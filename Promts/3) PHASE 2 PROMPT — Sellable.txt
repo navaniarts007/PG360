@@ -1,0 +1,48 @@
+PHASE 2 — Sellable. Master Brief / CLAUDE.md still applies. Build on the Phase 1 app.
+
+Add the following. Keep RLS coverage and pg_id scoping for every new table.
+
+### 1. Booking request flow
+- Public/tenant-facing "Request a room" form: name, phone, preferred_room_type, requested_date.
+- Admin inbox of bookings: approve / reject; on approve, optionally pre-allocate a room.
+- Status: pending -> approved/rejected. (SMS confirmation wires up in step 6.)
+
+### 2. Food menu + meal opt in/out
+- Admin sets a weekly menu (day_of_week x breakfast/lunch/dinner -> description). Tables: food_menu.
+- Tenant views current week's menu and can opt in/out per meal per day (table: food_opt).
+- Monthly food charge auto-feeds the rent invoice (food_charge on payments).
+
+### 3. Expense management
+- expenses table: category, amount, date, description, added_by.
+- Admin logs expenses; category-wise list + monthly summary.
+
+### 4. Simple P&L
+- For a selected month: total rent billed, total collected, total expenses,
+  net profit = collected − expenses. Show the numbers + one simple bar/line chart.
+
+### 5. Reports + export
+- Monthly rent collection report, occupancy report (beds filled %), tenant turnover,
+  expense report, P&L summary. Each exportable as CSV (and PDF where easy).
+
+### 6. In-app notifications
+- notifications table + a bell in admin and tenant headers. Realtime via Supabase.
+- Triggers: rent due, issue resolved, booking confirmed, announcement.
+
+### 7. Payment screenshot upload
+- Supabase Storage bucket (private). Tenant uploads UPI payment screenshot after paying;
+  admin sees it on the payment record. Signed URLs only; RLS on the bucket path by pg_id/tenant.
+
+### 8. MSG91 integration
+- OTP login option (phone OTP) via MSG91 alongside email/password.
+- Automated rent-due SMS reminder: a Supabase Edge Function (scheduled) that finds overdue
+  payments and sends MSG91 SMS. Make the MSG91 key an env var; mock in dev, real in prod.
+- Booking-confirmed and issue-resolved SMS hooks.
+
+### Definition of Done (Phase 2)
+- Booking request -> admin approve -> SMS confirmation works end to end.
+- Food menu set by admin shows on tenant portal; opt in/out persists; bill reflects food charge.
+- Expenses logged; P&L month view shows correct collected − expenses with a chart.
+- Reports export to CSV; notification bell updates in realtime; screenshot upload + view works.
+- A scheduled reminder Edge Function sends an MSG91 SMS for an overdue tenant.
+
+Give me a short plan + the new migrations first, then implement step by step.

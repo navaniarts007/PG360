@@ -1,0 +1,75 @@
+PHASE 1 — Foundation + Demo-Ready Core. Follow the Master Brief / CLAUDE.md exactly.
+
+Deliver a working, deployed web app with these capabilities. Build in this order.
+
+### 0. Project scaffold
+- Next.js (App Router) + TypeScript (strict) + Tailwind. ESLint + Prettier.
+- Supabase project wiring: typed server client + browser client in /lib/supabase.
+- Route groups: (marketing), (super-admin), (admin), (tenant). Add a middleware that
+  reads the session, looks up profiles.role, and redirects each role to its area.
+- .env.local with SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (server only).
+
+### 1. Database + RLS (migrations)
+Create migrations for: profiles, pg_accounts, rooms, tenants, payments, issues.
+- Enable RLS on all. Write policies:
+  * super_admin: full manage on pg_accounts; read platform aggregates.
+  * admin/staff: CRUD only where pg_id = their profile.pg_id.
+  * tenant: read their own room/payments; insert issues where tenant_id = their id.
+- A trigger or server action that, when a pg_account / tenant / staff is created, also
+  creates the Supabase auth user and a matching profiles row (role + pg_id).
+- Helper SQL functions: current_pg_id(), current_role() reading from profiles.
+
+### 2. Auth + role routing
+- Email/password login (Supabase Auth). One login page; redirect by role after sign-in.
+- Guard each route group server-side. Tenants/staff/admins cannot reach other areas.
+
+### 3. Super Admin panel
+- Login.
+- Create PG account: owner_name, pg_name, mobile, location, pg_type, category,
+  subscription_plan, and set the owner's password (creates the admin auth user + profile).
+- List all PGs with status; Suspend / Activate toggles (sets pg_accounts.status).
+- Tiny platform stats card: total PGs, total tenants, active subscriptions.
+
+### 4. Admin (PG owner) dashboard
+- Dashboard with 4 KPIs: Total Tenants, Beds Occupied %, Rent Collected (this month),
+  Amount Due (this month).
+- Rooms: add (number, floor, type, total_beds, rent_amount, wifi_password, amenities),
+  list with live status (vacant/partial/occupied), edit. Status derives from occupied_beds.
+- Tenants: add (name, phone, aadhaar_number, room, rent_amount, security_deposit,
+  checkin_date, rent_due_day); list (active/checked-out); detail page with payment history;
+  "Mark checkout" that sets checkout_date and frees the bed + shows a basic settlement
+  (deposit − dues). Creating a tenant also creates their tenant login (auth user + profile).
+- Payments:
+  * Record payment for a tenant for a given month (base_rent + electricity + food + other =
+    total; amount_paid; payment_mode; status auto = paid/partial/due).
+  * "Payments Due" page: for the current month, who paid vs who is due — this is demo Screen 1.
+  * A simple rent calculator on the record-payment form showing the breakdown.
+
+### 5. Tenant portal (the differentiator)
+- Login with credentials issued by admin.
+- My Room: room number, floor, type, amenities, roommates, and the WiFi password
+  (this is the killer micro-feature — make it prominent).
+- My Bill: current month's invoice breakdown + outstanding amount + payment history.
+- Raise Issue: category dropdown (electricity/plumbing/wifi/cleaning/noise/other) +
+  description + optional photo; track status (open/in_progress/resolved).
+- Contact: Call Admin (tel:) and WhatsApp Admin (wa.me) buttons.
+
+### 6. Landing page (public)
+- Hero: "PG Management Software for India. Start Free." + CTA to Register/contact.
+- Sections: Features (6 core), Pricing (Starter ₹5k / Pro ₹8k / Lifetime ₹10k),
+  How it works (Sign up → Add PG → Start managing), Footer (contact, WhatsApp, terms, privacy).
+- Keep it clean and fast. Placeholder testimonials.
+
+### 7. Deploy
+- Deploy to Vercel. Wire Supabase env vars in Vercel. Confirm the four demo screens work in prod.
+- Seed script: 1 super admin, 1 demo PG owner, 2 rooms, 3 tenants, sample payments/issues —
+  so the demo has data.
+
+### Definition of Done (Phase 1)
+- I can log in as super_admin, create a PG owner, and that owner can log in.
+- Admin can add rooms + tenants, record payments, and see the Payments Due page.
+- A tenant can log in, see their WiFi password and bill, and raise an issue the admin sees.
+- RLS verified: a tenant/admin from PG A cannot read PG B's data (write a quick check).
+- App is live on Vercel with seeded demo data.
+
+Start by giving me a short plan and the migration list, then implement step by step.

@@ -1,0 +1,185 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import {
+  ArrowLeft,
+  CalendarDays,
+  IdCard,
+  Phone,
+  ShieldCheck,
+  Wifi,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  PaymentStatusPill,
+  TenantStatusPill,
+} from "@/components/ui/status";
+import { CheckoutButton } from "@/components/admin/checkout-button";
+import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
+import { requireRole } from "@/lib/guards";
+import { getPayTenants, getTenantDetail } from "@/lib/db";
+import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
+
+export const metadata: Metadata = { title: "Tenant" };
+
+export default async function TenantDetail({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  await requireRole(["admin", "staff"]);
+  const { id } = await params;
+  const detail = await getTenantDetail(id);
+  if (!detail) notFound();
+  const { tenant, room, payments } = detail;
+
+  const outstanding = payments
+    .filter((p) => p.status !== "paid")
+    .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
+  const settlement = tenant.security_deposit - outstanding;
+
+  const payTenants = await getPayTenants();
+
+  return (
+    <div className="space-y-7">
+      <Link href="/dashboard/tenants" className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+        <ArrowLeft className="size-4" /> All tenants
+      </Link>
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <span className="grid size-16 place-items-center rounded-2xl bg-ink text-xl font-semibold text-paper shadow-lift">
+            {initials(tenant.name)}
+          </span>
+          <div>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">{tenant.name}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <TenantStatusPill status={tenant.status} />
+              {room && <Badge tone="clay">Room {room.room_number}</Badge>}
+              {tenant.food_plan_active && <Badge tone="gold">Food plan</Badge>}
+            </div>
+          </div>
+        </div>
+        {tenant.status === "active" && (
+          <div className="flex items-center gap-2">
+            <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
+            <CheckoutButton id={tenant.id} />
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* details */}
+        <Card className="p-5 sm:p-6">
+          <h3 className="text-lg text-ink">Details</h3>
+          <dl className="mt-4 space-y-3 text-sm">
+            <Row icon={Phone} label="Phone" value={tenant.phone} />
+            <Row icon={IdCard} label="Aadhaar" value={tenant.aadhaar_number ?? "—"} />
+            <Row icon={CalendarDays} label="Check-in" value={formatDate(tenant.checkin_date)} />
+            <Row icon={CalendarDays} label="Rent due day" value={`Every ${tenant.rent_due_day}th`} />
+            {room && <Row icon={Wifi} label="WiFi" value={room.wifi_password} mono />}
+          </dl>
+        </Card>
+
+        {/* money */}
+        <Card className="p-5 sm:p-6">
+          <h3 className="text-lg text-ink">Money</h3>
+          <div className="mt-4 space-y-3">
+            <MoneyRow label="Monthly rent" value={inr(tenant.rent_amount)} />
+            <MoneyRow label="Security deposit" value={inr(tenant.security_deposit)} />
+            <MoneyRow label="Outstanding" value={inr(outstanding)} tone={outstanding > 0 ? "rose" : "teal"} />
+            <div className="mt-2 rounded-xl bg-ink p-4 text-paper">
+              <p className="flex items-center gap-1.5 text-xs text-paper/60">
+                <ShieldCheck className="size-3.5" /> Settlement on checkout
+              </p>
+              <p className="mt-1 font-display text-2xl font-semibold tnum">
+                {inr(settlement)}
+              </p>
+              <p className="text-xs text-paper/50">deposit − outstanding dues</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* history */}
+        <Card className="lg:col-span-1">
+          <div className="p-5 pb-3 sm:p-6 sm:pb-3">
+            <h3 className="text-lg text-ink">Payment history</h3>
+          </div>
+          <div className="divide-y divide-line border-t border-line">
+            {payments.length === 0 && (
+              <p className="px-6 py-6 text-sm text-ink-muted">No payments recorded yet.</p>
+            )}
+            {payments.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-6 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">{monthLabel(p.month_for)}</p>
+                  <p className="text-xs text-ink-muted tnum">
+                    {inr(p.amount_paid)} / {inr(p.total_amount)}
+                  </p>
+                </div>
+                <PaymentStatusPill status={p.status} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  icon: Icon,
+  label,
+  value,
+  mono,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="flex items-center gap-2 text-ink-muted">
+        <Icon className="size-4" /> {label}
+      </dt>
+      <dd className={mono ? "font-mono text-ink" : "font-medium text-ink"}>{value}</dd>
+    </div>
+  );
+}
+
+function MoneyRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "rose" | "teal";
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-line pb-3 text-sm last:border-0">
+      <span className="text-ink-muted">{label}</span>
+      <span
+        className={
+          tone === "rose"
+            ? "font-semibold text-rose-600 tnum"
+            : tone === "teal"
+              ? "font-semibold text-teal-600 tnum"
+              : "font-semibold text-ink tnum"
+        }
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function monthLabel(m: string) {
+  const [y, mo] = m.split("-").map(Number);
+  return new Date(y!, (mo ?? 1) - 1, 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+}

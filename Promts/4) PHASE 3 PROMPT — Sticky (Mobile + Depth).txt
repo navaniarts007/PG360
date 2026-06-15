@@ -1,0 +1,39 @@
+PHASE 3 — Sticky. Master Brief / CLAUDE.md still applies. The web app is live.
+
+### 1. React Native (Expo) tenant app
+- New Expo app in the repo (monorepo or sibling folder), TypeScript.
+- Reuse the SAME Supabase backend, auth, and RLS — no new backend.
+- Screens mirroring the tenant web portal: Login, My Room (WiFi password),
+  My Bill + payment screenshot upload, Raise Issue + track, Food menu + opt in/out,
+  Notifications, Call/WhatsApp admin. Push notifications via Expo for rent due / issue resolved.
+
+### 2. Aadhaar document vault
+- Per-tenant document store in Supabase Storage (private): Aadhaar photo + other docs.
+- KYC status: pending/verified; admin manually verifies (no Aadhaar API for MVP).
+- Document vault view listing all of a tenant's files. Strict RLS on storage paths.
+
+### 3. Full P&L + analytics
+- Month-by-month P&L chart, occupancy trend, collection rate, category-wise expense breakdown.
+- Dashboard charts on the admin home.
+
+### 4. Staff management depth + audit
+- Add staff (manager/warden/cleaner), assign to rooms/floors.
+- Action audit: record who added which tenant / recorded which payment / resolved which issue.
+- Staff RLS: scoped to their pg; limited reports only.
+
+### 5. N8N automation
+- Reminder + onboarding workflows in N8N hitting Supabase/Edge Functions or webhooks:
+  e.g. T-3/T-0/T+3 rent reminders, new-tenant welcome, subscription-expiry nudges to owners.
+
+### 6. Bulk WhatsApp announcements
+- Admin composes an announcement; sends to all tenants of the pg via WhatsApp (MSG91/provider)
+  + drops an in-app notification. Rate-limit and log sends.
+
+### Definition of Done (Phase 3)
+- Tenant can do everything from the Expo app that they can on web, with push notifications.
+- Aadhaar vault stores/serves docs securely with KYC status; RLS verified.
+- Admin sees full P&L + occupancy charts and a staff action audit trail.
+- At least one N8N reminder workflow runs end to end.
+- Admin can send a bulk WhatsApp announcement to all tenants and see it logged.
+
+Plan + migrations first, then implement step by step. Keep web and mobile in sync on the schema.

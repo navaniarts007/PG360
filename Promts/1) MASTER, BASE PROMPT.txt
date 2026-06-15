@@ -1,0 +1,87 @@
+You are helping me build "PG360", a multi-tenant PG / Hostel Management SaaS for the Indian market.
+Owners pay a yearly subscription. The platform owner (me) onboards PG owners.
+
+## Product in one line
+A web app where PG owners manage rooms, tenants, rent, food, complaints and P&L — and each
+tenant gets their own login to see their room (incl. WiFi password), bill, and raise issues.
+
+## Roles (strict top-down hierarchy)
+- super_admin  -> ME, the platform owner. Creates PG owner accounts. Sees the whole platform.
+- admin        -> PG owner. Created by super_admin. Manages ONE pg.
+- staff        -> manager/warden/cleaner. Created by an admin. Scoped to that admin's pg.
+- tenant       -> inmate. Created by admin/staff. Read-mostly access to their own data only.
+
+Everything is created top-down: super_admin -> admin -> staff/tenant.
+
+## Tech stack (do not deviate without asking)
+- Next.js (App Router) + TypeScript (strict) + Tailwind CSS for the web app.
+- Supabase for Postgres DB, Auth, Storage, Realtime. Supabase IS the backend.
+- Custom logic: Next.js Server Actions and Supabase Edge Functions. NO separate Angular/Express server.
+- Hosting: Vercel. Email: Supabase auth emails now; MSG91/Resend for notifications later.
+- Mobile (React Native / Expo) comes in Phase 3 and reuses this same Supabase backend.
+
+## Architecture principles (CRITICAL — follow on every table and query)
+1. MULTI-TENANCY: almost every row belongs to a PG. Add `pg_id` to every PG-scoped table.
+2. ROW LEVEL SECURITY (RLS): enable RLS on EVERY table. No table ships without policies.
+   - A profile table maps each auth user to {role, pg_id}.
+   - admins/staff can only touch rows where pg_id = their pg_id.
+   - tenants can only touch rows that belong to them (tenant_id = their id) or read-only pg data
+     explicitly meant for them (their room, food menu, their invoices).
+   - super_admin can manage pg_accounts and read platform-wide aggregates.
+3. AUTH: Supabase Auth. On signup/creation, insert a row into `profiles` with role + pg_id.
+   Resolve role/pg_id from `profiles` in policies and in the UI (never trust the client).
+4. NEVER hardcode secrets. Use .env.local locally and Vercel/Supabase env vars in prod.
+5. Use Supabase migrations (SQL files) for ALL schema changes — never click-ops only.
+
+## Repo conventions
+- App Router with route groups: (marketing) for landing, (super-admin), (admin), (tenant).
+- `/lib/supabase/` for typed server + browser clients. Generate DB types from Supabase.
+- Server Actions for mutations; RLS is the real security boundary, not the UI.
+- Reusable UI in `/components/ui`. Keep forms accessible and mobile-friendly.
+- Tailwind only; no heavy UI kit required. Clean, dense, dashboard-style layouts.
+- Money in paise/integer or numeric(12,2); never floats for currency. Dates in ISO. Timezone Asia/Kolkata.
+
+## Canonical data model (target schema — implement progressively per phase)
+profiles        : id (=auth.uid), role, pg_id (nullable for super_admin), full_name, phone, created_at
+super_admins    : id, email, name, created_at        (or represent via profiles.role='super_admin')
+pg_accounts     : id, owner_name, pg_name, mobile, location, pg_type, category, status
+                  ('active'|'suspended'), subscription_plan, subscription_expiry,
+                  created_by (super_admin id), created_at
+staff           : id, pg_id, name, phone, email, role ('manager'|'warden'|'staff'|'cleaner'),
+                  status, created_at
+rooms           : id, pg_id, room_number, floor, type ('single'|'double'|'triple'),
+                  total_beds, occupied_beds, rent_amount, wifi_password, amenities (jsonb/text[]),
+                  status ('vacant'|'partial'|'occupied'), created_at
+tenants         : id, pg_id, room_id, name, phone, email, aadhaar_number, aadhaar_photo_url,
+                  emergency_contact, rent_amount, security_deposit, checkin_date, checkout_date,
+                  rent_due_day, food_plan_active, status ('active'|'checked_out'), created_at
+payments        : id, pg_id, tenant_id, month_for, base_rent, electricity_charge, food_charge,
+                  other_charges, total_amount, amount_paid, payment_mode ('cash'|'upi'|'bank'),
+                  payment_screenshot_url, payment_date, status ('paid'|'partial'|'due'), notes
+issues          : id, pg_id, tenant_id, category, description, photo_url,
+                  status ('open'|'in_progress'|'resolved'), assigned_to (staff id),
+                  created_at, resolved_at
+bookings        : id, pg_id, tenant_name, phone, preferred_room_type, requested_date,
+                  status ('pending'|'approved'|'rejected'), notes, created_at
+food_menu       : id, pg_id, day_of_week, meal_type ('breakfast'|'lunch'|'dinner'),
+                  description, created_at
+food_opt        : id, pg_id, tenant_id, date, meal_type, opted_in (bool)   -- meal opt in/out
+expenses        : id, pg_id, category, amount, date, description, added_by, created_at
+notifications   : id, pg_id, recipient_id, recipient_type, message, is_read, created_at
+
+## Roadmap (we build in 3 phases — I will tell you which phase to do)
+- Phase 1 (Demo-ready core): auth + roles, super admin, admin dashboard, rooms, tenants,
+  payments + due page, tenant portal (My Room incl. WiFi, raise issue, view bill), landing, deploy.
+- Phase 2 (Sellable): booking flow, food menu + opt in/out, expenses, simple P&L, reports + export,
+  in-app notifications, payment screenshot upload, MSG91 OTP + rent reminders.
+- Phase 3 (Sticky): React Native (Expo) tenant app, Aadhaar document vault, full P&L charts,
+  staff management depth + action audit, N8N automation, bulk WhatsApp announcements.
+
+## How I want you to work
+- Work incrementally. Propose a short plan, then implement in small, runnable steps.
+- After each step, tell me exactly what to run to verify (commands, URLs, test logins).
+- Generate SQL migrations for every schema change and the matching RLS policies.
+- Keep TypeScript strict and the build green. Flag any decision that needs my input.
+- Don't gold-plate. Ship the phase scope cleanly; defer anything outside it.
+
+Acknowledge this brief, then WAIT for me to specify the phase before writing code.
