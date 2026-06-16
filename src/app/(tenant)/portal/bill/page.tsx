@@ -4,7 +4,7 @@ import { Receipt, Zap, Utensils, Home, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { requireRole } from "@/lib/guards";
-import { getMyPayments, getMyTenant } from "@/lib/db";
+import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
 import { ScreenshotUpload } from "@/components/tenant/screenshot-upload";
 import { currentMonth, inr } from "@/lib/utils";
 
@@ -24,10 +24,14 @@ export default async function MyBill() {
   if (!mine) notFound();
   const tenant = mine.tenant;
 
-  const payments = await getMyPayments();
+  const [payments, pg] = await Promise.all([getMyPayments(), getMyPg()]);
   const current = payments.find((p) => p.month_for === currentMonth());
   const history = payments.filter((p) => p.month_for !== currentMonth());
-  const balance = current ? current.total_amount - current.amount_paid : 0;
+  const total = current?.total_amount ?? 0;
+  const paid = current?.amount_paid ?? 0;
+  const balance = current ? total - paid : 0;
+  const paidPct = total > 0 ? Math.min(Math.round((paid / total) * 100), 100) : 0;
+  const hasPayInfo = !!(pg?.upi_id || pg?.bank_details || pg?.payment_qr_url);
 
   const lines = current
     ? [
@@ -88,20 +92,78 @@ export default async function MyBill() {
                 </span>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-line bg-paper-2/40 p-4">
-                  <p className="text-xs text-ink-muted">Paid</p>
-                  <p className="mt-0.5 text-lg font-semibold text-teal-600 tnum">{inr(current.amount_paid)}</p>
+              {/* payment progress */}
+              <div className="mt-4 rounded-xl border border-line bg-paper-2/40 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-ink-soft">
+                    Paid <span className="font-semibold text-teal-600 tnum">{inr(paid)}</span>{" "}
+                    of <span className="tnum">{inr(total)}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-ink-muted tnum">{paidPct}%</span>
                 </div>
-                <div className="rounded-xl border border-line bg-paper-2/40 p-4">
-                  <p className="text-xs text-ink-muted">Outstanding</p>
-                  <p className={`mt-0.5 text-lg font-semibold tnum ${balance > 0 ? "text-rose-600" : "text-teal-600"}`}>
-                    {inr(balance)}
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
+                  <div
+                    className={`h-full rounded-full ${balance > 0 ? "bg-gold-400" : "bg-teal-500"}`}
+                    style={{ width: `${paidPct}%` }}
+                  />
+                </div>
+                {balance > 0 ? (
+                  <div className="mt-3 flex items-end justify-between border-t border-line pt-3">
+                    <div>
+                      <p className="text-xs text-ink-muted">Amount to pay now</p>
+                      <p className="text-[0.7rem] text-ink-muted">
+                        {current.status === "partial"
+                          ? "Part-paid — please clear the balance"
+                          : "Minimum to clear this month's bill"}
+                      </p>
+                    </div>
+                    <p className="font-display text-3xl font-semibold text-rose-600 tnum">
+                      {inr(balance)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-3 border-t border-line pt-3 text-sm font-semibold text-teal-600">
+                    ✓ Fully paid — thank you!
                   </p>
-                </div>
+                )}
               </div>
 
-              {balance > 0 && (
+              {/* how to pay */}
+              {balance > 0 && hasPayInfo && (
+                <div className="mt-4 rounded-xl border border-line bg-surface p-4">
+                  <p className="text-sm font-semibold text-ink">
+                    How to pay {inr(balance)}
+                  </p>
+                  <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
+                    {pg?.payment_qr_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={pg.payment_qr_url}
+                        alt="Payment QR"
+                        className="size-32 shrink-0 rounded-xl border border-line bg-white object-contain p-1"
+                      />
+                    )}
+                    <div className="space-y-2 text-sm">
+                      {pg?.upi_id && (
+                        <div>
+                          <span className="text-xs text-ink-muted">UPI ID</span>
+                          <p className="font-mono font-semibold text-ink">{pg.upi_id}</p>
+                        </div>
+                      )}
+                      {pg?.bank_details && (
+                        <div>
+                          <span className="text-xs text-ink-muted">Bank transfer</span>
+                          <p className="whitespace-pre-line text-ink-soft">{pg.bank_details}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-ink-muted">
+                    After paying, upload your screenshot below — your owner confirms it.
+                  </p>
+                </div>
+              )}
+              {balance > 0 && !hasPayInfo && (
                 <div className="mt-4 rounded-xl bg-ink p-4 text-paper">
                   <p className="text-sm font-semibold">Pay {inr(balance)} to your PG owner</p>
                   <p className="mt-0.5 text-xs text-paper/60">

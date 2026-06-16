@@ -35,6 +35,9 @@ export interface PgAccount {
   subscription_expiry: string;
   created_by: string;
   created_at: string;
+  upi_id: string | null;
+  bank_details: string | null;
+  payment_qr_url: string | null;
 }
 
 export type RoomType = "single" | "double" | "triple";

@@ -16,10 +16,16 @@ export type SignResult =
     }
   | { ok: false; error: string };
 
+const FOLDERS = ["pg360/payments", "pg360/qr"] as const;
+type Folder = (typeof FOLDERS)[number];
+
 /** Returns a short-lived signature so the browser can upload directly to
  *  Cloudinary without ever seeing the API secret. */
-export async function getUploadSignatureAction(): Promise<SignResult> {
+export async function getUploadSignatureAction(
+  folder: Folder = "pg360/payments",
+): Promise<SignResult> {
   await requireRole(["tenant", "admin", "staff"]);
+  if (!FOLDERS.includes(folder)) return { ok: false, error: "Bad upload target." };
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -27,11 +33,38 @@ export async function getUploadSignatureAction(): Promise<SignResult> {
     return { ok: false, error: "Uploads aren't configured." };
   }
   const timestamp = Math.floor(Date.now() / 1000);
-  const folder = "pg360/payments";
   // sign the params (sorted) + secret
   const toSign = `folder=${folder}&timestamp=${timestamp}`;
   const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
   return { ok: true, cloudName, apiKey, timestamp, signature, folder };
+}
+
+/** Admin saves the PG's payment details (UPI + bank) and/or QR image URL.
+ *  Uses the service client (admins can't UPDATE pg_accounts under RLS) but
+ *  scopes the write to the caller's own PG and only these columns. */
+export async function savePaymentDetailsAction(
+  _prev: { ok?: boolean; error?: string },
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const me = await requireRole(["admin", "staff"]);
+  if (!me.pg_id) return { error: "No PG attached to your account." };
+  const upi = String(formData.get("upi_id") ?? "").trim();
+  const bank = String(formData.get("bank_details") ?? "").trim();
+  const qr = String(formData.get("payment_qr_url") ?? "").trim();
+  const patch: Record<string, string | null> = {
+    upi_id: upi || null,
+    bank_details: bank || null,
+  };
+  if (qr) {
+    if (!/^https:\/\/res\.cloudinary\.com\//.test(qr)) return { error: "Invalid QR URL." };
+    patch.payment_qr_url = qr;
+  }
+  const admin = createAdminClient();
+  const { error } = await admin.from("pg_accounts").update(patch).eq("id", me.pg_id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/payments");
+  revalidatePath("/portal/bill");
+  return { ok: true };
 }
 
 /** Persist the uploaded screenshot URL onto the tenant's own payment. Uses the

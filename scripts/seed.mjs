@@ -139,7 +139,7 @@ async function main() {
     },
   );
 
-  // 5) a payment + an issue
+  // 5) a payment (left PARTIAL to show the "amount to pay" flow) + an issue
   console.log("→ Payment + issue…");
   await findOrInsert(
     "payments",
@@ -151,11 +151,13 @@ async function main() {
       base_rent: 16000,
       electricity_charge: 850,
       food_charge: 3000,
-      amount_paid: 19850,
+      amount_paid: 12000,
       payment_mode: "upi",
       payment_date: "2026-06-04",
     },
   );
+  // ensure it's partial even on re-runs (trigger recomputes status/total)
+  await db.from("payments").update({ amount_paid: 12000 }).eq("tenant_id", tenant.id).eq("month_for", "2026-06");
   await findOrInsert(
     "issues",
     { tenant_id: tenant.id, category: "wifi" },
@@ -167,6 +169,15 @@ async function main() {
       status: "in_progress",
     },
   );
+
+  console.log("→ PG payment details (UPI + bank)…");
+  await db
+    .from("pg_accounts")
+    .update({
+      upi_id: "sunrisepg@okhdfcbank",
+      bank_details: "A/c name: Sunrise Stay\nA/c no: 1234 5678 9012\nIFSC: HDFC0001234",
+    })
+    .eq("id", pg.id);
 
   // ---- Phase 2 demo data -------------------------------------------------
   console.log("→ Cleaning test artifacts…");

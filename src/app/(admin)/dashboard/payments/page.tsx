@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
+import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthPayments, getPayTenants } from "@/lib/db";
+import { adminKpis, getMonthPayments, getPayTenants, getPgAccount } from "@/lib/db";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -13,12 +14,13 @@ export const metadata: Metadata = { title: "Payments" };
 const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 
 export default async function PaymentsPage() {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, payTenants, all] = await Promise.all([
+  const [kpis, payTenants, all, pg] = await Promise.all([
     adminKpis(month),
     getPayTenants(),
     getMonthPayments(month),
+    me.pg_id ? getPgAccount(me.pg_id) : Promise.resolve(null),
   ]);
 
   const order = { due: 0, partial: 1, paid: 2 } as const;
@@ -114,6 +116,12 @@ export default async function PaymentsPage() {
           </table>
         </div>
       </Card>
+
+      <PaymentDetailsCard
+        upiId={pg?.upi_id ?? null}
+        bankDetails={pg?.bank_details ?? null}
+        qrUrl={pg?.payment_qr_url ?? null}
+      />
     </div>
   );
 }
