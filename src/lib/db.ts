@@ -138,6 +138,39 @@ export async function getFloorOptions(): Promise<{ id: string; label: string }[]
   return floors.map((f) => ({ id: f.id, label: f.name }));
 }
 
+/** One floor + its rooms/beds (for the dedicated floor page). */
+export async function getFloorDetail(
+  floorId: string,
+): Promise<{ floor: Floor; rooms: RoomBeds[] } | null> {
+  const s = await sb();
+  const { data: floor } = await s.from("floors").select("*").eq("id", floorId).maybeSingle();
+  if (!floor) return null;
+  const { data: rooms } = await s
+    .from("rooms")
+    .select("*")
+    .eq("floor_id", floorId)
+    .order("room_number");
+  const roomList = (rooms ?? []) as Room[];
+  const roomIds = roomList.map((r) => r.id);
+  const [{ data: beds }, { data: tenants }] = await Promise.all([
+    roomIds.length
+      ? s.from("beds").select("*").in("room_id", roomIds).order("bed_number")
+      : Promise.resolve({ data: [] as Bed[] }),
+    s.from("tenants").select("id, name").eq("pg_id", (floor as Floor).pg_id),
+  ]);
+  const nameById = new Map((tenants ?? []).map((t) => [t.id as string, t.name as string]));
+  const bedsByRoom = new Map<string, Array<Bed & { tenant_name: string | null }>>();
+  for (const b of (beds ?? []) as Bed[]) {
+    const list = bedsByRoom.get(b.room_id) ?? [];
+    list.push({ ...b, tenant_name: b.current_tenant_id ? nameById.get(b.current_tenant_id) ?? null : null });
+    bedsByRoom.set(b.room_id, list);
+  }
+  return {
+    floor: floor as Floor,
+    rooms: roomList.map((room) => ({ room, beds: bedsByRoom.get(room.id) ?? [] })),
+  };
+}
+
 /* ----------------------------------------------------- rate cards / beds */
 
 export async function listRateCards(): Promise<RateCard[]> {
