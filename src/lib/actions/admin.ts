@@ -45,6 +45,52 @@ export async function addRoomAction(
   return { ok: true };
 }
 
+export async function updateRoomAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const parsed = roomSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const { amenities, ...rest } = parsed.data;
+  const s = await createClient();
+  const { data: room } = await s
+    .from("rooms")
+    .select("occupied_beds")
+    .eq("id", id)
+    .maybeSingle();
+  if (room && rest.total_beds < room.occupied_beds) {
+    return { error: `Can't set beds below ${room.occupied_beds} currently occupied.` };
+  }
+  const { error } = await s
+    .from("rooms")
+    .update({
+      ...rest,
+      amenities: (amenities ?? "").split(",").map((a) => a.trim()).filter(Boolean),
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function deleteRoomAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  const { data: room } = await s
+    .from("rooms")
+    .select("occupied_beds")
+    .eq("id", id)
+    .maybeSingle();
+  if (!room || room.occupied_beds > 0) return; // block delete while occupied
+  await s.from("rooms").delete().eq("id", id);
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+}
+
 /* -------------------------------- tenants -------------------------------- */
 
 const tenantSchema = z.object({
@@ -162,6 +208,103 @@ export async function checkoutTenantAction(formData: FormData): Promise<void> {
 
   revalidatePath("/dashboard/tenants");
   revalidatePath(`/dashboard/tenants/${id}`);
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+}
+
+const tenantUpdateSchema = z.object({
+  name: z.string().min(2, "Name is required."),
+  phone: z.string().min(8, "Enter a valid phone."),
+  email: z.string().email("Enter a valid email."),
+  aadhaar_number: z.string().optional(),
+  room_id: z.string().optional(),
+  rent_amount: z.coerce.number().min(0),
+  security_deposit: z.coerce.number().min(0),
+  rent_due_day: z.coerce.number().int().min(1).max(28),
+});
+
+async function adjustBed(
+  s: Awaited<ReturnType<typeof createClient>>,
+  roomId: string,
+  delta: number,
+) {
+  const { data: room } = await s
+    .from("rooms")
+    .select("occupied_beds, total_beds")
+    .eq("id", roomId)
+    .maybeSingle();
+  if (!room) return;
+  const next = room.occupied_beds + delta;
+  if (next < 0 || next > room.total_beds) return;
+  await s.from("rooms").update({ occupied_beds: next }).eq("id", roomId);
+}
+
+export async function updateTenantAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const parsed = tenantUpdateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const newRoomId = d.room_id && d.room_id !== "none" ? d.room_id : null;
+  const s = await createClient();
+
+  const { data: tenant } = await s
+    .from("tenants")
+    .select("room_id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!tenant) return { error: "Tenant not found." };
+
+  const { error } = await s
+    .from("tenants")
+    .update({
+      name: d.name,
+      phone: d.phone,
+      email: d.email,
+      aadhaar_number: d.aadhaar_number || null,
+      room_id: newRoomId,
+      rent_amount: d.rent_amount,
+      security_deposit: d.security_deposit,
+      rent_due_day: d.rent_due_day,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  // re-balance beds if the room assignment changed (only for active tenants)
+  if (tenant.status === "active" && tenant.room_id !== newRoomId) {
+    if (tenant.room_id) await adjustBed(s, tenant.room_id, -1);
+    if (newRoomId) await adjustBed(s, newRoomId, +1);
+  }
+
+  revalidatePath("/dashboard/tenants");
+  revalidatePath(`/dashboard/tenants/${id}`);
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function deleteTenantAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  const { data: tenant } = await s
+    .from("tenants")
+    .select("room_id, user_id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!tenant) return;
+  if (tenant.status === "active" && tenant.room_id) await adjustBed(s, tenant.room_id, -1);
+  // cascades payments / issues / food_opt via FK
+  await s.from("tenants").delete().eq("id", id);
+  // remove their login (profile cascades from auth.users)
+  if (tenant.user_id) {
+    const admin = createAdminClient();
+    await admin.auth.admin.deleteUser(tenant.user_id);
+  }
+  revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
 }

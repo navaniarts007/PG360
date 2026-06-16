@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { RoomStatusPill } from "@/components/ui/status";
 import { Badge } from "@/components/ui/badge";
 import { AddRoomDialog } from "@/components/admin/add-room-dialog";
+import { ConfirmDelete } from "@/components/admin/confirm-delete";
+import { deleteRoomAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { listRooms } from "@/lib/db";
 import { inr } from "@/lib/utils";
@@ -92,6 +94,11 @@ export default async function RoomsPage() {
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-2.5 py-1.5 font-mono text-xs text-gold-200">
                     <Wifi className="size-3.5" /> {room.wifi_password}
                   </span>
+                </div>
+
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-line pt-3">
+                  <AddRoomDialog room={room} />
+                  <ConfirmDelete action={deleteRoomAction} id={room.id} title="Delete room" />
                 </div>
               </div>
             );

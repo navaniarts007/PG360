@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TenantStatusPill } from "@/components/ui/status";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
+import { ConfirmDelete } from "@/components/admin/confirm-delete";
+import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getRoomOptions, listTenantsWithRoom } from "@/lib/db";
 import { initials, inr } from "@/lib/utils";
@@ -77,10 +79,14 @@ export default async function TenantsPage() {
                     <td className="px-6 py-3.5">
                       <TenantStatusPill status={t.status} />
                     </td>
-                    <td className="px-6 py-3.5 text-right">
-                      <Link href={`/dashboard/tenants/${t.id}`} className="inline-grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-paper-2 hover:text-clay-600">
-                        <ChevronRight className="size-4" />
-                      </Link>
+                    <td className="px-6 py-3.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <AddTenantDialog rooms={roomOptions} tenant={t} />
+                        <ConfirmDelete action={deleteTenantAction} id={t.id} title="Delete tenant" />
+                        <Link href={`/dashboard/tenants/${t.id}`} className="inline-grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-paper-2 hover:text-clay-600">
+                          <ChevronRight className="size-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

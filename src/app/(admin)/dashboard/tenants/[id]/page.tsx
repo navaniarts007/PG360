@@ -17,8 +17,9 @@ import {
 } from "@/components/ui/status";
 import { CheckoutButton } from "@/components/admin/checkout-button";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
+import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { requireRole } from "@/lib/guards";
-import { getPayTenants, getTenantDetail } from "@/lib/db";
+import { getPayTenants, getRoomOptions, getTenantDetail } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenant" };
@@ -39,7 +40,10 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const payTenants = await getPayTenants();
+  const [payTenants, roomOptions] = await Promise.all([
+    getPayTenants(),
+    getRoomOptions(),
+  ]);
 
   return (
     <div className="space-y-7">
@@ -61,12 +65,15 @@ export default async function TenantDetail({
             </div>
           </div>
         </div>
-        {tenant.status === "active" && (
-          <div className="flex items-center gap-2">
-            <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
-            <CheckoutButton id={tenant.id} />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <AddTenantDialog rooms={roomOptions} tenant={tenant} />
+          {tenant.status === "active" && (
+            <>
+              <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
+              <CheckoutButton id={tenant.id} />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
