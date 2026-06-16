@@ -20,7 +20,7 @@ const db = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const PASSWORD = "demo1234";
+const PASSWORD = "pg360";
 const ok = (res, what) => {
   if (res.error) throw new Error(`${what}: ${res.error.message}`);
   return res.data;
@@ -34,19 +34,18 @@ async function ensureUser(email, fullName) {
     user_metadata: { full_name: fullName },
   });
   if (!created.error && created.data?.user) return created.data.user.id;
+  
+  // If user exists, update their password to match the new default
+  const { data: users } = await db.auth.admin.listUsers();
+  const existing = users.users.find(u => u.email === email);
+  if (existing) {
+    await db.auth.admin.updateUserById(existing.id, { password: PASSWORD });
+    return existing.id;
+  }
+
   if (created.error && !/already|registered|exists/i.test(created.error.message)) {
     throw created.error;
   }
-  // already exists — find it
-  let page = 1;
-  for (;;) {
-    const { data } = await db.auth.admin.listUsers({ page, perPage: 200 });
-    const hit = data.users.find((u) => u.email === email);
-    if (hit) return hit.id;
-    if (data.users.length < 200) throw new Error(`Could not find existing user ${email}`);
-    page += 1;
-  }
-}
 
 async function findOrInsert(table, match, row) {
   const existing = ok(
