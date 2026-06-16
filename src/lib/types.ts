@@ -91,6 +91,7 @@ export interface Payment {
   total_amount: number;
   amount_paid: number;
   payment_mode: PaymentMode | null;
+  payment_screenshot_url: string | null;
   payment_date: string | null;
   status: PaymentStatus;
   notes: string | null;
@@ -116,6 +117,52 @@ export interface Issue {
   assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
+}
+
+export type ExpenseCategory =
+  | "rent"
+  | "salaries"
+  | "utilities"
+  | "groceries"
+  | "maintenance"
+  | "supplies"
+  | "marketing"
+  | "other";
+
+export interface Expense {
+  id: string;
+  pg_id: string;
+  category: ExpenseCategory;
+  amount: number;
+  date: string;
+  description: string | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+export type MealType = "breakfast" | "lunch" | "dinner";
+
+export interface FoodMenuItem {
+  id: string;
+  pg_id: string;
+  day_of_week: number; // 0=Mon .. 6=Sun
+  meal_type: MealType;
+  description: string;
+  created_at: string;
+}
+
+export type BookingStatus = "pending" | "approved" | "rejected";
+
+export interface Booking {
+  id: string;
+  pg_id: string;
+  tenant_name: string;
+  phone: string;
+  preferred_room_type: "single" | "double" | "triple" | "any";
+  requested_date: string | null;
+  status: BookingStatus;
+  notes: string | null;
+  created_at: string;
 }
 
 export interface SessionUser {

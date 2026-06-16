@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   Bell,
   Building2,
+  CalendarCheck,
   CreditCard,
   LayoutDashboard,
   type LucideIcon,
@@ -13,7 +15,9 @@ import {
   MessageCircle,
   MessagesSquare,
   Receipt,
+  UtensilsCrossed,
   Users,
+  Wallet,
   Wifi,
   X,
 } from "lucide-react";
@@ -39,12 +43,17 @@ const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/dashboard/rooms", label: "Rooms", icon: Building2 },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
+    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+    { href: "/dashboard/food", label: "Food menu", icon: UtensilsCrossed },
+    { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
+    { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
     { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare },
   ],
   tenant: [
     { href: "/portal", label: "My Room", icon: Wifi, exact: true },
     { href: "/portal/bill", label: "My Bill", icon: Receipt },
+    { href: "/portal/food", label: "Food menu", icon: UtensilsCrossed },
     { href: "/portal/issues", label: "Complaints", icon: MessagesSquare },
     { href: "/portal/contact", label: "Contact", icon: MessageCircle },
   ],

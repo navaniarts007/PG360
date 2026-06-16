@@ -2,7 +2,10 @@ import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import type {
+  Expense,
+  FoodMenuItem,
   Issue,
+  MealType,
   Payment,
   PgAccount,
   Room,
@@ -264,6 +267,101 @@ export async function getMyIssues(): Promise<Issue[]> {
     .select("*")
     .order("created_at", { ascending: false });
   return (data ?? []) as Issue[];
+}
+
+/* ---------------------------------------------------------------- food */
+
+export async function getFoodMenu(): Promise<FoodMenuItem[]> {
+  const s = await sb();
+  const { data } = await s.from("food_menu").select("*");
+  return (data ?? []) as FoodMenuItem[];
+}
+
+export interface FoodOptRow {
+  date: string;
+  meal_type: MealType;
+  opted_in: boolean;
+}
+
+export async function getMyFoodOpts(from: string, to: string): Promise<FoodOptRow[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("food_opt")
+    .select("date, meal_type, opted_in")
+    .gte("date", from)
+    .lte("date", to);
+  return (data ?? []) as FoodOptRow[];
+}
+
+/* ------------------------------------------------------------ bookings */
+
+export async function listBookings(): Promise<import("./types").Booking[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("bookings")
+    .select("*")
+    .order("created_at", { ascending: false });
+  return (data ?? []) as import("./types").Booking[];
+}
+
+/** Public PG lookup for the booking page (anon can't read pg_accounts via RLS). */
+export async function getPublicPg(
+  id: string,
+): Promise<{ pg_name: string; location: string; status: string } | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("pg_accounts")
+    .select("pg_name, location, status")
+    .eq("id", id)
+    .maybeSingle();
+  return (data as { pg_name: string; location: string; status: string }) ?? null;
+}
+
+/* ------------------------------------------------------ expenses / P&L */
+
+const monthBounds = (month: string) => ({
+  from: `${month}-01`,
+  to: `${month}-31`,
+});
+
+export async function listExpenses(month: string): Promise<Expense[]> {
+  const s = await sb();
+  const { from, to } = monthBounds(month);
+  const { data } = await s
+    .from("expenses")
+    .select("*")
+    .gte("date", from)
+    .lte("date", to)
+    .order("date", { ascending: false });
+  return (data ?? []) as Expense[];
+}
+
+export async function expenseSummary(month: string) {
+  const expenses = await listExpenses(month);
+  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const byCategory = new Map<string, number>();
+  for (const e of expenses) {
+    byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount);
+  }
+  return {
+    total,
+    byCategory: [...byCategory.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  };
+}
+
+export async function pnl(month: string) {
+  const s = await sb();
+  const { from, to } = monthBounds(month);
+  const [{ data: pays }, { data: exps }] = await Promise.all([
+    s.from("payments").select("total_amount, amount_paid").eq("month_for", month),
+    s.from("expenses").select("amount").gte("date", from).lte("date", to),
+  ]);
+  const billed = ((pays ?? []) as { total_amount: number }[]).reduce((x, p) => x + p.total_amount, 0);
+  const collected = ((pays ?? []) as { amount_paid: number }[]).reduce((x, p) => x + p.amount_paid, 0);
+  const expenses = ((exps ?? []) as { amount: number }[]).reduce((x, e) => x + e.amount, 0);
+  return { billed, collected, expenses, net: collected - expenses };
 }
 
 /** Roommate names only — read via the service client so RLS (which hides other

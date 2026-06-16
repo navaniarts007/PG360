@@ -217,6 +217,47 @@ export async function recordPaymentAction(
   return { ok: true };
 }
 
+/* -------------------------------- expenses ------------------------------- */
+
+const expenseSchema = z.object({
+  category: z.enum([
+    "rent",
+    "salaries",
+    "utilities",
+    "groceries",
+    "maintenance",
+    "supplies",
+    "marketing",
+    "other",
+  ]),
+  amount: z.coerce.number().min(0, "Enter an amount."),
+  date: z.string().min(1, "Date is required."),
+  description: z.string().optional(),
+});
+
+export async function addExpenseAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const me = await requireRole(["admin", "staff"]);
+  if (!me.pg_id) return { error: "No PG attached to your account." };
+  const parsed = expenseSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const s = await createClient();
+  const { error } = await s.from("expenses").insert({
+    pg_id: me.pg_id,
+    category: parsed.data.category,
+    amount: parsed.data.amount,
+    date: parsed.data.date,
+    description: parsed.data.description || null,
+    added_by: me.id,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/expenses");
+  revalidatePath("/dashboard/reports");
+  return { ok: true };
+}
+
 /* --------------------------------- issues -------------------------------- */
 
 export async function setIssueStatusAction(formData: FormData): Promise<void> {

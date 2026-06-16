@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Clock, IndianRupee } from "lucide-react";
+import { CheckCircle2, Clock, IndianRupee, Paperclip } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
@@ -77,7 +77,20 @@ export default async function PaymentsPage() {
                       )}
                     </td>
                     <td className="px-6 py-3.5 text-ink-muted">
-                      {r.payment_mode ? MODE[r.payment_mode] : "—"}
+                      <span className="flex items-center gap-2">
+                        {r.payment_mode ? MODE[r.payment_mode] : "—"}
+                        {r.payment_screenshot_url && (
+                          <a
+                            href={r.payment_screenshot_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="View payment proof"
+                            className="text-clay-600 hover:text-clay-700"
+                          >
+                            <Paperclip className="size-3.5" />
+                          </a>
+                        )}
+                      </span>
                     </td>
                     <td className="px-6 py-3.5">
                       <PaymentStatusPill status={r.status} />

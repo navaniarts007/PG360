@@ -168,6 +168,47 @@ async function main() {
     },
   );
 
+  // ---- Phase 2 demo data -------------------------------------------------
+  console.log("→ Cleaning test artifacts…");
+  await db.from("bookings").delete().eq("tenant_name", "Smoke Tester");
+  await db.from("expenses").delete().in("description", ["smoke test electricity", "app-path test"]);
+
+  console.log("→ Weekly food menu…");
+  const MENU = [
+    ["Idli & sambar", "Veg thali", "Chapati & paneer"],
+    ["Poha", "Rajma chawal", "Roti & dal fry"],
+    ["Upma", "Veg pulao & raita", "Chapati & aloo gobi"],
+    ["Bread & eggs", "Curd rice & pickle", "Roti & chana masala"],
+    ["Dosa & chutney", "Lemon rice", "Chapati & mixed veg"],
+    ["Aloo paratha", "Veg biryani", "Roti & egg curry"],
+    ["Puri & bhaji", "Chole bhature", "Khichdi & papad"],
+  ];
+  const menuRows = [];
+  MENU.forEach((meals, day) =>
+    ["breakfast", "lunch", "dinner"].forEach((meal, mi) =>
+      menuRows.push({ pg_id: pg.id, day_of_week: day, meal_type: meal, description: meals[mi] }),
+    ),
+  );
+  await db.from("food_menu").upsert(menuRows, { onConflict: "pg_id,day_of_week,meal_type" });
+
+  console.log("→ Sample expenses…");
+  for (const e of [
+    { category: "salaries", amount: 25000, date: "2026-06-01", description: "Cook + cleaner salaries" },
+    { category: "groceries", amount: 18400, date: "2026-06-05", description: "Monthly groceries" },
+    { category: "utilities", amount: 6200, date: "2026-06-08", description: "Electricity + water" },
+    { category: "maintenance", amount: 3000, date: "2026-06-11", description: "Plumber visit" },
+  ]) {
+    await findOrInsert("expenses", { pg_id: pg.id, date: e.date, category: e.category }, { pg_id: pg.id, added_by: adminId, ...e });
+  }
+
+  console.log("→ Sample booking requests…");
+  for (const b of [
+    { tenant_name: "Neha Gupta", phone: "+919811112222", preferred_room_type: "single", requested_date: "2026-07-01" },
+    { tenant_name: "Sandeep Rao", phone: "+919833334444", preferred_room_type: "double", requested_date: "2026-06-25" },
+  ]) {
+    await findOrInsert("bookings", { pg_id: pg.id, tenant_name: b.tenant_name }, { pg_id: pg.id, ...b });
+  }
+
   console.log("\n✓ Seed complete. Logins (password: demo1234):");
   console.log("   super_admin  owner@pg360.app");
   console.log("   admin        ravi@sunrisepg.in");

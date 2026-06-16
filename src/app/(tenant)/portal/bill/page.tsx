@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyTenant } from "@/lib/db";
+import { ScreenshotUpload } from "@/components/tenant/screenshot-upload";
 import { currentMonth, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "My Bill" };
@@ -108,6 +109,13 @@ export default async function MyBill() {
                   </p>
                 </div>
               )}
+
+              <div className="mt-4">
+                <ScreenshotUpload
+                  paymentId={current.id}
+                  existingUrl={current.payment_screenshot_url}
+                />
+              </div>
             </div>
           ) : (
             <p className="p-6 text-sm text-ink-muted">
