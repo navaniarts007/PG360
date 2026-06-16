@@ -13,12 +13,23 @@ import {
 import type { RateCard, Room } from "@/lib/types";
 import { inr } from "@/lib/utils";
 
+interface FloorOption {
+  id: string;
+  label: string;
+}
+
 export function AddRoomDialog({
   rateCards,
+  floors,
   room,
+  defaultFloorId,
+  compact = false,
 }: {
   rateCards: RateCard[];
+  floors: FloorOption[];
   room?: Room;
+  defaultFloorId?: string;
+  compact?: boolean;
 }) {
   const isEdit = !!room;
   return (
@@ -37,25 +48,45 @@ export function AddRoomDialog({
           >
             <Pencil className="size-3.5" /> Edit
           </button>
+        ) : compact ? (
+          <button
+            onClick={open}
+            disabled={rateCards.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-clay-50 px-3 py-1.5 text-xs font-semibold text-clay-700 transition-colors hover:bg-clay-100 disabled:opacity-50"
+          >
+            <Plus className="size-3.5" /> Add room to this floor
+          </button>
         ) : (
-          <Button onClick={open} disabled={rateCards.length === 0}>
+          <Button onClick={open} disabled={rateCards.length === 0 || floors.length === 0}>
             <Plus className="size-4" /> Add room
           </Button>
         )
       }
     >
-      {(close) => <RoomForm rateCards={rateCards} room={room} onDone={close} />}
+      {(close) => (
+        <RoomForm
+          rateCards={rateCards}
+          floors={floors}
+          room={room}
+          defaultFloorId={defaultFloorId}
+          onDone={close}
+        />
+      )}
     </Modal>
   );
 }
 
 function RoomForm({
   rateCards,
+  floors,
   room,
+  defaultFloorId,
   onDone,
 }: {
   rateCards: RateCard[];
+  floors: FloorOption[];
   room?: Room;
+  defaultFloorId?: string;
   onDone: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -91,8 +122,13 @@ function RoomForm({
         <FieldRow label="Room number" htmlFor="room_number">
           <Input id="room_number" name="room_number" defaultValue={room?.room_number ?? ""} placeholder="201" required />
         </FieldRow>
-        <FieldRow label="Floor" htmlFor="floor">
-          <Input id="floor" name="floor" type="number" min={0} defaultValue={room?.floor ?? 1} />
+        <FieldRow label="Floor" htmlFor="floor_id">
+          <Select id="floor_id" name="floor_id" defaultValue={room?.floor_id ?? defaultFloorId ?? ""} required>
+            <option value="" disabled>Select a floor…</option>
+            {floors.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </Select>
         </FieldRow>
         <FieldRow label="Total beds" htmlFor="total_beds">
           <Input id="total_beds" name="total_beds" type="number" min={1} defaultValue={room?.total_beds ?? 2} />

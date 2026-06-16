@@ -90,11 +90,20 @@ export interface Bed {
   created_at: string;
 }
 
+export interface Floor {
+  id: string;
+  pg_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface Room {
   id: string;
   pg_id: string;
   room_number: string;
   floor: number;
+  floor_id: string | null;
   type: RoomType;
   total_beds: number;
   occupied_beds: number;

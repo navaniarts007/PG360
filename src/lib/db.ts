@@ -6,6 +6,7 @@ import type {
   AppNotification,
   Bed,
   Expense,
+  Floor,
   FoodMenuItem,
   Issue,
   MealType,
@@ -98,6 +99,43 @@ export async function getRoomOptions(): Promise<RoomOption[]> {
     label: `Room ${r.room_number} · Floor ${r.floor}`,
     full: r.occupied_beds >= r.total_beds,
   }));
+}
+
+/* -------------------------------------------------------------- floors */
+
+export async function listFloors(): Promise<Floor[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("floors")
+    .select("*")
+    .eq("pg_id", pid)
+    .order("sort_order")
+    .order("name");
+  return (data ?? []) as Floor[];
+}
+
+export interface FloorWithRooms {
+  floor: Floor;
+  rooms: RoomBeds[];
+}
+
+/** Floors (including empty ones) with their rooms + beds, for the floor view. */
+export async function listFloorsWithRooms(): Promise<FloorWithRooms[]> {
+  const [floors, roomBeds] = await Promise.all([listFloors(), listBedsByRoom()]);
+  const byFloor = new Map<string, RoomBeds[]>();
+  for (const rb of roomBeds) {
+    const key = rb.room.floor_id ?? "__none__";
+    const list = byFloor.get(key) ?? [];
+    list.push(rb);
+    byFloor.set(key, list);
+  }
+  return floors.map((floor) => ({ floor, rooms: byFloor.get(floor.id) ?? [] }));
+}
+
+export async function getFloorOptions(): Promise<{ id: string; label: string }[]> {
+  const floors = await listFloors();
+  return floors.map((f) => ({ id: f.id, label: f.name }));
 }
 
 /* ----------------------------------------------------- rate cards / beds */

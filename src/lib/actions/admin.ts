@@ -19,7 +19,7 @@ const amenityList = (s?: string) =>
 
 const roomSchema = z.object({
   room_number: z.string().min(1, "Room number is required."),
-  floor: z.coerce.number().int().min(0),
+  floor_id: z.string().min(1, "Pick a floor."),
   rate_card_id: z.string().min(1, "Pick a rate card."),
   total_beds: z.coerce.number().int().min(1, "At least 1 bed."),
   wifi_password: z.string().min(1, "WiFi password is required."),
@@ -45,12 +45,19 @@ export async function addRoomAction(
     .maybeSingle();
   if (!rc || rc.pg_id !== pid) return { error: "That rate card isn't in this property." };
 
+  const { data: floor } = await s
+    .from("floors")
+    .select("sort_order")
+    .eq("id", d.floor_id)
+    .maybeSingle();
+
   const { data: room, error } = await s
     .from("rooms")
     .insert({
       pg_id: pid,
       room_number: d.room_number,
-      floor: d.floor,
+      floor: floor?.sort_order ?? 0,
+      floor_id: d.floor_id,
       type: rc.room_type,
       total_beds: d.total_beds,
       occupied_beds: 0,
@@ -79,7 +86,7 @@ export async function addRoomAction(
 
 const roomUpdateSchema = z.object({
   room_number: z.string().min(1, "Room number is required."),
-  floor: z.coerce.number().int().min(0),
+  floor_id: z.string().min(1, "Pick a floor."),
   total_beds: z.coerce.number().int().min(1, "At least 1 bed."),
   wifi_password: z.string().min(1, "WiFi password is required."),
   amenities: z.string().optional(),
@@ -108,9 +115,15 @@ export async function updateRoomAction(
     return { error: `Can't reduce below ${occupied} occupied bed(s).` };
   }
 
+  const { data: floor } = await s
+    .from("floors")
+    .select("sort_order")
+    .eq("id", d.floor_id)
+    .maybeSingle();
   const patch: Record<string, unknown> = {
     room_number: d.room_number,
-    floor: d.floor,
+    floor_id: d.floor_id,
+    floor: floor?.sort_order ?? 0,
     total_beds: d.total_beds,
     wifi_password: d.wifi_password,
     amenities: amenityList(d.amenities),

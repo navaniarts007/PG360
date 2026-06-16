@@ -1,18 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Layers } from "lucide-react";
+import { ChevronDown, Eye, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Collapsible floor group. Server renders the room cards as children; this
- *  client wrapper just handles expand/minimize with a smooth height animation. */
+/** A floor as a card you can View (expand) to see its rooms. Server renders the
+ *  room cards (+ add-room button) as children; floor edit/delete come via the
+ *  `actions` slot. Collapsed by default — you see the floors, then click View. */
 export function FloorSection({
   label,
   rooms,
   bedsFilled,
   bedsTotal,
   vacant,
-  defaultOpen = false,
+  actions,
   children,
 }: {
   label: string;
@@ -20,19 +21,19 @@ export function FloorSection({
   bedsFilled: number;
   bedsTotal: number;
   vacant: number;
-  defaultOpen?: boolean;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface/70 shadow-soft">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-paper-2/40 sm:px-5"
-        aria-expanded={open}
-      >
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex flex-1 items-center gap-3 text-left"
+          aria-expanded={open}
+        >
           <span
             className={cn(
               "grid size-9 place-items-center rounded-xl bg-paper-2 text-ink-soft ring-1 ring-line transition-colors",
@@ -41,31 +42,32 @@ export function FloorSection({
           >
             <Layers className="size-4.5" />
           </span>
-          <div>
-            <p className="font-display text-lg font-semibold text-ink">{label}</p>
-            <p className="text-xs text-ink-muted">
-              {rooms} {rooms === 1 ? "room" : "rooms"} · {bedsFilled}/{bedsTotal} beds filled
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {vacant > 0 ? (
+          <span>
+            <span className="block font-display text-lg font-semibold text-ink">{label}</span>
+            <span className="block text-xs text-ink-muted">
+              {rooms} {rooms === 1 ? "room" : "rooms"}
+              {bedsTotal > 0 && ` · ${bedsFilled}/${bedsTotal} beds filled`}
+            </span>
+          </span>
+        </button>
+
+        <div className="flex items-center gap-1.5">
+          {vacant > 0 && (
             <span className="hidden rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600 ring-1 ring-rose-100 sm:inline">
               {vacant} vacant
             </span>
-          ) : (
-            <span className="hidden rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100 sm:inline">
-              Full
-            </span>
           )}
-          <ChevronDown
-            className={cn(
-              "size-5 text-ink-muted transition-transform duration-300",
-              open && "rotate-180",
-            )}
-          />
+          {actions}
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-paper transition-colors hover:bg-ink-soft"
+          >
+            <Eye className="size-3.5" />
+            {open ? "Hide" : "View"}
+            <ChevronDown className={cn("size-3.5 transition-transform duration-300", open && "rotate-180")} />
+          </button>
         </div>
-      </button>
+      </div>
 
       <div
         className={cn(
@@ -74,9 +76,7 @@ export function FloorSection({
         )}
       >
         <div className="overflow-hidden">
-          <div className="grid gap-4 border-t border-line p-4 sm:p-5 lg:grid-cols-2">
-            {children}
-          </div>
+          <div className="border-t border-line p-4 sm:p-5">{children}</div>
         </div>
       </div>
     </div>
