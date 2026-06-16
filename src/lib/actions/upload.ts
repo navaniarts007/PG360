@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
+import { getActiveProperty } from "../auth";
 import { createAdminClient } from "../supabase/admin";
 
 export type SignResult =
@@ -46,8 +47,9 @@ export async function savePaymentDetailsAction(
   _prev: { ok?: boolean; error?: string },
   formData: FormData,
 ): Promise<{ ok?: boolean; error?: string }> {
-  const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const upi = String(formData.get("upi_id") ?? "").trim();
   const bank = String(formData.get("bank_details") ?? "").trim();
   const qr = String(formData.get("payment_qr_url") ?? "").trim();
@@ -60,7 +62,7 @@ export async function savePaymentDetailsAction(
     patch.payment_qr_url = qr;
   }
   const admin = createAdminClient();
-  const { error } = await admin.from("pg_accounts").update(patch).eq("id", me.pg_id);
+  const { error } = await admin.from("pg_accounts").update(patch).eq("id", pid);
   if (error) return { error: error.message };
   revalidatePath("/dashboard/payments");
   revalidatePath("/portal/bill");

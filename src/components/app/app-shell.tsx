@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BedDouble,
   Building2,
   CalendarCheck,
   CreditCard,
@@ -23,9 +24,10 @@ import {
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
+import { PropertySwitcher } from "./property-switcher";
 import { initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import type { AppNotification, Role } from "@/lib/types";
+import type { AppNotification, PropertyRef, Role } from "@/lib/types";
 
 interface NavItem {
   href: string;
@@ -41,7 +43,8 @@ const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
   ],
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-    { href: "/dashboard/rooms", label: "Rooms", icon: Building2 },
+    { href: "/dashboard/properties", label: "Properties", icon: Building2 },
+    { href: "/dashboard/rooms", label: "Rooms", icon: BedDouble },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
     { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
@@ -71,6 +74,8 @@ export function AppShell({
   context,
   userId,
   notifications,
+  properties,
+  activePropertyId,
   children,
 }: {
   role: Role;
@@ -78,6 +83,8 @@ export function AppShell({
   context: string;
   userId: string;
   notifications: AppNotification[];
+  properties: PropertyRef[];
+  activePropertyId: string | null;
   children: React.ReactNode;
 }) {
   const nav = NAVS[navKey(role)];
@@ -109,12 +116,16 @@ export function AppShell({
         </button>
       </div>
 
-      <div className="mx-3 mb-2 rounded-xl border border-line bg-paper-2/60 px-3 py-2.5">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-clay-500">
-          {roleLabel}
-        </p>
-        <p className="truncate text-sm font-medium text-ink">{context}</p>
-      </div>
+      {(role === "admin" || role === "staff") && properties.length > 0 ? (
+        <PropertySwitcher properties={properties} activeId={activePropertyId} />
+      ) : (
+        <div className="mx-3 mb-2 rounded-xl border border-line bg-paper-2/60 px-3 py-2.5">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wider text-clay-500">
+            {roleLabel}
+          </p>
+          <p className="truncate text-sm font-medium text-ink">{context}</p>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-1 px-3 py-2">
         {nav.map((item) => {

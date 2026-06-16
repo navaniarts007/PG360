@@ -16,6 +16,8 @@ export default async function TenantLayout({
       context={pg?.pg_name ?? "My PG"}
       userId={user.id}
       notifications={notifications}
+      properties={user.properties}
+      activePropertyId={user.activePropertyId}
     >
       {children}
     </AppShell>

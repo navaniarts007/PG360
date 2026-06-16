@@ -19,6 +19,8 @@ export default async function AdminLayout({
       context={pg?.pg_name ?? "Your PG"}
       userId={user.id}
       notifications={notifications}
+      properties={user.properties}
+      activePropertyId={user.activePropertyId}
     >
       {children}
     </AppShell>

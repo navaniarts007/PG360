@@ -179,6 +179,11 @@ export interface AppNotification {
   created_at: string;
 }
 
+export interface PropertyRef {
+  id: string;
+  name: string;
+}
+
 export interface SessionUser {
   id: string;
   role: Role;
@@ -186,4 +191,8 @@ export interface SessionUser {
   tenant_id: string | null;
   full_name: string;
   email: string;
+  /** Properties this admin/staff is a member of (empty for tenant/super). */
+  properties: PropertyRef[];
+  /** The property the admin is currently acting on (cookie-selected, validated). */
+  activePropertyId: string | null;
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "../guards";
+import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -14,8 +15,9 @@ export async function saveFoodMenuAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const s = await createClient();
 
   const rows: {
@@ -28,7 +30,7 @@ export async function saveFoodMenuAction(
     for (const meal of MEALS) {
       const desc = String(formData.get(`d${day}_${meal}`) ?? "").trim();
       rows.push({
-        pg_id: me.pg_id,
+        pg_id: pid,
         day_of_week: day,
         meal_type: meal,
         description: desc,

@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
+import { getActiveProperty } from "./auth";
 import type {
   AppNotification,
   Expense,
@@ -28,6 +29,16 @@ export async function listPgAccounts(): Promise<PgAccount[]> {
     .from("pg_accounts")
     .select("*")
     .order("created_at", { ascending: false });
+  return (data ?? []) as PgAccount[];
+}
+
+/** Properties the current admin/staff is a member of (RLS-scoped). */
+export async function listMyProperties(): Promise<PgAccount[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("pg_accounts")
+    .select("*")
+    .order("created_at", { ascending: true });
   return (data ?? []) as PgAccount[];
 }
 
@@ -63,7 +74,12 @@ export async function platformStats() {
 
 export async function listRooms(): Promise<Room[]> {
   const s = await sb();
-  const { data } = await s.from("rooms").select("*").order("room_number");
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("rooms")
+    .select("*")
+    .eq("pg_id", pid)
+    .order("room_number");
   return (data ?? []) as Room[];
 }
 
@@ -88,9 +104,11 @@ type TenantRow = Tenant & { room: { room_number: string; floor: number } | null 
 
 export async function listTenantsWithRoom(): Promise<TenantRow[]> {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { data } = await s
     .from("tenants")
     .select("*, room:rooms(room_number, floor)")
+    .eq("pg_id", pid)
     .order("status", { ascending: true })
     .order("created_at", { ascending: false });
   // to-one FK embeds return objects at runtime; cast through unknown.
@@ -106,9 +124,11 @@ export interface PayTenant {
 
 export async function getPayTenants(): Promise<PayTenant[]> {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { data } = await s
     .from("tenants")
     .select("id, name, rent_amount, status, room:rooms(room_number)")
+    .eq("pg_id", pid)
     .eq("status", "active");
   type Row = {
     id: string;
@@ -150,11 +170,20 @@ export async function getTenantDetail(id: string): Promise<{
 
 export async function adminKpis(month: string) {
   const s = await sb();
+  const pid = await getActiveProperty();
   const [{ data: rooms }, { count: tenantCount }, { data: payments }] =
     await Promise.all([
-      s.from("rooms").select("total_beds, occupied_beds"),
-      s.from("tenants").select("id", { count: "exact", head: true }).eq("status", "active"),
-      s.from("payments").select("total_amount, amount_paid").eq("month_for", month),
+      s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
+      s
+        .from("tenants")
+        .select("id", { count: "exact", head: true })
+        .eq("pg_id", pid)
+        .eq("status", "active"),
+      s
+        .from("payments")
+        .select("total_amount, amount_paid")
+        .eq("pg_id", pid)
+        .eq("month_for", month),
     ]);
   const r = (rooms ?? []) as { total_beds: number; occupied_beds: number }[];
   const p = (payments ?? []) as { total_amount: number; amount_paid: number }[];
@@ -182,9 +211,11 @@ export async function getMonthPayments(
   month: string,
 ): Promise<Array<Payment & { name: string; room: string }>> {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { data } = await s
     .from("payments")
     .select("*, tenant:tenants(name, room:rooms(room_number))")
+    .eq("pg_id", pid)
     .eq("month_for", month);
   return ((data ?? []) as unknown as PaymentRow[]).map((p) => ({
     ...p,
@@ -218,9 +249,11 @@ export async function listIssuesWithTenant(): Promise<
   Array<Issue & { tenant_name: string; room_number: string | null }>
 > {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { data } = await s
     .from("issues")
     .select("*, tenant:tenants(name, room:rooms(room_number))")
+    .eq("pg_id", pid)
     .order("created_at", { ascending: false });
   return ((data ?? []) as unknown as IssueRow[]).map((i) => ({
     ...i,
@@ -286,7 +319,8 @@ export async function getMyNotifications(limit = 20): Promise<AppNotification[]>
 
 export async function getFoodMenu(): Promise<FoodMenuItem[]> {
   const s = await sb();
-  const { data } = await s.from("food_menu").select("*");
+  const pid = await getActiveProperty();
+  const { data } = await s.from("food_menu").select("*").eq("pg_id", pid);
   return (data ?? []) as FoodMenuItem[];
 }
 
@@ -310,9 +344,11 @@ export async function getMyFoodOpts(from: string, to: string): Promise<FoodOptRo
 
 export async function listBookings(): Promise<import("./types").Booking[]> {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { data } = await s
     .from("bookings")
     .select("*")
+    .eq("pg_id", pid)
     .order("created_at", { ascending: false });
   return (data ?? []) as import("./types").Booking[];
 }
@@ -339,10 +375,12 @@ const monthBounds = (month: string) => ({
 
 export async function listExpenses(month: string): Promise<Expense[]> {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { from, to } = monthBounds(month);
   const { data } = await s
     .from("expenses")
     .select("*")
+    .eq("pg_id", pid)
     .gte("date", from)
     .lte("date", to)
     .order("date", { ascending: false });
@@ -366,10 +404,20 @@ export async function expenseSummary(month: string) {
 
 export async function pnl(month: string) {
   const s = await sb();
+  const pid = await getActiveProperty();
   const { from, to } = monthBounds(month);
   const [{ data: pays }, { data: exps }] = await Promise.all([
-    s.from("payments").select("total_amount, amount_paid").eq("month_for", month),
-    s.from("expenses").select("amount").gte("date", from).lte("date", to),
+    s
+      .from("payments")
+      .select("total_amount, amount_paid")
+      .eq("pg_id", pid)
+      .eq("month_for", month),
+    s
+      .from("expenses")
+      .select("amount")
+      .eq("pg_id", pid)
+      .gte("date", from)
+      .lte("date", to),
   ]);
   const billed = ((pays ?? []) as { total_amount: number }[]).reduce((x, p) => x + p.total_amount, 0);
   const collected = ((pays ?? []) as { amount_paid: number }[]).reduce((x, p) => x + p.amount_paid, 0);

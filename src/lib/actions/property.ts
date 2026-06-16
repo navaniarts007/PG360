@@ -1,0 +1,101 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getSession, setActiveProperty } from "../auth";
+import { requireRole } from "../guards";
+import { createClient } from "../supabase/server";
+import { createAdminClient } from "../supabase/admin";
+
+export type ActionState = { ok?: boolean; error?: string };
+
+/** Switch the admin's active property (validated against their memberships). */
+export async function setActivePropertyAction(propertyId: string): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  if (!session.properties.some((p) => p.id === propertyId)) return;
+  await setActiveProperty(propertyId);
+  revalidatePath("/dashboard", "layout");
+}
+
+const propertySchema = z.object({
+  pg_name: z.string().min(2, "Property name is required."),
+  location: z.string().min(2, "Location is required."),
+  mobile: z.string().min(8, "Enter a valid mobile number."),
+  pg_type: z.enum(["boys", "girls", "coliving"]),
+  category: z.enum(["budget", "standard", "premium"]),
+});
+
+/** An owner adds another property to their portfolio. */
+export async function createPropertyAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const me = await requireRole(["admin"]);
+  const parsed = propertySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const admin = createAdminClient();
+
+  const expiry = new Date();
+  expiry.setFullYear(expiry.getFullYear() + 1);
+  const { data: pg, error } = await admin
+    .from("pg_accounts")
+    .insert({
+      owner_name: me.full_name,
+      pg_name: d.pg_name,
+      mobile: d.mobile,
+      location: d.location,
+      pg_type: d.pg_type,
+      category: d.category,
+      subscription_plan: "pro",
+      subscription_expiry: expiry.toISOString().slice(0, 10),
+      created_by: me.id,
+      owner_id: me.id,
+    })
+    .select()
+    .single();
+  if (error || !pg) return { error: error?.message ?? "Could not create the property." };
+
+  await admin
+    .from("property_members")
+    .insert({ property_id: pg.id, user_id: me.id, role: "admin" });
+
+  await setActiveProperty(pg.id);
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
+export async function updatePropertyAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const me = await requireRole(["admin"]);
+  const id = String(formData.get("id"));
+  if (!me.properties.some((p) => p.id === id)) return { error: "Not your property." };
+  const parsed = propertySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const s = await createClient();
+  const { error } = await s.from("pg_accounts").update(parsed.data).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/properties");
+  return { ok: true };
+}
+
+export async function deletePropertyAction(formData: FormData): Promise<void> {
+  const me = await requireRole(["admin"]);
+  const id = String(formData.get("id"));
+  if (!me.properties.some((p) => p.id === id)) return;
+  if (me.properties.length <= 1) return; // never delete the last property
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("pg_id", id)
+    .eq("status", "active");
+  if ((count ?? 0) > 0) return; // block delete while active tenants exist
+  await admin.from("pg_accounts").delete().eq("id", id);
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/properties");
+}

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "../guards";
+import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyTenant } from "../notify";
@@ -25,14 +26,15 @@ export async function addRoomAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const parsed = roomSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const { amenities, ...rest } = parsed.data;
   const s = await createClient();
   const { error } = await s.from("rooms").insert({
-    pg_id: me.pg_id,
+    pg_id: pid,
     occupied_beds: 0,
     amenities: (amenities ?? "").split(",").map((a) => a.trim()).filter(Boolean),
     ...rest,
@@ -62,8 +64,9 @@ export async function addTenantAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const parsed = tenantSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
@@ -86,7 +89,7 @@ export async function addTenantAction(
   }
 
   const { error: tErr } = await admin.from("tenants").insert({
-    pg_id: me.pg_id,
+    pg_id: pid,
     room_id: roomId,
     user_id: created.user.id,
     name: d.name,
@@ -106,7 +109,7 @@ export async function addTenantAction(
   await admin.from("profiles").upsert({
     id: created.user.id,
     role: "tenant",
-    pg_id: me.pg_id,
+    pg_id: pid,
     full_name: d.name,
     phone: d.phone,
   });
@@ -130,15 +133,16 @@ export async function addTenantAction(
 }
 
 export async function checkoutTenantAction(formData: FormData): Promise<void> {
-  const me = await requireRole(["admin", "staff"]);
+  await requireRole(["admin", "staff"]);
   const id = String(formData.get("id"));
   const s = await createClient();
+  // RLS already scopes this to the caller's properties.
   const { data: tenant } = await s
     .from("tenants")
     .select("id, pg_id, room_id, status")
     .eq("id", id)
     .maybeSingle();
-  if (!tenant || tenant.pg_id !== me.pg_id || tenant.status === "checked_out") return;
+  if (!tenant || tenant.status === "checked_out") return;
 
   await s
     .from("tenants")
@@ -180,8 +184,9 @@ export async function recordPaymentAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
@@ -192,12 +197,12 @@ export async function recordPaymentAction(
     .select("id, pg_id")
     .eq("id", d.tenant_id)
     .maybeSingle();
-  if (!tenant || tenant.pg_id !== me.pg_id) return { error: "That tenant is not in your PG." };
+  if (!tenant || tenant.pg_id !== pid) return { error: "That tenant is not in this property." };
 
   // total_amount + status are derived by a DB trigger.
   const { error } = await s.from("payments").upsert(
     {
-      pg_id: me.pg_id,
+      pg_id: pid,
       tenant_id: d.tenant_id,
       month_for: d.month_for,
       base_rent: d.base_rent,
@@ -214,7 +219,7 @@ export async function recordPaymentAction(
   if (error) return { error: error.message };
 
   await notifyTenant(
-    me.pg_id,
+    pid,
     d.tenant_id,
     `Your payment for ${d.month_for} was recorded.`,
     "/portal/bill",
@@ -247,12 +252,13 @@ export async function addExpenseAction(
   formData: FormData,
 ): Promise<ActionState> {
   const me = await requireRole(["admin", "staff"]);
-  if (!me.pg_id) return { error: "No PG attached to your account." };
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const parsed = expenseSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const s = await createClient();
   const { error } = await s.from("expenses").insert({
-    pg_id: me.pg_id,
+    pg_id: pid,
     category: parsed.data.category,
     amount: parsed.data.amount,
     date: parsed.data.date,
@@ -268,14 +274,14 @@ export async function addExpenseAction(
 /* --------------------------------- issues -------------------------------- */
 
 export async function setIssueStatusAction(formData: FormData): Promise<void> {
-  const me = await requireRole(["admin", "staff"]);
+  await requireRole(["admin", "staff"]);
   const id = String(formData.get("id"));
   const status = String(formData.get("status"));
   if (!["open", "in_progress", "resolved"].includes(status)) return;
   const s = await createClient();
   const { data: issue } = await s
     .from("issues")
-    .select("tenant_id")
+    .select("tenant_id, pg_id")
     .eq("id", id)
     .maybeSingle();
   await s
@@ -286,8 +292,13 @@ export async function setIssueStatusAction(formData: FormData): Promise<void> {
     })
     .eq("id", id);
 
-  if (status === "resolved" && issue && me.pg_id) {
-    await notifyTenant(me.pg_id, issue.tenant_id as string, "Your complaint was resolved ✓", "/portal/issues");
+  if (status === "resolved" && issue) {
+    await notifyTenant(
+      issue.pg_id as string,
+      issue.tenant_id as string,
+      "Your complaint was resolved ✓",
+      "/portal/issues",
+    );
   }
   revalidatePath("/dashboard/issues");
   revalidatePath("/dashboard");

@@ -16,6 +16,8 @@ export default async function SuperAdminLayout({
       context="PG360 Platform"
       userId={user.id}
       notifications={notifications}
+      properties={user.properties}
+      activePropertyId={user.activePropertyId}
     >
       {children}
     </AppShell>

@@ -62,6 +62,7 @@ export async function createPgAction(
       subscription_plan: d.subscription_plan,
       subscription_expiry: expiry.toISOString().slice(0, 10),
       created_by: me.id,
+      owner_id: created.user.id,
     })
     .select()
     .single();
@@ -70,7 +71,7 @@ export async function createPgAction(
     return { error: pgErr?.message ?? "Could not create the PG." };
   }
 
-  // 3) the owner's profile (role=admin, scoped to the new PG)
+  // 3) the owner's profile (role=admin) + property membership
   const { error: profErr } = await admin.from("profiles").upsert({
     id: created.user.id,
     role: "admin",
@@ -79,6 +80,10 @@ export async function createPgAction(
     phone: d.mobile,
   });
   if (profErr) return { error: profErr.message };
+
+  await admin
+    .from("property_members")
+    .insert({ property_id: pg.id, user_id: created.user.id, role: "admin" });
 
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");

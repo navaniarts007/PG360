@@ -230,9 +230,89 @@ async function main() {
     await findOrInsert("notifications", { recipient_id: n.recipient_id, message: n.message }, { pg_id: pg.id, ...n });
   }
 
+  // ---- Multi-property (Phase A1) ----------------------------------------
+  console.log("→ Multi-property: owner_id + memberships…");
+  await db.from("pg_accounts").update({ owner_id: adminId }).eq("id", pg.id);
+  await findOrInsert(
+    "property_members",
+    { property_id: pg.id, user_id: adminId },
+    { property_id: pg.id, user_id: adminId, role: "admin" },
+  );
+
+  const expiry2 = new Date();
+  expiry2.setFullYear(expiry2.getFullYear() + 1);
+  const heights = await findOrInsert(
+    "pg_accounts",
+    { created_by: superId, pg_name: "Sunrise Heights" },
+    {
+      owner_name: "Ravi Kumar",
+      pg_name: "Sunrise Heights",
+      mobile: "+919845012345",
+      location: "HSR Layout, Bengaluru",
+      pg_type: "boys",
+      category: "standard",
+      subscription_plan: "pro",
+      subscription_expiry: expiry2.toISOString().slice(0, 10),
+      created_by: superId,
+      owner_id: adminId,
+    },
+  );
+  await findOrInsert(
+    "property_members",
+    { property_id: heights.id, user_id: adminId },
+    { property_id: heights.id, user_id: adminId, role: "admin" },
+  );
+  await findOrInsert(
+    "rooms",
+    { pg_id: heights.id, room_number: "G1" },
+    {
+      pg_id: heights.id, room_number: "G1", floor: 0, type: "double",
+      total_beds: 2, occupied_beds: 0, rent_amount: 9000,
+      wifi_password: "Heights@G1", amenities: ["Fan", "Common bath"],
+    },
+  );
+
+  // a second OWNER, to prove cross-owner isolation
+  console.log("→ Second owner (Meena) + Green Nest…");
+  const meenaId = await ensureUser("meena@greennest.in", "Meena Iyer");
+  const greennest = await findOrInsert(
+    "pg_accounts",
+    { created_by: superId, pg_name: "Green Nest" },
+    {
+      owner_name: "Meena Iyer",
+      pg_name: "Green Nest",
+      mobile: "+919812233445",
+      location: "Indiranagar, Bengaluru",
+      pg_type: "girls",
+      category: "premium",
+      subscription_plan: "starter",
+      subscription_expiry: expiry2.toISOString().slice(0, 10),
+      created_by: superId,
+      owner_id: meenaId,
+    },
+  );
+  await db.from("profiles").upsert({
+    id: meenaId, role: "admin", pg_id: greennest.id, full_name: "Meena Iyer",
+  });
+  await findOrInsert(
+    "property_members",
+    { property_id: greennest.id, user_id: meenaId },
+    { property_id: greennest.id, user_id: meenaId, role: "admin" },
+  );
+  await findOrInsert(
+    "rooms",
+    { pg_id: greennest.id, room_number: "101" },
+    {
+      pg_id: greennest.id, room_number: "101", floor: 1, type: "single",
+      total_beds: 1, occupied_beds: 0, rent_amount: 14000,
+      wifi_password: "GreenNest@101", amenities: ["AC", "Attached bath"],
+    },
+  );
+
   console.log("\n✓ Seed complete. Logins (password: demo1234):");
   console.log("   super_admin  owner@pg360.app");
-  console.log("   admin        ravi@sunrisepg.in");
+  console.log("   admin/owner  ravi@sunrisepg.in   (Sunrise Stay + Sunrise Heights)");
+  console.log("   admin/owner  meena@greennest.in  (Green Nest)");
   console.log("   tenant       arjun@tenant.in");
 }
 
