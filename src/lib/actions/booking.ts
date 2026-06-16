@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
+import { notifyStaff } from "../notify";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -44,6 +45,12 @@ export async function createBookingAction(
     notes: d.notes || null,
   });
   if (error) return { error: error.message };
+
+  await notifyStaff(
+    d.pg_id,
+    `New room request from ${d.tenant_name} (${d.preferred_room_type})`,
+    "/dashboard/bookings",
+  );
   return { ok: true };
 }
 

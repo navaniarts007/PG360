@@ -165,6 +165,17 @@ export interface Booking {
   created_at: string;
 }
 
+export interface AppNotification {
+  id: string;
+  pg_id: string;
+  recipient_id: string;
+  recipient_type: Role;
+  message: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 export interface SessionUser {
   id: string;
   role: Role;

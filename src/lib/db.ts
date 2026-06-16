@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import type {
+  AppNotification,
   Expense,
   FoodMenuItem,
   Issue,
@@ -267,6 +268,18 @@ export async function getMyIssues(): Promise<Issue[]> {
     .select("*")
     .order("created_at", { ascending: false });
   return (data ?? []) as Issue[];
+}
+
+/* -------------------------------------------------------- notifications */
+
+export async function getMyNotifications(limit = 20): Promise<AppNotification[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as AppNotification[];
 }
 
 /* ---------------------------------------------------------------- food */

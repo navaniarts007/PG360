@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Bell,
   Building2,
   CalendarCheck,
   CreditCard,
@@ -23,9 +22,10 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "./logout-button";
+import { NotificationBell } from "./notification-bell";
 import { initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import type { Role } from "@/lib/types";
+import type { AppNotification, Role } from "@/lib/types";
 
 interface NavItem {
   href: string;
@@ -69,11 +69,15 @@ export function AppShell({
   role,
   user,
   context,
+  userId,
+  notifications,
   children,
 }: {
   role: Role;
   user: { full_name: string; email: string };
   context: string;
+  userId: string;
+  notifications: AppNotification[];
   children: React.ReactNode;
 }) {
   const nav = NAVS[navKey(role)];
@@ -188,9 +192,12 @@ export function AppShell({
             <Menu className="size-5" />
           </button>
           <Logo />
-          <span className="grid size-10 place-items-center rounded-xl text-ink-muted">
-            <Bell className="size-5" />
-          </span>
+          <NotificationBell userId={userId} initial={notifications} />
+        </header>
+
+        {/* desktop top bar */}
+        <header className="sticky top-0 z-20 hidden h-16 items-center justify-end border-b border-line bg-paper/70 px-8 backdrop-blur lg:flex">
+          <NotificationBell userId={userId} initial={notifications} />
         </header>
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>

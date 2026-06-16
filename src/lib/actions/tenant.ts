@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
+import { notifyStaff } from "../notify";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -32,6 +33,11 @@ export async function raiseIssueAction(
   });
   if (error) return { error: error.message };
 
+  await notifyStaff(
+    me.pg_id,
+    `New ${parsed.data.category} complaint from ${me.full_name}`,
+    "/dashboard/issues",
+  );
   revalidatePath("/portal/issues");
   return { ok: true };
 }

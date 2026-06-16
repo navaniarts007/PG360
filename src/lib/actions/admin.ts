@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
+import { notifyTenant } from "../notify";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -212,6 +213,12 @@ export async function recordPaymentAction(
   );
   if (error) return { error: error.message };
 
+  await notifyTenant(
+    me.pg_id,
+    d.tenant_id,
+    `Your payment for ${d.month_for} was recorded.`,
+    "/portal/bill",
+  );
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -261,11 +268,16 @@ export async function addExpenseAction(
 /* --------------------------------- issues -------------------------------- */
 
 export async function setIssueStatusAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
   const id = String(formData.get("id"));
   const status = String(formData.get("status"));
   if (!["open", "in_progress", "resolved"].includes(status)) return;
   const s = await createClient();
+  const { data: issue } = await s
+    .from("issues")
+    .select("tenant_id")
+    .eq("id", id)
+    .maybeSingle();
   await s
     .from("issues")
     .update({
@@ -273,6 +285,10 @@ export async function setIssueStatusAction(formData: FormData): Promise<void> {
       resolved_at: status === "resolved" ? new Date().toISOString() : null,
     })
     .eq("id", id);
+
+  if (status === "resolved" && issue && me.pg_id) {
+    await notifyTenant(me.pg_id, issue.tenant_id as string, "Your complaint was resolved ✓", "/portal/issues");
+  }
   revalidatePath("/dashboard/issues");
   revalidatePath("/dashboard");
 }

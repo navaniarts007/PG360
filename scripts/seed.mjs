@@ -209,6 +209,16 @@ async function main() {
     await findOrInsert("bookings", { pg_id: pg.id, tenant_name: b.tenant_name }, { pg_id: pg.id, ...b });
   }
 
+  console.log("→ Sample notifications…");
+  await db.from("notifications").delete().like("message", "Test:%");
+  for (const n of [
+    { recipient_id: adminId, recipient_type: "admin", message: "New wifi complaint from Arjun Nair", link: "/dashboard/issues" },
+    { recipient_id: adminId, recipient_type: "admin", message: "New room request from Neha Gupta (single)", link: "/dashboard/bookings" },
+    { recipient_id: tenantId, recipient_type: "tenant", message: "Your payment for 2026-06 was recorded.", link: "/portal/bill" },
+  ]) {
+    await findOrInsert("notifications", { recipient_id: n.recipient_id, message: n.message }, { pg_id: pg.id, ...n });
+  }
+
   console.log("\n✓ Seed complete. Logins (password: demo1234):");
   console.log("   super_admin  owner@pg360.app");
   console.log("   admin        ravi@sunrisepg.in");
