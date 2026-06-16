@@ -419,6 +419,15 @@ export async function getMyTenant(): Promise<{
   return { tenant: tenant as Tenant, room: (room as Room) ?? null };
 }
 
+/** Bed assigned to the current tenant (if any). */
+export async function getMyBed(): Promise<Bed | null> {
+  const s = await sb();
+  const { data: t } = await s.from("tenants").select("bed_id").limit(1).maybeSingle();
+  if (!t || !t.bed_id) return null;
+  const { data: bed } = await s.from("beds").select("*").eq("id", t.bed_id).maybeSingle();
+  return (bed as Bed) ?? null;
+}
+
 export async function getMyPg(): Promise<PgAccount | null> {
   const s = await sb();
   const { data } = await s.from("pg_accounts").select("*").limit(1).maybeSingle();

@@ -10,11 +10,13 @@ import {
 export function ScreenshotUpload({
   paymentId,
   existingUrl,
+  hiddenInputId,
 }: {
-  paymentId: string;
-  existingUrl: string | null;
+  paymentId?: string | null;
+  existingUrl?: string | null;
+  hiddenInputId?: string;
 }) {
-  const [url, setUrl] = useState(existingUrl);
+  const [url, setUrl] = useState<string | null | undefined>(existingUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,8 +42,23 @@ export function ScreenshotUpload({
       const json = (await res.json()) as { secure_url?: string; error?: { message: string } };
       if (!json.secure_url) throw new Error(json.error?.message ?? "Upload failed.");
 
-      const saved = await savePaymentScreenshotAction(paymentId, json.secure_url);
-      if (saved.error) throw new Error(saved.error);
+      // If a paymentId was provided, persist the screenshot against that payment.
+      if (paymentId) {
+        const saved = await savePaymentScreenshotAction(paymentId, json.secure_url);
+        if (saved.error) throw new Error(saved.error);
+      } else if (hiddenInputId) {
+        // No payment yet: write the uploaded URL into the named hidden input so
+        // a surrounding form can submit it to a server action.
+        try {
+          const el = document.getElementById(hiddenInputId) as HTMLInputElement | null;
+          if (el) {
+            el.value = json.secure_url;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        } catch {
+          // ignore DOM errors — not critical
+        }
+      }
       setUrl(json.secure_url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
