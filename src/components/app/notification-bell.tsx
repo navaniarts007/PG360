@@ -29,7 +29,7 @@ export function NotificationBell({
   const ref = useRef<HTMLDivElement>(null);
   const unread = items.filter((n) => !n.is_read).length;
 
-  // realtime: prepend new notifications for this user
+  // realtime: prepend new notifications for this user (best-effort; never throws)
   useEffect(() => {
     const supabase = createClient();
     // unique topic per mount — the browser client is a singleton, so reusing a
@@ -48,9 +48,17 @@ export function NotificationBell({
           setItems((prev) => [payload.new as AppNotification, ...prev].slice(0, 30));
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // swallow CHANNEL_ERROR / TIMED_OUT so a flaky socket never surfaces
+        // an unhandled Event to the dev error overlay.
+        void status;
+      });
     return () => {
-      void supabase.removeChannel(channel);
+      try {
+        void supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
     };
   }, [userId]);
 
