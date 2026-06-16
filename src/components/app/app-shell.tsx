@@ -15,6 +15,7 @@ import {
   MessageCircle,
   MessagesSquare,
   Receipt,
+  Settings,
   UtensilsCrossed,
   Users,
   Wallet,
@@ -27,13 +28,19 @@ import { NotificationBell } from "./notification-bell";
 import { PropertySwitcher } from "./property-switcher";
 import { initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import type { AppNotification, PropertyRef, Role } from "@/lib/types";
+import type {
+  AppNotification,
+  PropertyRef,
+  PropertySettings,
+  Role,
+} from "@/lib/types";
 
 interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
   exact?: boolean;
+  module?: keyof PropertySettings;
 }
 
 const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
@@ -46,18 +53,19 @@ const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
     { href: "/dashboard/properties", label: "Properties", icon: Building2 },
     { href: "/dashboard/rooms", label: "Rooms", icon: BedDouble },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
-    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
+    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, module: "bookings" },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-    { href: "/dashboard/food", label: "Food menu", icon: UtensilsCrossed },
+    { href: "/dashboard/food", label: "Food menu", icon: UtensilsCrossed, module: "food" },
     { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
     { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
-    { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare },
+    { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare, module: "complaints" },
+    { href: "/dashboard/settings", label: "Settings", icon: Settings },
   ],
   tenant: [
     { href: "/portal", label: "My Room", icon: Wifi, exact: true },
     { href: "/portal/bill", label: "My Bill", icon: Receipt },
-    { href: "/portal/food", label: "Food menu", icon: UtensilsCrossed },
-    { href: "/portal/issues", label: "Complaints", icon: MessagesSquare },
+    { href: "/portal/food", label: "Food menu", icon: UtensilsCrossed, module: "food" },
+    { href: "/portal/issues", label: "Complaints", icon: MessagesSquare, module: "complaints" },
     { href: "/portal/contact", label: "Contact", icon: MessageCircle },
   ],
 };
@@ -76,6 +84,7 @@ export function AppShell({
   notifications,
   properties,
   activePropertyId,
+  settings,
   children,
 }: {
   role: Role;
@@ -85,9 +94,12 @@ export function AppShell({
   notifications: AppNotification[];
   properties: PropertyRef[];
   activePropertyId: string | null;
+  settings: PropertySettings;
   children: React.ReactNode;
 }) {
-  const nav = NAVS[navKey(role)];
+  const nav = NAVS[navKey(role)].filter(
+    (item) => !item.module || settings[item.module] !== false,
+  );
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 

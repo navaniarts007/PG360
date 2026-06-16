@@ -22,8 +22,24 @@ export interface Profile {
   created_at: string;
 }
 
+/** Per-property feature toggles (stored in pg_accounts.settings jsonb).
+ *  Undefined means "on" — a module is only hidden when explicitly false. */
+export interface PropertySettings {
+  food?: boolean;
+  bookings?: boolean;
+  complaints?: boolean;
+  electricity?: boolean;
+  daily_stay?: boolean;
+  reviews?: boolean;
+  visitors?: boolean;
+}
+
+/** Module keys that are wired up and gate navigation today. */
+export const ACTIVE_MODULES = ["food", "bookings", "complaints"] as const;
+
 export interface PgAccount {
   id: string;
+  owner_id: string | null;
   owner_name: string;
   pg_name: string;
   mobile: string;
@@ -38,6 +54,7 @@ export interface PgAccount {
   upi_id: string | null;
   bank_details: string | null;
   payment_qr_url: string | null;
+  settings: PropertySettings;
 }
 
 export type RoomType = "single" | "double" | "triple";

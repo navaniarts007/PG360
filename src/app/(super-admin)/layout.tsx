@@ -18,6 +18,7 @@ export default async function SuperAdminLayout({
       notifications={notifications}
       properties={user.properties}
       activePropertyId={user.activePropertyId}
+      settings={{}}
     >
       {children}
     </AppShell>

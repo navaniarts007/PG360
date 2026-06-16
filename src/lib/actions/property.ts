@@ -2,12 +2,41 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getSession, setActiveProperty } from "../auth";
+import { getActiveProperty, getSession, setActiveProperty } from "../auth";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
+import type { PropertySettings } from "../types";
 
 export type ActionState = { ok?: boolean; error?: string };
+
+const MODULE_KEYS: (keyof PropertySettings)[] = [
+  "food",
+  "bookings",
+  "complaints",
+  "electricity",
+  "daily_stay",
+  "reviews",
+  "visitors",
+];
+
+/** Save the active property's module toggles. */
+export async function saveSettingsAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const settings: PropertySettings = {};
+  for (const k of MODULE_KEYS) settings[k] = formData.get(k) === "on";
+  const admin = createAdminClient();
+  const { error } = await admin.from("pg_accounts").update({ settings }).eq("id", pid);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/settings");
+  return { ok: true };
+}
 
 /** Switch the admin's active property (validated against their memberships). */
 export async function setActivePropertyAction(propertyId: string): Promise<void> {

@@ -9,7 +9,7 @@ export default async function AdminLayout({
 }) {
   const user = await requireRole(["admin", "staff"]);
   const [pg, notifications] = await Promise.all([
-    user.pg_id ? getPgAccount(user.pg_id) : Promise.resolve(null),
+    user.activePropertyId ? getPgAccount(user.activePropertyId) : Promise.resolve(null),
     getMyNotifications(),
   ]);
   return (
@@ -21,6 +21,7 @@ export default async function AdminLayout({
       notifications={notifications}
       properties={user.properties}
       activePropertyId={user.activePropertyId}
+      settings={pg?.settings ?? {}}
     >
       {children}
     </AppShell>
