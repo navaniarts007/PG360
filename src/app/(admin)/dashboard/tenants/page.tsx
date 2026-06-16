@@ -9,16 +9,16 @@ import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
-import { getRoomOptions, listTenantsWithRoom } from "@/lib/db";
+import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
 import { initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, roomOptions] = await Promise.all([
+  const [tenants, beds] = await Promise.all([
     listTenantsWithRoom(),
-    getRoomOptions(),
+    getBedOptions(),
   ]);
 
   const active = tenants.filter((t) => t.status === "active").length;
@@ -29,7 +29,7 @@ export default async function TenantsPage() {
         eyebrow="People"
         title="Tenants"
         subtitle={`${active} active · ${tenants.length - active} checked out`}
-        action={<AddTenantDialog rooms={roomOptions} />}
+        action={<AddTenantDialog beds={beds} />}
       />
 
       {tenants.length === 0 ? (
@@ -37,7 +37,7 @@ export default async function TenantsPage() {
           icon={Users}
           title="No tenants yet"
           body="Add a resident — they'll get their own login automatically."
-          action={<AddTenantDialog rooms={roomOptions} />}
+          action={<AddTenantDialog beds={beds} />}
         />
       ) : (
         <Card className="overflow-hidden">
@@ -81,7 +81,7 @@ export default async function TenantsPage() {
                     </td>
                     <td className="px-6 py-3.5">
                       <div className="flex items-center justify-end gap-1">
-                        <AddTenantDialog rooms={roomOptions} tenant={t} />
+                        <AddTenantDialog beds={beds} tenant={t} />
                         <ConfirmDelete action={deleteTenantAction} id={t.id} title="Delete tenant" />
                         <Link href={`/dashboard/tenants/${t.id}`} className="inline-grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-paper-2 hover:text-clay-600">
                           <ChevronRight className="size-4" />

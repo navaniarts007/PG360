@@ -10,19 +10,14 @@ import {
   updateTenantAction,
   type ActionState,
 } from "@/lib/actions/admin";
+import type { BedOption } from "@/lib/db";
 import type { Tenant } from "@/lib/types";
 
-export interface RoomOption {
-  id: string;
-  label: string;
-  full: boolean;
-}
-
 export function AddTenantDialog({
-  rooms,
+  beds,
   tenant,
 }: {
-  rooms: RoomOption[];
+  beds: BedOption[];
   tenant?: Tenant;
 }) {
   const isEdit = !!tenant;
@@ -31,8 +26,8 @@ export function AddTenantDialog({
       title={isEdit ? `Edit ${tenant.name}` : "Add a tenant"}
       description={
         isEdit
-          ? "Update this tenant's details."
-          : "Creates the resident and their own login automatically."
+          ? "Rent follows the assigned bed."
+          : "Pick a bed — rent auto-fills, and the resident gets a login."
       }
       trigger={(open) =>
         isEdit ? (
@@ -49,17 +44,17 @@ export function AddTenantDialog({
         )
       }
     >
-      {(close) => <TenantForm rooms={rooms} tenant={tenant} onDone={close} />}
+      {(close) => <TenantForm beds={beds} tenant={tenant} onDone={close} />}
     </Modal>
   );
 }
 
 function TenantForm({
-  rooms,
+  beds,
   tenant,
   onDone,
 }: {
-  rooms: RoomOption[];
+  beds: BedOption[];
   tenant?: Tenant;
   onDone: () => void;
 }) {
@@ -70,6 +65,8 @@ function TenantForm({
   useEffect(() => {
     if (state.ok) onDone();
   }, [state.ok, onDone]);
+
+  const options = beds.filter((b) => b.status === "vacant" || b.id === tenant?.bed_id);
 
   return (
     <form action={action} className="space-y-4">
@@ -83,25 +80,21 @@ function TenantForm({
         <FieldRow label="Full name" htmlFor="name" className="col-span-2">
           <Input id="name" name="name" defaultValue={tenant?.name ?? ""} placeholder="Arjun Nair" required />
         </FieldRow>
+        <FieldRow label="Bed" htmlFor="bed_id" hint="rent auto-fills" className="col-span-2">
+          <Select id="bed_id" name="bed_id" defaultValue={tenant?.bed_id ?? "none"}>
+            <option value="none">Unassigned</option>
+            {options.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </Select>
+        </FieldRow>
         <FieldRow label="Phone" htmlFor="phone">
           <Input id="phone" name="phone" defaultValue={tenant?.phone ?? ""} placeholder="+9198…" required />
         </FieldRow>
         <FieldRow label="Aadhaar (last 4)" htmlFor="aadhaar_number">
           <Input id="aadhaar_number" name="aadhaar_number" defaultValue={tenant?.aadhaar_number ?? ""} placeholder="XXXX-XXXX-1234" />
-        </FieldRow>
-        <FieldRow label="Room" htmlFor="room_id">
-          <Select id="room_id" name="room_id" defaultValue={tenant?.room_id ?? "none"}>
-            <option value="none">Unassigned</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id} disabled={r.full && r.id !== tenant?.room_id}>
-                {r.label}
-                {r.full && r.id !== tenant?.room_id ? " (full)" : ""}
-              </option>
-            ))}
-          </Select>
-        </FieldRow>
-        <FieldRow label="Rent / month (₹)" htmlFor="rent_amount">
-          <Input id="rent_amount" name="rent_amount" type="number" min={0} defaultValue={tenant?.rent_amount ?? ""} placeholder="12000" required />
         </FieldRow>
         <FieldRow label="Security deposit (₹)" htmlFor="security_deposit">
           <Input id="security_deposit" name="security_deposit" type="number" min={0} defaultValue={tenant?.security_deposit ?? ""} placeholder="24000" required />
@@ -110,13 +103,13 @@ function TenantForm({
           <Input id="rent_due_day" name="rent_due_day" type="number" min={1} max={28} defaultValue={tenant?.rent_due_day ?? 5} />
         </FieldRow>
         {!tenant && (
-          <FieldRow label="Check-in date" htmlFor="checkin_date">
+          <FieldRow label="Check-in date" htmlFor="checkin_date" className="col-span-2">
             <Input id="checkin_date" name="checkin_date" type="date" required />
           </FieldRow>
         )}
       </div>
 
-      {!tenant && (
+      {!tenant ? (
         <div className="rounded-xl border border-line bg-paper-2/50 p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Tenant login
@@ -130,8 +123,7 @@ function TenantForm({
             </FieldRow>
           </div>
         </div>
-      )}
-      {tenant && (
+      ) : (
         <FieldRow label="Login email" htmlFor="email">
           <Input id="email" name="email" type="email" defaultValue={tenant.email} required />
         </FieldRow>

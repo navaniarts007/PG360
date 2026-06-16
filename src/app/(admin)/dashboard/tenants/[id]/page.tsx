@@ -19,7 +19,7 @@ import { CheckoutButton } from "@/components/admin/checkout-button";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { requireRole } from "@/lib/guards";
-import { getPayTenants, getRoomOptions, getTenantDetail } from "@/lib/db";
+import { getBedOptions, getPayTenants, getTenantDetail } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenant" };
@@ -40,9 +40,9 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, roomOptions] = await Promise.all([
+  const [payTenants, beds] = await Promise.all([
     getPayTenants(),
-    getRoomOptions(),
+    getBedOptions(),
   ]);
 
   return (
@@ -66,7 +66,7 @@ export default async function TenantDetail({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <AddTenantDialog rooms={roomOptions} tenant={tenant} />
+          <AddTenantDialog beds={beds} tenant={tenant} />
           {tenant.status === "active" && (
             <>
               <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />

@@ -59,6 +59,36 @@ export interface PgAccount {
 
 export type RoomType = "single" | "double" | "triple";
 export type RoomStatus = "vacant" | "partial" | "occupied";
+export type BathType = "attached" | "common";
+
+export interface RateCard {
+  id: string;
+  pg_id: string;
+  name: string;
+  room_type: string;
+  ac: boolean;
+  bath_type: BathType;
+  price_per_month: number;
+  food_included: boolean;
+  food_opt_out_deduction: number;
+  created_at: string;
+}
+
+export type BedStatus = "vacant" | "occupied";
+
+export interface Bed {
+  id: string;
+  pg_id: string;
+  room_id: string;
+  bed_number: string;
+  rate_card_id: string | null;
+  price_per_month: number;
+  status: BedStatus;
+  current_tenant_id: string | null;
+  available_from: string | null;
+  notes: string | null;
+  created_at: string;
+}
 
 export interface Room {
   id: string;
@@ -81,6 +111,7 @@ export interface Tenant {
   id: string;
   pg_id: string;
   room_id: string | null;
+  bed_id: string | null;
   name: string;
   phone: string;
   email: string;

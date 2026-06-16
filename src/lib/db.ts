@@ -4,12 +4,14 @@ import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty } from "./auth";
 import type {
   AppNotification,
+  Bed,
   Expense,
   FoodMenuItem,
   Issue,
   MealType,
   Payment,
   PgAccount,
+  RateCard,
   Room,
   Tenant,
 } from "./types";
@@ -95,6 +97,73 @@ export async function getRoomOptions(): Promise<RoomOption[]> {
     id: r.id,
     label: `Room ${r.room_number} · Floor ${r.floor}`,
     full: r.occupied_beds >= r.total_beds,
+  }));
+}
+
+/* ----------------------------------------------------- rate cards / beds */
+
+export async function listRateCards(): Promise<RateCard[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("rate_cards")
+    .select("*")
+    .eq("pg_id", pid)
+    .order("price_per_month", { ascending: false });
+  return (data ?? []) as RateCard[];
+}
+
+export interface RoomBeds {
+  room: Room;
+  beds: Array<Bed & { tenant_name: string | null }>;
+}
+
+/** Bed-level occupancy grouped by room (the view Bangalore owners want). */
+export async function listBedsByRoom(): Promise<RoomBeds[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const [{ data: beds }, rooms, { data: tenants }] = await Promise.all([
+    s.from("beds").select("*").eq("pg_id", pid).order("bed_number"),
+    listRooms(),
+    s.from("tenants").select("id, name").eq("pg_id", pid),
+  ]);
+  const nameById = new Map((tenants ?? []).map((t) => [t.id as string, t.name as string]));
+  const bedsByRoom = new Map<string, Array<Bed & { tenant_name: string | null }>>();
+  for (const b of (beds ?? []) as Bed[]) {
+    const list = bedsByRoom.get(b.room_id) ?? [];
+    list.push({ ...b, tenant_name: b.current_tenant_id ? nameById.get(b.current_tenant_id) ?? null : null });
+    bedsByRoom.set(b.room_id, list);
+  }
+  return rooms.map((room) => ({ room, beds: bedsByRoom.get(room.id) ?? [] }));
+}
+
+export interface BedOption {
+  id: string;
+  label: string;
+  price: number;
+  room_id: string;
+  status: "vacant" | "occupied";
+}
+
+/** All beds in the active property as picker options. The dialog filters to
+ *  vacant beds (plus the tenant's own bed when editing). */
+export async function getBedOptions(): Promise<BedOption[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data: beds } = await s
+    .from("beds")
+    .select("id, bed_number, price_per_month, room_id, status")
+    .eq("pg_id", pid)
+    .order("bed_number");
+  const rooms = await listRooms();
+  const roomNo = new Map(rooms.map((r) => [r.id, r.room_number]));
+  type Row = { id: string; bed_number: string; price_per_month: number; room_id: string; status: "vacant" | "occupied" };
+  return ((beds ?? []) as Row[]).map((b) => ({
+    id: b.id,
+    label: `Room ${roomNo.get(b.room_id) ?? "?"} · Bed ${b.bed_number} · ₹${b.price_per_month.toLocaleString("en-IN")}/mo`,
+    price: b.price_per_month,
+    room_id: b.room_id,
+    status: b.status,
   }));
 }
 

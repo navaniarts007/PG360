@@ -10,14 +10,25 @@ import {
   updateRoomAction,
   type ActionState,
 } from "@/lib/actions/admin";
-import type { Room } from "@/lib/types";
+import type { RateCard, Room } from "@/lib/types";
+import { inr } from "@/lib/utils";
 
-export function AddRoomDialog({ room }: { room?: Room }) {
+export function AddRoomDialog({
+  rateCards,
+  room,
+}: {
+  rateCards: RateCard[];
+  room?: Room;
+}) {
   const isEdit = !!room;
   return (
     <Modal
       title={isEdit ? `Edit Room ${room.room_number}` : "Add a room"}
-      description={isEdit ? "Update this room's details." : "Status updates automatically as beds fill."}
+      description={
+        isEdit
+          ? "Beds and rent follow the chosen rate card."
+          : "Pick a rate card — beds are created and priced automatically."
+      }
       trigger={(open) =>
         isEdit ? (
           <button
@@ -27,18 +38,26 @@ export function AddRoomDialog({ room }: { room?: Room }) {
             <Pencil className="size-3.5" /> Edit
           </button>
         ) : (
-          <Button onClick={open}>
+          <Button onClick={open} disabled={rateCards.length === 0}>
             <Plus className="size-4" /> Add room
           </Button>
         )
       }
     >
-      {(close) => <RoomForm room={room} onDone={close} />}
+      {(close) => <RoomForm rateCards={rateCards} room={room} onDone={close} />}
     </Modal>
   );
 }
 
-function RoomForm({ room, onDone }: { room?: Room; onDone: () => void }) {
+function RoomForm({
+  rateCards,
+  room,
+  onDone,
+}: {
+  rateCards: RateCard[];
+  room?: Room;
+  onDone: () => void;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     room ? updateRoomAction : addRoomAction,
     {},
@@ -55,6 +74,19 @@ function RoomForm({ room, onDone }: { room?: Room; onDone: () => void }) {
           <AlertCircle className="size-4 shrink-0" /> {state.error}
         </div>
       )}
+
+      <FieldRow label={room ? "Rate card (re-price)" : "Rate card"} htmlFor="rate_card_id">
+        <Select id="rate_card_id" name="rate_card_id" defaultValue="" required={!room}>
+          {room && <option value="">— keep current pricing —</option>}
+          {!room && <option value="" disabled>Select a rate card…</option>}
+          {rateCards.map((rc) => (
+            <option key={rc.id} value={rc.id}>
+              {rc.name} · {inr(rc.price_per_month)}/bed
+            </option>
+          ))}
+        </Select>
+      </FieldRow>
+
       <div className="grid grid-cols-2 gap-3">
         <FieldRow label="Room number" htmlFor="room_number">
           <Input id="room_number" name="room_number" defaultValue={room?.room_number ?? ""} placeholder="201" required />
@@ -62,18 +94,8 @@ function RoomForm({ room, onDone }: { room?: Room; onDone: () => void }) {
         <FieldRow label="Floor" htmlFor="floor">
           <Input id="floor" name="floor" type="number" min={0} defaultValue={room?.floor ?? 1} />
         </FieldRow>
-        <FieldRow label="Type" htmlFor="type">
-          <Select id="type" name="type" defaultValue={room?.type ?? "double"}>
-            <option value="single">Single</option>
-            <option value="double">Double</option>
-            <option value="triple">Triple</option>
-          </Select>
-        </FieldRow>
         <FieldRow label="Total beds" htmlFor="total_beds">
           <Input id="total_beds" name="total_beds" type="number" min={1} defaultValue={room?.total_beds ?? 2} />
-        </FieldRow>
-        <FieldRow label="Rent / bed (₹)" htmlFor="rent_amount">
-          <Input id="rent_amount" name="rent_amount" type="number" min={0} defaultValue={room?.rent_amount ?? ""} placeholder="12000" required />
         </FieldRow>
         <FieldRow label="WiFi password" htmlFor="wifi_password">
           <Input id="wifi_password" name="wifi_password" defaultValue={room?.wifi_password ?? ""} placeholder="Sunrise@201" required />
@@ -82,6 +104,7 @@ function RoomForm({ room, onDone }: { room?: Room; onDone: () => void }) {
       <FieldRow label="Amenities" htmlFor="amenities" hint="comma separated">
         <Input id="amenities" name="amenities" defaultValue={room?.amenities.join(", ") ?? ""} placeholder="AC, Attached bath, Geyser" />
       </FieldRow>
+
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel

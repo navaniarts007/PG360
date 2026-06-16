@@ -16,6 +16,7 @@ import {
   MessagesSquare,
   Receipt,
   Settings,
+  Tag,
   UtensilsCrossed,
   Users,
   Wallet,
@@ -51,7 +52,8 @@ const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/dashboard/properties", label: "Properties", icon: Building2 },
-    { href: "/dashboard/rooms", label: "Rooms", icon: BedDouble },
+    { href: "/dashboard/rooms", label: "Rooms & beds", icon: BedDouble },
+    { href: "/dashboard/pricing", label: "Pricing", icon: Tag },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
     { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, module: "bookings" },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
