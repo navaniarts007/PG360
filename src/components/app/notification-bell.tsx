@@ -32,8 +32,10 @@ export function NotificationBell({
   // realtime: prepend new notifications for this user
   useEffect(() => {
     const supabase = createClient();
+    // unique topic per mount — the browser client is a singleton, so reusing a
+    // topic across React strict-mode remounts would re-.on() a subscribed channel.
     const channel = supabase
-      .channel(`notif:${userId}`)
+      .channel(`notif:${userId}:${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         {
