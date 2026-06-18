@@ -311,28 +311,22 @@ export async function getTenantDetail(id: string): Promise<{
 export async function adminKpis(month: string) {
   const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: rooms }, { count: tenantCount }, { data: payments }] =
-    await Promise.all([
-      s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
-      s
-        .from("tenants")
-        .select("id", { count: "exact", head: true })
-        .eq("pg_id", pid)
-        .eq("status", "active"),
-      s
-        .from("payments")
-        .select("total_amount, amount_paid")
-        .eq("pg_id", pid)
-        .eq("month_for", month),
-    ]);
+  const [{ data: rooms }, { data: tenants }, { data: payments }] = await Promise.all([
+    s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
+    s.from("tenants").select("id, rent_amount").eq("pg_id", pid).eq("status", "active"),
+    s.from("payments").select("tenant_id, total_amount, amount_paid").eq("pg_id", pid).eq("month_for", month),
+  ]);
   const r = (rooms ?? []) as { total_beds: number; occupied_beds: number }[];
-  const p = (payments ?? []) as { total_amount: number; amount_paid: number }[];
+  const t = (tenants ?? []) as { id: string; rent_amount: number }[];
+  const p = (payments ?? []) as { tenant_id: string; total_amount: number; amount_paid: number }[];
+  const payByTenant = new Map(p.map((x) => [x.tenant_id, x]));
   const totalBeds = r.reduce((sum, x) => sum + x.total_beds, 0);
   const occupiedBeds = r.reduce((sum, x) => sum + x.occupied_beds, 0);
   const collected = p.reduce((sum, x) => sum + x.amount_paid, 0);
-  const billed = p.reduce((sum, x) => sum + x.total_amount, 0);
+  // billed counts EVERY active tenant — derived from rent when not yet invoiced
+  const billed = t.reduce((sum, x) => sum + (payByTenant.get(x.id)?.total_amount ?? x.rent_amount), 0);
   return {
-    totalTenants: tenantCount ?? 0,
+    totalTenants: t.length,
     roomCount: r.length,
     totalBeds,
     occupiedBeds,
@@ -341,6 +335,75 @@ export async function adminKpis(month: string) {
     due: Math.max(billed - collected, 0),
     billed,
   };
+}
+
+export interface BillRow {
+  tenant_id: string;
+  name: string;
+  room: string;
+  paymentId: string | null;
+  total: number;
+  paid: number;
+  balance: number;
+  status: "paid" | "partial" | "due";
+  verified: boolean;
+  payment_mode: string | null;
+  screenshot_url: string | null;
+}
+
+/** Every active tenant's bill for the month — a real invoice row if recorded,
+ *  else derived from their rent (so the owner always sees who is due). */
+export async function getMonthBill(month: string): Promise<BillRow[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const [{ data: tenants }, { data: pays }] = await Promise.all([
+    s.from("tenants").select("id, name, rent_amount, room:rooms(room_number)").eq("pg_id", pid).eq("status", "active"),
+    s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
+  ]);
+  const payByTenant = new Map(((pays ?? []) as Payment[]).map((p) => [p.tenant_id, p]));
+  type T = { id: string; name: string; rent_amount: number; room: { room_number: string } | null };
+  const order = { due: 0, partial: 1, paid: 2 } as const;
+  return ((tenants ?? []) as unknown as T[])
+    .map((t) => {
+      const p = payByTenant.get(t.id);
+      const total = p?.total_amount ?? t.rent_amount;
+      const paid = p?.amount_paid ?? 0;
+      return {
+        tenant_id: t.id,
+        name: t.name,
+        room: t.room?.room_number ?? "—",
+        paymentId: p?.id ?? null,
+        total,
+        paid,
+        balance: Math.max(total - paid, 0),
+        status: (p?.status ?? "due") as BillRow["status"],
+        verified: p?.verified ?? false,
+        payment_mode: p?.payment_mode ?? null,
+        screenshot_url: p?.payment_screenshot_url ?? null,
+      };
+    })
+    .sort((a, b) => order[a.status] - order[b.status] || b.balance - a.balance);
+}
+
+export async function listStaff(): Promise<
+  { id: string; full_name: string; phone: string | null; role: string }[]
+> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  // members of the active property who are staff (+ the owner admins)
+  const { data: members } = await s
+    .from("property_members")
+    .select("user_id, role")
+    .eq("property_id", pid);
+  const ids = ((members ?? []) as { user_id: string; role: string }[]).map((m) => m.user_id);
+  if (ids.length === 0) return [];
+  const { data: profiles } = await s
+    .from("profiles")
+    .select("id, full_name, phone, role")
+    .in("id", ids);
+  return ((profiles ?? []) as { id: string; full_name: string; phone: string | null; role: string }[]).filter(
+    (p) => p.role === "staff" || p.role === "admin",
+  );
 }
 
 type PaymentRow = Payment & {

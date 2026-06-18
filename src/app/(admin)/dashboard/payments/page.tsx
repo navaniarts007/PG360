@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Clock, IndianRupee, Paperclip } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, IndianRupee } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
+import { VerifyPaymentButton } from "@/components/admin/verify-payment-button";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthPayments, getPayTenants, getPgAccount } from "@/lib/db";
+import { adminKpis, getMonthBill, getPayTenants, getPgAccount } from "@/lib/db";
+import { getActiveProperty } from "@/lib/auth";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -14,32 +16,32 @@ export const metadata: Metadata = { title: "Payments" };
 const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 
 export default async function PaymentsPage() {
-  const me = await requireRole(["admin", "staff"]);
+  await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, payTenants, all, pg] = await Promise.all([
+  const pid = await getActiveProperty();
+  const [kpis, payTenants, rows, pg] = await Promise.all([
     adminKpis(month),
     getPayTenants(),
-    getMonthPayments(month),
-    me.pg_id ? getPgAccount(me.pg_id) : Promise.resolve(null),
+    getMonthBill(month),
+    pid ? getPgAccount(pid) : Promise.resolve(null),
   ]);
 
-  const order = { due: 0, partial: 1, paid: 2 } as const;
-  const rows = [...all].sort((a, b) => order[a.status] - order[b.status]);
   const paidCount = rows.filter((r) => r.status === "paid").length;
+  const pendingVerify = rows.filter((r) => r.paymentId && !r.verified && r.paid > 0).length;
 
   return (
     <div className="space-y-7">
       <PageHeader
-        eyebrow="June 2026"
+        eyebrow={`${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}`}
         title="Payments"
-        subtitle="Record rent and track who has paid vs who is due this month."
+        subtitle="Every active tenant's bill for the month — collect dues and verify tenant-submitted payments."
         action={<RecordPaymentDialog tenants={payTenants} month={month} />}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryStat icon={IndianRupee} accent="teal" label="Collected" value={inrCompact(kpis.collected)} sub={`of ${inrCompact(kpis.billed)} billed`} />
         <SummaryStat icon={Clock} accent="rose" label="Outstanding" value={inrCompact(kpis.due)} sub={`${rows.length - paidCount} tenants pending`} />
-        <SummaryStat icon={CheckCircle2} accent="clay" label="Paid in full" value={`${paidCount}/${rows.length}`} sub="tenants this month" />
+        <SummaryStat icon={CheckCircle2} accent="gold" label="To verify" value={String(pendingVerify)} sub="tenant-submitted payments" />
       </div>
 
       <Card className="overflow-hidden">
@@ -51,16 +53,15 @@ export default async function PaymentsPage() {
                 <th className="px-6 py-3.5 font-semibold">Billed</th>
                 <th className="px-6 py-3.5 font-semibold">Paid</th>
                 <th className="px-6 py-3.5 font-semibold">Balance</th>
-                <th className="px-6 py-3.5 font-semibold">Mode</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 text-right font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
-                const balance = r.total_amount - r.amount_paid;
+                const unverified = !!r.paymentId && !r.verified && r.paid > 0;
                 return (
-                  <tr key={r.id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
+                  <tr key={r.tenant_id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <span className="grid size-8 place-items-center rounded-full bg-clay-50 text-[0.7rem] font-bold text-clay-600">
@@ -69,45 +70,53 @@ export default async function PaymentsPage() {
                         <span className="font-semibold text-ink">{r.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.total_amount)}</td>
-                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.amount_paid)}</td>
+                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.total)}</td>
+                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.paid)}</td>
                     <td className="px-6 py-3.5 tnum">
-                      {balance > 0 ? (
-                        <span className="font-semibold text-rose-600">{inr(balance)}</span>
+                      {r.balance > 0 ? (
+                        <span className="font-semibold text-rose-600">{inr(r.balance)}</span>
                       ) : (
                         <span className="text-ink-muted">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-3.5 text-ink-muted">
-                      <span className="flex items-center gap-2">
-                        {r.payment_mode ? MODE[r.payment_mode] : "—"}
-                        {r.payment_screenshot_url && (
-                          <a
-                            href={r.payment_screenshot_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            title="View payment proof"
-                            className="text-clay-600 hover:text-clay-700"
-                          >
-                            <Paperclip className="size-3.5" />
-                          </a>
+                    <td className="px-6 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <PaymentStatusPill status={r.status} />
+                        {unverified && (
+                          <span className="rounded-full bg-gold-50 px-2 py-0.5 text-[0.7rem] font-semibold text-gold-600 ring-1 ring-gold-100">
+                            unverified
+                          </span>
                         )}
-                      </span>
+                        {r.payment_mode && (
+                          <span className="text-xs text-ink-muted">{MODE[r.payment_mode]}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-3.5">
-                      <PaymentStatusPill status={r.status} />
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      {r.status !== "paid" ? (
-                        <RecordPaymentDialog
-                          tenants={payTenants}
-                          month={month}
-                          preselectId={r.tenant_id}
-                          variant="collect"
-                        />
-                      ) : (
-                        <span className="text-xs text-teal-600">✓ Settled</span>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {r.screenshot_url && (
+                          <a
+                            href={r.screenshot_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View payment screenshot"
+                            className="grid size-8 place-items-center rounded-lg text-ink-muted hover:bg-paper-2 hover:text-clay-600"
+                          >
+                            <ExternalLink className="size-4" />
+                          </a>
+                        )}
+                        {unverified && <VerifyPaymentButton paymentId={r.paymentId!} />}
+                        {r.balance > 0 ? (
+                          <RecordPaymentDialog
+                            tenants={payTenants}
+                            month={month}
+                            preselectId={r.tenant_id}
+                            variant="collect"
+                          />
+                        ) : r.verified ? (
+                          <span className="text-xs text-teal-600">✓ Verified</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -134,7 +143,7 @@ function SummaryStat({
   sub,
 }: {
   icon: React.ElementType;
-  accent: "teal" | "rose" | "clay";
+  accent: "teal" | "rose" | "gold";
   label: string;
   value: string;
   sub: string;
@@ -142,7 +151,7 @@ function SummaryStat({
   const tone = {
     teal: "bg-teal-50 text-teal-600 ring-teal-100",
     rose: "bg-rose-50 text-rose-600 ring-rose-100",
-    clay: "bg-clay-50 text-clay-600 ring-clay-100",
+    gold: "bg-gold-50 text-gold-600 ring-gold-100",
   }[accent];
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-5 shadow-soft">

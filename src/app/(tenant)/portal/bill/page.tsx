@@ -31,6 +31,7 @@ export default async function MyBill() {
   const mine = await getMyTenant();
   if (!mine) notFound();
   const tenant = mine.tenant;
+  const room = mine.room;
 
   const [payments, pg] = await Promise.all([getMyPayments(), getMyPg()]);
   const month = currentMonth();
@@ -53,6 +54,9 @@ export default async function MyBill() {
   const dueDate = `${month}-${String(tenant.rent_due_day).padStart(2, "0")}`;
   const today = new Date().toISOString().slice(0, 10);
   const overdue = balance > 0 && today > dueDate;
+
+  const noBed = !room && !current;
+  const pendingVerify = !!current && !current.verified && paid > 0;
 
   const lines = [
     { icon: Home, label: "Base rent", value: baseRent },
@@ -88,7 +92,25 @@ export default async function MyBill() {
           </div>
 
           <div className="p-5 sm:p-6">
+            {noBed ? (
+              <div className="rounded-xl border border-line bg-paper-2/40 p-6 text-center">
+                <p className="font-semibold text-ink">No bed assigned yet</p>
+                <p className="mt-1 text-sm text-ink-muted">
+                  Your PG owner hasn&apos;t assigned you a bed, so there&apos;s no rent to show
+                  yet. Please contact them.
+                </p>
+              </div>
+            ) : (
+              <>
             {/* deadline */}
+            {pendingVerify && (
+              <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-gold-600">
+                <CalendarClock className="size-4 shrink-0" />
+                <span className="font-medium">
+                  Payment submitted — awaiting your owner&apos;s confirmation.
+                </span>
+              </div>
+            )}
             <div
               className={`mb-4 flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm ${
                 overdue
@@ -215,6 +237,8 @@ export default async function MyBill() {
               >
                 <ExternalLink className="size-4" /> View your uploaded payment proof
               </a>
+            )}
+              </>
             )}
           </div>
         </Card>

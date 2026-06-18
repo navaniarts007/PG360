@@ -449,6 +449,7 @@ export async function recordPaymentAction(
       amount_paid: d.amount_paid,
       payment_mode: d.payment_mode,
       payment_date: d.amount_paid > 0 ? new Date().toISOString().slice(0, 10) : null,
+      verified: true, // admin-recorded payments are trusted
       notes: d.notes || null,
     },
     { onConflict: "tenant_id,month_for" },
@@ -501,6 +502,84 @@ export async function addExpenseAction(
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
+}
+
+/** Owner confirms a tenant-submitted payment. */
+export async function verifyPaymentAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  await s.from("payments").update({ verified: true }).eq("id", id);
+  revalidatePath("/dashboard/payments");
+  revalidatePath("/dashboard");
+  revalidatePath("/portal/bill");
+}
+
+const expenseUpdateSchema = expenseSchema; // same shape
+
+export async function updateExpenseAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const parsed = expenseUpdateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const s = await createClient();
+  const { error } = await s
+    .from("expenses")
+    .update({
+      category: parsed.data.category,
+      amount: parsed.data.amount,
+      date: parsed.data.date,
+      description: parsed.data.description || null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/expenses");
+  revalidatePath("/dashboard/reports");
+  return { ok: true };
+}
+
+export async function deleteExpenseAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  await s.from("expenses").delete().eq("id", id);
+  revalidatePath("/dashboard/expenses");
+  revalidatePath("/dashboard/reports");
+}
+
+const issueEditSchema = z.object({
+  category: z.enum(["electricity", "plumbing", "wifi", "cleaning", "noise", "other"]),
+  description: z.string().min(5, "Describe the issue (5+ characters)."),
+});
+
+export async function updateIssueAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const parsed = issueEditSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const s = await createClient();
+  const { error } = await s
+    .from("issues")
+    .update({ category: parsed.data.category, description: parsed.data.description })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/issues");
+  return { ok: true };
+}
+
+export async function deleteIssueAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  await s.from("issues").delete().eq("id", id);
+  revalidatePath("/dashboard/issues");
+  revalidatePath("/dashboard");
 }
 
 /* --------------------------------- issues -------------------------------- */

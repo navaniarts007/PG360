@@ -154,6 +154,7 @@ export interface Payment {
   payment_screenshot_url: string | null;
   payment_date: string | null;
   status: PaymentStatus;
+  verified: boolean;
   notes: string | null;
 }
 
