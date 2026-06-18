@@ -517,10 +517,15 @@ export async function getPublicPg(
 
 /* ------------------------------------------------------ expenses / P&L */
 
-const monthBounds = (month: string) => ({
-  from: `${month}-01`,
-  to: `${month}-31`,
-});
+// Inclusive first day, EXCLUSIVE first-of-next-month (avoids invalid dates like
+// 2026-06-31 which Postgres rejects). Use with .gte(from).lt(to).
+const monthBounds = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  const yy = y ?? 1970;
+  const mm = m ?? 1;
+  const to = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+  return { from: `${month}-01`, to };
+};
 
 export async function listExpenses(month: string): Promise<Expense[]> {
   const s = await sb();
@@ -531,7 +536,7 @@ export async function listExpenses(month: string): Promise<Expense[]> {
     .select("*")
     .eq("pg_id", pid)
     .gte("date", from)
-    .lte("date", to)
+    .lt("date", to)
     .order("date", { ascending: false });
   return (data ?? []) as Expense[];
 }
@@ -566,7 +571,7 @@ export async function pnl(month: string) {
       .select("amount")
       .eq("pg_id", pid)
       .gte("date", from)
-      .lte("date", to),
+      .lt("date", to),
   ]);
   const billed = ((pays ?? []) as { total_amount: number }[]).reduce((x, p) => x + p.total_amount, 0);
   const collected = ((pays ?? []) as { amount_paid: number }[]).reduce((x, p) => x + p.amount_paid, 0);

@@ -1,20 +1,20 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Receipt, Zap, Utensils, Home, Plus } from "lucide-react";
+import {
+  CalendarClock,
+  ExternalLink,
+  Home,
+  Plus,
+  Receipt,
+  Utensils,
+  Zap,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
+import { TenantRecordPaymentDialog } from "@/components/tenant/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
-import { getMyPayments, getMyPg, getMyTenant, getMyBed } from "@/lib/db";
-import { tenantRecordPaymentAction } from "@/lib/actions/tenant";
-import { ScreenshotUpload } from "@/components/tenant/screenshot-upload";
-import { currentMonth, inr } from "@/lib/utils";
-import type { ActionState } from "@/lib/actions/tenant";
-
-async function handleTenantRecordPayment(formData: FormData) {
-  "use server";
-  // Forward to the shared server action but adapt the return type to `void`
-  await tenantRecordPaymentAction({} as ActionState, formData);
-}
+import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
+import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "My Bill" };
 
@@ -33,27 +33,32 @@ export default async function MyBill() {
   const tenant = mine.tenant;
 
   const [payments, pg] = await Promise.all([getMyPayments(), getMyPg()]);
-  const current = payments.find((p) => p.month_for === currentMonth());
-  const history = payments.filter((p) => p.month_for !== currentMonth());
+  const month = currentMonth();
+  const current = payments.find((p) => p.month_for === month);
+  const history = payments.filter((p) => p.month_for !== month);
 
-  // Compute totals either from the existing invoice (current) or predict from
-  // the tenant's bed / tenant record when no invoice exists yet.
-  const bed = current ? null : await getMyBed();
-  const base_rent = current?.base_rent ?? bed?.price_per_month ?? tenant.rent_amount ?? 0;
-  const electricity_charge = current?.electricity_charge ?? 0;
-  const food_charge = current?.food_charge ?? 0;
-  const other_charges = current?.other_charges ?? 0;
-  const total = current?.total_amount ?? base_rent + electricity_charge + food_charge + other_charges;
+  // Invoice is auto-derived from rent when the owner hasn't recorded one yet.
+  const baseRent = current?.base_rent ?? tenant.rent_amount ?? 0;
+  const electricity = current?.electricity_charge ?? 0;
+  const food = current?.food_charge ?? 0;
+  const other = current?.other_charges ?? 0;
+  const total = current?.total_amount ?? baseRent + electricity + food + other;
   const paid = current?.amount_paid ?? 0;
   const balance = Math.max(total - paid, 0);
   const paidPct = total > 0 ? Math.min(Math.round((paid / total) * 100), 100) : 0;
+  const status = current?.status ?? (total > 0 ? "due" : "due");
   const hasPayInfo = !!(pg?.upi_id || pg?.bank_details || pg?.payment_qr_url);
 
+  // deadline = rent due day of this month
+  const dueDate = `${month}-${String(tenant.rent_due_day).padStart(2, "0")}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = balance > 0 && today > dueDate;
+
   const lines = [
-    { icon: Home, label: "Base rent", value: base_rent },
-    { icon: Zap, label: "Electricity", value: electricity_charge },
-    { icon: Utensils, label: "Food", value: food_charge },
-    { icon: Plus, label: "Other charges", value: other_charges },
+    { icon: Home, label: "Base rent", value: baseRent },
+    { icon: Zap, label: "Electricity", value: electricity },
+    { icon: Utensils, label: "Food", value: food },
+    { icon: Plus, label: "Other charges", value: other },
   ].filter((l) => l.value > 0 || l.label === "Base rent");
 
   return (
@@ -68,7 +73,6 @@ export default async function MyBill() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Current invoice */}
         <Card className="lg:col-span-2">
           <div className="flex items-center justify-between border-b border-line p-5 sm:p-6">
             <div className="flex items-center gap-3">
@@ -76,78 +80,97 @@ export default async function MyBill() {
                 <Receipt className="size-5" />
               </span>
               <div>
-                <h3 className="text-lg text-ink">{monthLabel(currentMonth())}</h3>
+                <h3 className="text-lg text-ink">{monthLabel(month)}</h3>
                 <p className="text-xs text-ink-muted">Invoice · {tenant.name}</p>
               </div>
             </div>
-            {current ? (
-              <PaymentStatusPill status={current.status} />
-            ) : (
-              <span className="text-sm text-ink-muted">Not billed yet</span>
-            )}
+            <PaymentStatusPill status={status} />
           </div>
 
-          {current ? (
-            <div className="p-5 sm:p-6">
-              <div className="space-y-1">
-                {lines.map((l) => (
-                  <div key={l.label} className="flex items-center justify-between py-2.5 text-sm">
-                    <span className="flex items-center gap-2.5 text-ink-soft">
-                      <l.icon className="size-4 text-ink-muted" /> {l.label}
-                    </span>
-                    <span className="font-medium text-ink tnum">{inr(l.value)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 flex items-center justify-between border-t border-line pt-4">
-                <span className="font-semibold text-ink">Total</span>
-                <span className="font-display text-2xl font-semibold text-ink tnum">
-                  {inr(current.total_amount)}
+          <div className="p-5 sm:p-6">
+            {/* deadline */}
+            <div
+              className={`mb-4 flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+                overdue
+                  ? "border-rose-200 bg-rose-50 text-rose-600"
+                  : balance > 0
+                    ? "border-gold-200 bg-gold-50 text-gold-600"
+                    : "border-teal-200 bg-teal-50 text-teal-700"
+              }`}
+            >
+              <CalendarClock className="size-4 shrink-0" />
+              {balance === 0 ? (
+                <span className="font-medium">Paid in full — nothing due.</span>
+              ) : overdue ? (
+                <span className="font-medium">
+                  Overdue — was due {formatDate(dueDate)}. Please pay {inr(balance)} now.
                 </span>
-              </div>
+              ) : (
+                <span className="font-medium">
+                  Pay {inr(balance)} before {formatDate(dueDate)}.
+                </span>
+              )}
+            </div>
 
-              {/* payment progress */}
-              <div className="mt-4 rounded-xl border border-line bg-paper-2/40 p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-soft">
-                    Paid <span className="font-semibold text-teal-600 tnum">{inr(paid)}</span>{" "}
-                    of <span className="tnum">{inr(total)}</span>
+            <div className="space-y-1">
+              {lines.map((l) => (
+                <div key={l.label} className="flex items-center justify-between py-2.5 text-sm">
+                  <span className="flex items-center gap-2.5 text-ink-soft">
+                    <l.icon className="size-4 text-ink-muted" /> {l.label}
                   </span>
-                  <span className="text-xs font-semibold text-ink-muted tnum">{paidPct}%</span>
+                  <span className="font-medium text-ink tnum">{inr(l.value)}</span>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
-                  <div
-                    className={`h-full rounded-full ${balance > 0 ? "bg-gold-400" : "bg-teal-500"}`}
-                    style={{ width: `${paidPct}%` }}
-                  />
-                </div>
-                {balance > 0 ? (
-                  <div className="mt-3 flex items-end justify-between border-t border-line pt-3">
-                    <div>
-                      <p className="text-xs text-ink-muted">Amount to pay now</p>
-                      <p className="text-[0.7rem] text-ink-muted">
-                        {current.status === "partial"
-                          ? "Part-paid — please clear the balance"
-                          : "Minimum to clear this month's bill"}
-                      </p>
-                    </div>
-                    <p className="font-display text-3xl font-semibold text-rose-600 tnum">
-                      {inr(balance)}
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-line pt-4">
+              <span className="font-semibold text-ink">Total</span>
+              <span className="font-display text-2xl font-semibold text-ink tnum">{inr(total)}</span>
+            </div>
+            {!current && (
+              <p className="mt-1 text-xs text-ink-muted">
+                Estimated from your rent. Electricity / food (if any) are added by your owner.
+              </p>
+            )}
+
+            {/* progress */}
+            <div className="mt-4 rounded-xl border border-line bg-paper-2/40 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-ink-soft">
+                  Paid <span className="font-semibold text-teal-600 tnum">{inr(paid)}</span> of{" "}
+                  <span className="tnum">{inr(total)}</span>
+                </span>
+                <span className="text-xs font-semibold text-ink-muted tnum">{paidPct}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
+                <div
+                  className={`h-full rounded-full ${balance > 0 ? "bg-gold-400" : "bg-teal-500"}`}
+                  style={{ width: `${paidPct}%` }}
+                />
+              </div>
+              {balance > 0 ? (
+                <div className="mt-3 flex items-end justify-between border-t border-line pt-3">
+                  <div>
+                    <p className="text-xs text-ink-muted">Amount to pay now</p>
+                    <p className="text-[0.7rem] text-ink-muted">
+                      {status === "partial"
+                        ? "Part-paid — please clear the balance"
+                        : "Minimum to clear this month's bill"}
                     </p>
                   </div>
-                ) : (
-                  <p className="mt-3 border-t border-line pt-3 text-sm font-semibold text-teal-600">
-                    ✓ Fully paid — thank you!
-                  </p>
-                )}
-              </div>
+                  <p className="font-display text-3xl font-semibold text-rose-600 tnum">{inr(balance)}</p>
+                </div>
+              ) : (
+                <p className="mt-3 border-t border-line pt-3 text-sm font-semibold text-teal-600">
+                  ✓ Fully paid — thank you!
+                </p>
+              )}
+            </div>
 
-              {/* how to pay */}
-              {balance > 0 && hasPayInfo && (
-                <div className="mt-4 rounded-xl border border-line bg-surface p-4">
-                  <p className="text-sm font-semibold text-ink">
-                    How to pay {inr(balance)}
-                  </p>
+            {/* how to pay */}
+            {balance > 0 && (
+              <div className="mt-4 rounded-xl border border-line bg-surface p-4">
+                <p className="text-sm font-semibold text-ink">How to pay {inr(balance)}</p>
+                {hasPayInfo ? (
                   <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
                     {pg?.payment_qr_url && (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -172,125 +195,28 @@ export default async function MyBill() {
                       )}
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-ink-muted">
-                    After paying, upload your screenshot below — your owner confirms it.
-                  </p>
-                </div>
-              )}
-              {balance > 0 && !hasPayInfo && (
-                <div className="mt-4 rounded-xl bg-ink p-4 text-paper">
-                  <p className="text-sm font-semibold">Pay {inr(balance)} to your PG owner</p>
-                  <p className="mt-0.5 text-xs text-paper/60">
-                    Cash, UPI or bank transfer. Your owner will mark it paid once received.
-                  </p>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <ScreenshotUpload
-                  paymentId={current.id}
-                  existingUrl={current.payment_screenshot_url}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="p-5 sm:p-6">
-              <div className="space-y-1">
-                {lines.map((l) => (
-                  <div key={l.label} className="flex items-center justify-between py-2.5 text-sm">
-                    <span className="flex items-center gap-2.5 text-ink-soft">
-                      <l.icon className="size-4 text-ink-muted" /> {l.label}
-                    </span>
-                    <span className="font-medium text-ink tnum">{inr(l.value)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 flex items-center justify-between border-t border-line pt-4">
-                <span className="font-semibold text-ink">Total</span>
-                <span className="font-display text-2xl font-semibold text-ink tnum">{inr(total)}</span>
-              </div>
-
-              {/* payment progress */}
-              <div className="mt-4 rounded-xl border border-line bg-paper-2/40 p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-soft">
-                    Paid <span className="font-semibold text-teal-600 tnum">{inr(paid)}</span> of <span className="tnum">{inr(total)}</span>
-                  </span>
-                  <span className="text-xs font-semibold text-ink-muted tnum">{paidPct}%</span>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
-                  <div
-                    className={`h-full rounded-full ${balance > 0 ? "bg-gold-400" : "bg-teal-500"}`}
-                    style={{ width: `${paidPct}%` }}
-                  />
-                </div>
-                {balance > 0 ? (
-                  <div className="mt-3 flex items-end justify-between border-t border-line pt-3">
-                    <div>
-                      <p className="text-xs text-ink-muted">Amount to pay now</p>
-                      <p className="text-[0.7rem] text-ink-muted">Please clear this month&apos;s dues by your due date.</p>
-                    </div>
-                    <p className="font-display text-3xl font-semibold text-rose-600 tnum">{inr(balance)}</p>
-                  </div>
                 ) : (
-                  <p className="mt-3 border-t border-line pt-3 text-sm font-semibold text-teal-600">✓ Fully paid — thank you!</p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Pay your PG owner by UPI, cash or bank transfer, then record it below.
+                  </p>
                 )}
-              </div>
-
-              {/* how to pay */}
-              {balance > 0 && hasPayInfo && (
-                <div className="mt-4 rounded-xl border border-line bg-surface p-4">
-                  <p className="text-sm font-semibold text-ink">How to pay {inr(balance)}</p>
-                  <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
-                    {pg?.payment_qr_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={pg.payment_qr_url} alt="Payment QR" className="size-32 shrink-0 rounded-xl border border-line bg-white object-contain p-1" />
-                    )}
-                    <div className="space-y-2 text-sm">
-                      {pg?.upi_id && (
-                        <div>
-                          <span className="text-xs text-ink-muted">UPI ID</span>
-                          <p className="font-mono font-semibold text-ink">{pg.upi_id}</p>
-                        </div>
-                      )}
-                      {pg?.bank_details && (
-                        <div>
-                          <span className="text-xs text-ink-muted">Bank transfer</span>
-                          <p className="whitespace-pre-line text-ink-soft">{pg.bank_details}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <p className="mt-3 text-xs text-ink-muted">After paying, upload your screenshot below and submit the form to record your payment.</p>
+                <div className="mt-4">
+                  <TenantRecordPaymentDialog month={month} balance={balance} />
                 </div>
-              )}
-
-              <div className="mt-4">
-                <form action={handleTenantRecordPayment} className="space-y-3">
-                  <input type="hidden" name="month_for" value={currentMonth()} />
-                  <input type="hidden" name="screenshot_url" id="screenshot_url" />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input
-                      name="amount_paid"
-                      defaultValue={total}
-                      className="rounded-lg border border-line px-3 py-2 text-sm"
-                    />
-                    <select name="payment_mode" defaultValue="upi" className="rounded-lg border border-line px-3 py-2 text-sm">
-                      <option value="upi">UPI</option>
-                      <option value="bank">Bank transfer</option>
-                      <option value="cash">Cash</option>
-                    </select>
-                    <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-ink px-3.5 py-2 text-sm font-semibold text-paper">
-                      Record payment
-                    </button>
-                  </div>
-                  <div className="mt-3">
-                    <ScreenshotUpload hiddenInputId="screenshot_url" existingUrl={null} />
-                  </div>
-                </form>
               </div>
-            </div>
-          )}
+            )}
+
+            {current?.payment_screenshot_url && (
+              <a
+                href={current.payment_screenshot_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-clay-600 hover:text-clay-700"
+              >
+                <ExternalLink className="size-4" /> View your uploaded payment proof
+              </a>
+            )}
+          </div>
         </Card>
 
         {/* History */}
