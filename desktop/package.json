@@ -1,0 +1,47 @@
+{
+  "name": "pg360-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PG360 desktop app (Windows) — Electron wrapper around the live web app",
+  "author": "PG360",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis msi",
+    "dist:exe": "electron-builder --win nsis",
+    "dist:msi": "electron-builder --win msi"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "software.pg360.app",
+    "productName": "PG360",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "msi"
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PG360"
+    }
+  }
+}
