@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PG360</string>
+    <string name="title_activity_main">PG360</string>
+    <string name="package_name">software.pg360.app</string>
+    <string name="custom_url_scheme">software.pg360.app</string>
+</resources>
