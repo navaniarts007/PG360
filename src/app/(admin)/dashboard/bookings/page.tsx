@@ -5,6 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BookingStatusControl } from "@/components/admin/booking-status-control";
+import { BookingEditDialog } from "@/components/admin/booking-edit-dialog";
+import { ConfirmDelete } from "@/components/admin/confirm-delete";
+import { deleteBookingAction } from "@/lib/actions/booking";
 import { requireRole } from "@/lib/guards";
 import { listBookings } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -74,8 +77,10 @@ export default async function BookingsPage() {
                   </p>
                 </div>
               </div>
-              <div className="shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
                 <BookingStatusControl id={b.id} status={b.status} />
+                <BookingEditDialog booking={b} />
+                <ConfirmDelete action={deleteBookingAction} id={b.id} title="Delete request" />
               </div>
             </Card>
           ))}

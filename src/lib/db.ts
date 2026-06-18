@@ -86,21 +86,6 @@ export async function listRooms(): Promise<Room[]> {
   return (data ?? []) as Room[];
 }
 
-export interface RoomOption {
-  id: string;
-  label: string;
-  full: boolean;
-}
-
-export async function getRoomOptions(): Promise<RoomOption[]> {
-  const rooms = await listRooms();
-  return rooms.map((r) => ({
-    id: r.id,
-    label: `Room ${r.room_number} · Floor ${r.floor}`,
-    full: r.occupied_beds >= r.total_beds,
-  }));
-}
-
 /* -------------------------------------------------------------- floors */
 
 export async function listFloors(): Promise<Floor[]> {
@@ -427,21 +412,6 @@ export async function getMonthPayments(
   }));
 }
 
-export async function getDuePayments(month: string) {
-  const all = await getMonthPayments(month);
-  return all
-    .filter((p) => p.status !== "paid")
-    .map((p) => ({
-      id: p.id,
-      tenant_id: p.tenant_id,
-      name: p.name,
-      room: p.room,
-      balance: p.total_amount - p.amount_paid,
-      status: p.status,
-    }))
-    .sort((a, b) => b.balance - a.balance);
-}
-
 /* --------------------------------------------------------------- issues */
 
 type IssueRow = Issue & {
@@ -480,15 +450,6 @@ export async function getMyTenant(): Promise<{
   if (!data) return null;
   const { room, ...tenant } = data as unknown as Tenant & { room: Room | null };
   return { tenant: tenant as Tenant, room: (room as Room) ?? null };
-}
-
-/** Bed assigned to the current tenant (if any). */
-export async function getMyBed(): Promise<Bed | null> {
-  const s = await sb();
-  const { data: t } = await s.from("tenants").select("bed_id").limit(1).maybeSingle();
-  if (!t || !t.bed_id) return null;
-  const { data: bed } = await s.from("beds").select("*").eq("id", t.bed_id).maybeSingle();
-  return (bed as Bed) ?? null;
 }
 
 export async function getMyPg(): Promise<PgAccount | null> {

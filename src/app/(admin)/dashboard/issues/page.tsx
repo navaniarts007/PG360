@@ -12,6 +12,9 @@ import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IssueStatusControl } from "@/components/admin/issue-status-control";
+import { IssueEditDialog } from "@/components/admin/issue-edit-dialog";
+import { ConfirmDelete } from "@/components/admin/confirm-delete";
+import { deleteIssueAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { listIssuesWithTenant } from "@/lib/db";
 
@@ -72,8 +75,14 @@ export default async function IssuesPage() {
                     </p>
                   </div>
                 </div>
-                <div className="shrink-0 sm:text-right">
+                <div className="flex shrink-0 items-center gap-2 sm:justify-end">
                   <IssueStatusControl id={issue.id} status={issue.status} />
+                  <IssueEditDialog
+                    id={issue.id}
+                    category={issue.category}
+                    description={issue.description}
+                  />
+                  <ConfirmDelete action={deleteIssueAction} id={issue.id} title="Delete complaint" />
                 </div>
               </Card>
             );

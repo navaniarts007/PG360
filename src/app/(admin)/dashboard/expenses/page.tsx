@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AddExpenseDialog } from "@/components/admin/add-expense-dialog";
+import { ConfirmDelete } from "@/components/admin/confirm-delete";
+import { deleteExpenseAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { expenseSummary, listExpenses } from "@/lib/db";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
@@ -102,6 +104,7 @@ export default async function ExpensesPage() {
                     <th className="px-6 py-3 font-semibold">Note</th>
                     <th className="px-6 py-3 font-semibold">Date</th>
                     <th className="px-6 py-3 text-right font-semibold">Amount</th>
+                    <th className="px-6 py-3 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -115,6 +118,12 @@ export default async function ExpensesPage() {
                       <td className="px-6 py-3.5 text-ink-soft">{e.description ?? "—"}</td>
                       <td className="px-6 py-3.5 text-ink-muted tnum">{formatDate(e.date)}</td>
                       <td className="px-6 py-3.5 text-right font-semibold text-ink tnum">{inr(e.amount)}</td>
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <AddExpenseDialog defaultDate={today} expense={e} />
+                          <ConfirmDelete action={deleteExpenseAction} id={e.id} title="Delete expense" />
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

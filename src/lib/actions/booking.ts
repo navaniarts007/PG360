@@ -64,3 +64,46 @@ export async function setBookingStatusAction(formData: FormData): Promise<void> 
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard");
 }
+
+const bookingUpdateSchema = z.object({
+  tenant_name: z.string().min(2, "Enter a name."),
+  phone: z.string().min(8, "Enter a valid phone."),
+  preferred_room_type: z.enum(["single", "double", "triple", "any"]),
+  requested_date: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export async function updateBookingAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const parsed = bookingUpdateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const s = await createClient();
+  const { error } = await s
+    .from("bookings")
+    .update({
+      tenant_name: d.tenant_name,
+      phone: d.phone,
+      preferred_room_type: d.preferred_room_type,
+      requested_date: d.requested_date || null,
+      notes: d.notes || null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/bookings");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function deleteBookingAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  await s.from("bookings").delete().eq("id", id);
+  revalidatePath("/dashboard/bookings");
+  revalidatePath("/dashboard");
+}
