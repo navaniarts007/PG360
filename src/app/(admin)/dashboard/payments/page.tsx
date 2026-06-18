@@ -6,6 +6,7 @@ import { PaymentStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { VerifyPaymentButton } from "@/components/admin/verify-payment-button";
+import { RemindButton } from "@/components/admin/remind-button";
 import { requireRole } from "@/lib/guards";
 import { adminKpis, getMonthBill, getPayTenants, getPgAccount } from "@/lib/db";
 import { getActiveProperty } from "@/lib/auth";
@@ -107,12 +108,15 @@ export default async function PaymentsPage() {
                         )}
                         {unverified && <VerifyPaymentButton paymentId={r.paymentId!} />}
                         {r.balance > 0 ? (
-                          <RecordPaymentDialog
-                            tenants={payTenants}
-                            month={month}
-                            preselectId={r.tenant_id}
-                            variant="collect"
-                          />
+                          <>
+                            <RemindButton tenantId={r.tenant_id} month={month} balance={r.balance} />
+                            <RecordPaymentDialog
+                              tenants={payTenants}
+                              month={month}
+                              preselectId={r.tenant_id}
+                              variant="collect"
+                            />
+                          </>
                         ) : r.verified ? (
                           <span className="text-xs text-teal-600">✓ Verified</span>
                         ) : null}

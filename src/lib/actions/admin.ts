@@ -626,6 +626,28 @@ export async function verifyPaymentAction(formData: FormData): Promise<void> {
   revalidatePath("/portal/bill");
 }
 
+/** Nudge a tenant about a pending bill via an in-app notification. (Groundwork
+ *  for WhatsApp reminders later — same trigger, different channel.) */
+export async function remindTenantAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return;
+  const tenantId = String(formData.get("tenant_id"));
+  const month = String(formData.get("month") || "");
+  const balance = Number(formData.get("balance") || 0);
+  const s = await createClient();
+  const { data: t } = await s.from("tenants").select("id, pg_id").eq("id", tenantId).maybeSingle();
+  if (!t || t.pg_id !== pid) return;
+  const amt = balance > 0 ? `₹${balance.toLocaleString("en-IN")} ` : "";
+  await notifyTenant(
+    pid,
+    tenantId,
+    `Rent reminder: ${amt}is pending${month ? ` for ${month}` : ""}. Please pay at your earliest.`,
+    "/portal/bill",
+  );
+  revalidatePath("/dashboard/payments");
+}
+
 const expenseUpdateSchema = expenseSchema; // same shape
 
 export async function updateExpenseAction(
