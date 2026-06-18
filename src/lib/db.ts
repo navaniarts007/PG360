@@ -670,13 +670,6 @@ export async function pnl(month: string) {
 
 /* ----------------------------------------------------- money model (A2) */
 
-/** A single payment of the logged-in tenant (RLS-scoped) — for the HRA receipt. */
-export async function getMyPayment(paymentId: string): Promise<Payment | null> {
-  const s = await sb();
-  const { data } = await s.from("payments").select("*").eq("id", paymentId).maybeSingle();
-  return (data as Payment) ?? null;
-}
-
 /** The active property's policy row (notice / lock-in / deposit / electricity). */
 export async function getActivePolicy(): Promise<PgPolicy | null> {
   const s = await sb();
