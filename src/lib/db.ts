@@ -2,16 +2,20 @@ import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty } from "./auth";
+import { computeBill } from "./money";
 import type {
   AppNotification,
   Bed,
+  CheckoutSettlement,
   Expense,
   Floor,
   FoodMenuItem,
   Issue,
+  JoiningFee,
   MealType,
   Payment,
   PgAccount,
+  PgPolicy,
   RateCard,
   Room,
   Tenant,
@@ -49,6 +53,24 @@ export async function getPgAccount(id: string): Promise<PgAccount | null> {
   const s = await sb();
   const { data } = await s.from("pg_accounts").select("*").eq("id", id).maybeSingle();
   return (data as PgAccount) ?? null;
+}
+
+/** The active property's money policy, guaranteed non-null (schema defaults when
+ *  no row exists yet) — convenient for settings forms. */
+export async function getPgPolicy(pgId: string): Promise<PgPolicy> {
+  const s = await sb();
+  const { data } = await s.from("pg_policies").select("*").eq("pg_id", pgId).maybeSingle();
+  if (data) return data as PgPolicy;
+  return {
+    id: "",
+    pg_id: pgId,
+    notice_period_days: 30,
+    lock_in_months: 0,
+    deposit_months: 1,
+    electricity_included_units: 0,
+    electricity_per_unit_rate: 0,
+    created_at: "",
+  };
 }
 
 export async function platformStats() {
@@ -296,20 +318,34 @@ export async function getTenantDetail(id: string): Promise<{
 export async function adminKpis(month: string) {
   const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: rooms }, { data: tenants }, { data: payments }] = await Promise.all([
+  const [{ data: rooms }, { data: tenants }, { data: payments }, { data: pg }] = await Promise.all([
     s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
-    s.from("tenants").select("id, rent_amount").eq("pg_id", pid).eq("status", "active"),
+    s.from("tenants").select("id, rent_amount, checkin_date, food_opt_out").eq("pg_id", pid).eq("status", "active"),
     s.from("payments").select("tenant_id, total_amount, amount_paid").eq("pg_id", pid).eq("month_for", month),
+    s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
   ]);
   const r = (rooms ?? []) as { total_beds: number; occupied_beds: number }[];
-  const t = (tenants ?? []) as { id: string; rent_amount: number }[];
+  const t = (tenants ?? []) as { id: string; rent_amount: number; checkin_date: string; food_opt_out: boolean }[];
   const p = (payments ?? []) as { tenant_id: string; total_amount: number; amount_paid: number }[];
+  const foodDeduction = (pg as { food_opt_out_deduction: number } | null)?.food_opt_out_deduction ?? 0;
   const payByTenant = new Map(p.map((x) => [x.tenant_id, x]));
   const totalBeds = r.reduce((sum, x) => sum + x.total_beds, 0);
   const occupiedBeds = r.reduce((sum, x) => sum + x.occupied_beds, 0);
   const collected = p.reduce((sum, x) => sum + x.amount_paid, 0);
-  // billed counts EVERY active tenant — derived from rent when not yet invoiced
-  const billed = t.reduce((sum, x) => sum + (payByTenant.get(x.id)?.total_amount ?? x.rent_amount), 0);
+  // billed counts EVERY active tenant — derived (pro-rata + food) when not yet invoiced
+  const billed = t.reduce(
+    (sum, x) =>
+      sum +
+      (payByTenant.get(x.id)?.total_amount ??
+        computeBill({
+          pricePerMonth: x.rent_amount,
+          checkinISO: x.checkin_date,
+          month,
+          foodOptOut: x.food_opt_out,
+          foodOptOutDeduction: foodDeduction,
+        }).total),
+    0,
+  );
   return {
     totalTenants: t.length,
     roomCount: r.length,
@@ -341,17 +377,39 @@ export interface BillRow {
 export async function getMonthBill(month: string): Promise<BillRow[]> {
   const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: tenants }, { data: pays }] = await Promise.all([
-    s.from("tenants").select("id, name, rent_amount, room:rooms(room_number)").eq("pg_id", pid).eq("status", "active"),
+  const [{ data: tenants }, { data: pays }, { data: pg }] = await Promise.all([
+    s
+      .from("tenants")
+      .select("id, name, rent_amount, checkin_date, food_opt_out, room:rooms(room_number)")
+      .eq("pg_id", pid)
+      .eq("status", "active"),
     s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
+    s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
   ]);
+  const foodDeduction = (pg as { food_opt_out_deduction: number } | null)?.food_opt_out_deduction ?? 0;
   const payByTenant = new Map(((pays ?? []) as Payment[]).map((p) => [p.tenant_id, p]));
-  type T = { id: string; name: string; rent_amount: number; room: { room_number: string } | null };
+  type T = {
+    id: string;
+    name: string;
+    rent_amount: number;
+    checkin_date: string;
+    food_opt_out: boolean;
+    room: { room_number: string } | null;
+  };
   const order = { due: 0, partial: 1, paid: 2 } as const;
   return ((tenants ?? []) as unknown as T[])
     .map((t) => {
       const p = payByTenant.get(t.id);
-      const total = p?.total_amount ?? t.rent_amount;
+      // not yet invoiced → derive the Bangalore way (pro-rata first month, food
+      // included by default with an opt-out deduction).
+      const derived = computeBill({
+        pricePerMonth: t.rent_amount,
+        checkinISO: t.checkin_date,
+        month,
+        foodOptOut: t.food_opt_out,
+        foodOptOutDeduction: foodDeduction,
+      });
+      const total = p?.total_amount ?? derived.total;
       const paid = p?.amount_paid ?? 0;
       return {
         tenant_id: t.id,
@@ -474,6 +532,13 @@ export async function getMyIssues(): Promise<Issue[]> {
     .select("*")
     .order("created_at", { ascending: false });
   return (data ?? []) as Issue[];
+}
+
+/** A single payment of the logged-in tenant (RLS-scoped) — for the HRA receipt. */
+export async function getMyPayment(id: string): Promise<Payment | null> {
+  const s = await sb();
+  const { data } = await s.from("payments").select("*").eq("id", id).maybeSingle();
+  return (data as Payment) ?? null;
 }
 
 /* -------------------------------------------------------- notifications */
@@ -601,6 +666,85 @@ export async function pnl(month: string) {
   const collected = ((pays ?? []) as { amount_paid: number }[]).reduce((x, p) => x + p.amount_paid, 0);
   const expenses = ((exps ?? []) as { amount: number }[]).reduce((x, e) => x + e.amount, 0);
   return { billed, collected, expenses, net: collected - expenses };
+}
+
+/* ----------------------------------------------------- money model (A2) */
+
+/** A single payment of the logged-in tenant (RLS-scoped) — for the HRA receipt. */
+export async function getMyPayment(paymentId: string): Promise<Payment | null> {
+  const s = await sb();
+  const { data } = await s.from("payments").select("*").eq("id", paymentId).maybeSingle();
+  return (data as Payment) ?? null;
+}
+
+/** The active property's policy row (notice / lock-in / deposit / electricity). */
+export async function getActivePolicy(): Promise<PgPolicy | null> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  if (!pid) return null;
+  const { data } = await s.from("pg_policies").select("*").eq("pg_id", pid).maybeSingle();
+  return (data as PgPolicy) ?? null;
+}
+
+/** Tenant's own policy (read-only) — for the bill / receipt context. */
+export async function getMyPolicy(): Promise<PgPolicy | null> {
+  const s = await sb();
+  const { data } = await s.from("pg_policies").select("*").limit(1).maybeSingle();
+  return (data as PgPolicy) ?? null;
+}
+
+/** Joining fees for a tenant (admin view). */
+export async function getJoiningFees(tenantId: string): Promise<JoiningFee[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("joining_fees")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as JoiningFee[];
+}
+
+/** Joining fees for the logged-in tenant. */
+export async function getMyJoiningFees(): Promise<JoiningFee[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("joining_fees")
+    .select("*")
+    .order("created_at", { ascending: false });
+  return (data ?? []) as JoiningFee[];
+}
+
+/** All checkout settlements in the active property, newest first (admin). */
+export async function listSettlements(): Promise<
+  Array<CheckoutSettlement & { tenant_name: string }>
+> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("checkout_settlements")
+    .select("*, tenant:tenants(name)")
+    .eq("pg_id", pid)
+    .order("created_at", { ascending: false });
+  type Row = CheckoutSettlement & { tenant: { name: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((x) => ({
+    ...x,
+    tenant_name: x.tenant?.name ?? "—",
+  }));
+}
+
+/** A tenant's most recent settlement (admin), if one was already drafted. */
+export async function getSettlementForTenant(
+  tenantId: string,
+): Promise<CheckoutSettlement | null> {
+  const s = await sb();
+  const { data } = await s
+    .from("checkout_settlements")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as CheckoutSettlement) ?? null;
 }
 
 /** Roommate names only — read via the service client so RLS (which hides other

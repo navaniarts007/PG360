@@ -6,6 +6,7 @@ import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyStaff } from "../notify";
+import { computeBill } from "../money";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -72,27 +73,42 @@ export async function tenantRecordPaymentAction(
   }
 
   const admin = createAdminClient();
-  const { data: tenant } = await admin
-    .from("tenants")
-    .select("rent_amount")
-    .eq("id", me.tenant_id)
-    .maybeSingle();
+  const [{ data: tenant }, { data: pg }] = await Promise.all([
+    admin
+      .from("tenants")
+      .select("rent_amount, checkin_date, food_opt_out")
+      .eq("id", me.tenant_id)
+      .maybeSingle(),
+    admin.from("pg_accounts").select("food_opt_out_deduction").eq("id", me.pg_id).maybeSingle(),
+  ]);
   const { data: existing } = await admin
     .from("payments")
-    .select("base_rent, electricity_charge, food_charge, other_charges, payment_screenshot_url")
+    .select("base_rent, electricity_charge, food_charge, other_charges, food_opt_out_deduction, is_pro_rata, pro_rata_days, payment_screenshot_url")
     .eq("tenant_id", me.tenant_id)
     .eq("month_for", d.month_for)
     .maybeSingle();
+
+  // First-time invoice for this month → derive it the Bangalore way.
+  const derived = computeBill({
+    pricePerMonth: tenant?.rent_amount ?? 0,
+    checkinISO: tenant?.checkin_date ?? d.month_for + "-01",
+    month: d.month_for,
+    foodOptOut: tenant?.food_opt_out ?? false,
+    foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
+  });
 
   const { error } = await admin.from("payments").upsert(
     {
       pg_id: me.pg_id,
       tenant_id: me.tenant_id,
       month_for: d.month_for,
-      base_rent: existing?.base_rent ?? tenant?.rent_amount ?? 0,
+      base_rent: existing?.base_rent ?? derived.baseRent,
       electricity_charge: existing?.electricity_charge ?? 0,
       food_charge: existing?.food_charge ?? 0,
       other_charges: existing?.other_charges ?? 0,
+      food_opt_out_deduction: existing?.food_opt_out_deduction ?? derived.foodDeduction,
+      is_pro_rata: existing?.is_pro_rata ?? derived.isProRata,
+      pro_rata_days: existing?.pro_rata_days ?? (derived.isProRata ? derived.proRataDays : null),
       amount_paid: d.amount_paid,
       payment_mode: d.payment_mode,
       payment_screenshot_url: d.screenshot_url ?? existing?.payment_screenshot_url ?? null,
@@ -111,4 +127,21 @@ export async function tenantRecordPaymentAction(
   revalidatePath("/portal/bill");
   revalidatePath("/dashboard/payments");
   return { ok: true };
+}
+
+/* ------------------------------- food opt-out toggle ------------------------------- */
+
+/** Tenant turns the included meal plan on/off. Food is included by default;
+ *  opting out deducts the property's food deduction from the next bill. */
+export async function tenantToggleFoodAction(formData: FormData): Promise<void> {
+  const me = await requireRole(["tenant"]);
+  if (!me.tenant_id || !me.pg_id) return;
+  const optOut = formData.get("opt_out") === "true";
+  const admin = createAdminClient();
+  await admin.from("tenants").update({ food_opt_out: optOut }).eq("id", me.tenant_id);
+  if (optOut) {
+    await notifyStaff(me.pg_id, `${me.full_name} opted out of meals`, "/dashboard/tenants");
+  }
+  revalidatePath("/portal/food");
+  revalidatePath("/portal/bill");
 }

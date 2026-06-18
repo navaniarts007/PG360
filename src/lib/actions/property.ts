@@ -38,6 +38,68 @@ export async function saveSettingsAction(
   return { ok: true };
 }
 
+const moneySchema = z.object({
+  owner_pan: z.string().optional(),
+  property_address: z.string().optional(),
+  food_included_default: z.coerce.boolean(),
+  food_opt_out_deduction: z.coerce.number().int().min(0),
+  notice_period_days: z.coerce.number().int().min(0).max(365),
+  lock_in_months: z.coerce.number().int().min(0).max(36),
+  deposit_months: z.coerce.number().int().min(0).max(12),
+  electricity_included_units: z.coerce.number().int().min(0),
+  electricity_per_unit_rate: z.coerce.number().int().min(0),
+});
+
+/** Save the property's money model: HRA/owner details, food default + opt-out
+ *  deduction (on pg_accounts) and the notice/lock-in/deposit/electricity policy
+ *  (upserted into pg_policies). */
+export async function saveMoneySettingsAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const raw = Object.fromEntries(formData);
+  const parsed = moneySchema.safeParse({
+    ...raw,
+    food_included_default: formData.get("food_included_default") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const admin = createAdminClient();
+
+  const { error: pgErr } = await admin
+    .from("pg_accounts")
+    .update({
+      owner_pan: d.owner_pan?.trim() || null,
+      property_address: d.property_address?.trim() || null,
+      food_included_default: d.food_included_default,
+      food_opt_out_deduction: d.food_opt_out_deduction,
+    })
+    .eq("id", pid);
+  if (pgErr) return { error: pgErr.message };
+
+  const { error: polErr } = await admin
+    .from("pg_policies")
+    .upsert(
+      {
+        pg_id: pid,
+        notice_period_days: d.notice_period_days,
+        lock_in_months: d.lock_in_months,
+        deposit_months: d.deposit_months,
+        electricity_included_units: d.electricity_included_units,
+        electricity_per_unit_rate: d.electricity_per_unit_rate,
+      },
+      { onConflict: "pg_id" },
+    );
+  if (polErr) return { error: polErr.message };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/tenants", "layout");
+  return { ok: true };
+}
+
 /** Switch the admin's active property (validated against their memberships). */
 export async function setActivePropertyAction(propertyId: string): Promise<void> {
   const session = await getSession();

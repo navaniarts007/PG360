@@ -14,6 +14,7 @@ import { PaymentStatusPill } from "@/components/ui/status";
 import { TenantRecordPaymentDialog } from "@/components/tenant/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
+import { computeBill } from "@/lib/money";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "My Bill" };
@@ -38,12 +39,23 @@ export default async function MyBill() {
   const current = payments.find((p) => p.month_for === month);
   const history = payments.filter((p) => p.month_for !== month);
 
-  // Invoice is auto-derived from rent when the owner hasn't recorded one yet.
-  const baseRent = current?.base_rent ?? tenant.rent_amount ?? 0;
+  // Invoice is auto-derived the Bangalore way when the owner hasn't recorded one
+  // yet: pro-rata first month + food included by default (opt-out deducts).
+  const derived = computeBill({
+    pricePerMonth: tenant.rent_amount ?? 0,
+    checkinISO: tenant.checkin_date,
+    month,
+    foodOptOut: tenant.food_opt_out,
+    foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
+  });
+  const baseRent = current?.base_rent ?? derived.baseRent;
   const electricity = current?.electricity_charge ?? 0;
   const food = current?.food_charge ?? 0;
+  const foodDeduction = current?.food_opt_out_deduction ?? derived.foodDeduction;
   const other = current?.other_charges ?? 0;
-  const total = current?.total_amount ?? baseRent + electricity + food + other;
+  const total = current?.total_amount ?? derived.total;
+  const isProRata = current?.is_pro_rata ?? derived.isProRata;
+  const proRataDays = current?.pro_rata_days ?? derived.proRataDays;
   const paid = current?.amount_paid ?? 0;
   const balance = Math.max(total - paid, 0);
   const paidPct = total > 0 ? Math.min(Math.round((paid / total) * 100), 100) : 0;
@@ -58,12 +70,19 @@ export default async function MyBill() {
   const noBed = !room && !current;
   const pendingVerify = !!current && !current.verified && paid > 0;
 
-  const lines = [
-    { icon: Home, label: "Base rent", value: baseRent },
+  const lines: { icon: typeof Home; label: string; value: number }[] = [
+    {
+      icon: Home,
+      label: isProRata ? `Base rent (pro-rata · ${proRataDays} days)` : "Base rent",
+      value: baseRent,
+    },
     { icon: Zap, label: "Electricity", value: electricity },
     { icon: Utensils, label: "Food", value: food },
     { icon: Plus, label: "Other charges", value: other },
-  ].filter((l) => l.value > 0 || l.label === "Base rent");
+  ].filter((l) => l.value > 0 || l.label.startsWith("Base rent"));
+  if (foodDeduction > 0) {
+    lines.push({ icon: Utensils, label: "Food opt-out credit", value: -foodDeduction });
+  }
 
   return (
     <div className="space-y-7">
@@ -228,16 +247,28 @@ export default async function MyBill() {
               </div>
             )}
 
-            {current?.payment_screenshot_url && (
-              <a
-                href={current.payment_screenshot_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-clay-600 hover:text-clay-700"
-              >
-                <ExternalLink className="size-4" /> View your uploaded payment proof
-              </a>
-            )}
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              {current?.payment_screenshot_url && (
+                <a
+                  href={current.payment_screenshot_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-clay-600 hover:text-clay-700"
+                >
+                  <ExternalLink className="size-4" /> View your uploaded payment proof
+                </a>
+              )}
+              {current && current.amount_paid > 0 && (
+                <a
+                  href={`/receipt/${current.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-clay-600 hover:text-clay-700"
+                >
+                  <Receipt className="size-4" /> Download HRA receipt
+                </a>
+              )}
+            </div>
               </>
             )}
           </div>
@@ -253,12 +284,25 @@ export default async function MyBill() {
           ) : (
             <div className="divide-y divide-line">
               {history.map((p) => (
-                <div key={p.id} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
+                <div key={p.id} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
                   <div>
                     <p className="text-sm font-semibold text-ink">{monthLabel(p.month_for)}</p>
                     <p className="text-xs text-ink-muted tnum">{inr(p.amount_paid)}</p>
                   </div>
-                  <PaymentStatusPill status={p.status} />
+                  <div className="flex items-center gap-3">
+                    {p.amount_paid > 0 && (
+                      <a
+                        href={`/receipt/${p.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Download HRA rent receipt"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-clay-600 hover:text-clay-700"
+                      >
+                        <Receipt className="size-3.5" /> Receipt
+                      </a>
+                    )}
+                    <PaymentStatusPill status={p.status} />
+                  </div>
                 </div>
               ))}
             </div>

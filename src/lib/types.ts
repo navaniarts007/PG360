@@ -55,6 +55,54 @@ export interface PgAccount {
   bank_details: string | null;
   payment_qr_url: string | null;
   settings: PropertySettings;
+  owner_pan: string | null;
+  property_address: string | null;
+  food_included_default: boolean;
+  food_opt_out_deduction: number;
+}
+
+/** Per-property money rules (notice / lock-in / deposit / electricity cap). */
+export interface PgPolicy {
+  id: string;
+  pg_id: string;
+  notice_period_days: number;
+  lock_in_months: number;
+  deposit_months: number;
+  electricity_included_units: number;
+  electricity_per_unit_rate: number;
+  created_at: string;
+}
+
+export interface JoiningFee {
+  id: string;
+  pg_id: string;
+  tenant_id: string;
+  amount: number;
+  description: string;
+  paid: boolean;
+  paid_date: string | null;
+  created_at: string;
+}
+
+export type SettlementStatus = "draft" | "confirmed" | "paid";
+
+export interface CheckoutSettlement {
+  id: string;
+  pg_id: string;
+  tenant_id: string;
+  checkout_date: string;
+  last_paid_until: string | null;
+  pro_rata_days_owed: number;
+  pro_rata_amount: number;
+  notice_shortfall_days: number;
+  notice_penalty: number;
+  lock_in_forfeiture: number;
+  damages_deduction: number;
+  deposit_amount: number;
+  refundable_amount: number;
+  notes: string | null;
+  status: SettlementStatus;
+  created_at: string;
 }
 
 export type RoomType = "single" | "double" | "triple";
@@ -132,6 +180,10 @@ export interface Tenant {
   checkout_date: string | null;
   rent_due_day: number;
   food_plan_active: boolean;
+  food_opt_out: boolean;
+  joining_date: string | null;
+  notice_given_date: string | null;
+  lock_in_end_date: string | null;
   status: TenantStatus;
   created_at: string;
 }
@@ -155,6 +207,9 @@ export interface Payment {
   payment_date: string | null;
   status: PaymentStatus;
   verified: boolean;
+  is_pro_rata: boolean;
+  pro_rata_days: number | null;
+  food_opt_out_deduction: number;
   notes: string | null;
 }
 

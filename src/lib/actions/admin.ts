@@ -7,6 +7,7 @@ import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyTenant } from "../notify";
+import { computeSettlement } from "../money";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -205,6 +206,7 @@ const tenantSchema = z.object({
   checkin_date: z.string().min(1, "Check-in date is required."),
   rent_due_day: z.coerce.number().int().min(1).max(28),
   login_password: z.string().min(6, "Password must be 6+ characters."),
+  joining_fee: z.coerce.number().int().min(0).optional(),
 });
 
 export async function addTenantAction(
@@ -283,10 +285,33 @@ export async function addTenantAction(
       .eq("id", bedId);
   }
 
+  // One-time joining/admission fee (non-refundable), if entered.
+  if (d.joining_fee && d.joining_fee > 0) {
+    await admin.from("joining_fees").insert({
+      pg_id: pid,
+      tenant_id: tenant.id,
+      amount: d.joining_fee,
+    });
+  }
+
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+/** Toggle a joining fee between paid / unpaid. */
+export async function toggleJoiningFeePaidAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const paid = formData.get("paid") === "true";
+  const s = await createClient();
+  await s
+    .from("joining_fees")
+    .update({ paid, paid_date: paid ? new Date().toISOString().slice(0, 10) : null })
+    .eq("id", id);
+  const tenantId = String(formData.get("tenant_id") || "");
+  if (tenantId) revalidatePath(`/dashboard/tenants/${tenantId}`);
 }
 
 const tenantUpdateSchema = z.object({
@@ -381,6 +406,92 @@ export async function checkoutTenantAction(formData: FormData): Promise<void> {
   revalidatePath(`/dashboard/tenants/${id}`);
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
+}
+
+const settlementSchema = z.object({
+  tenant_id: z.string().min(1),
+  checkout_date: z.string().min(1, "Checkout date is required."),
+  last_paid_until: z.string().optional(),
+  notice_given_date: z.string().optional(),
+  damages: z.coerce.number().int().min(0).optional(),
+  notes: z.string().optional(),
+});
+
+/** Compute + persist a checkout settlement, then check the tenant out. The math
+ *  is recomputed server-side (never trusts client numbers) from the property
+ *  policy, the bed price, deposit and the dates provided. */
+export async function saveSettlementAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const parsed = settlementSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const s = await createClient();
+
+  const { data: tenant } = await s
+    .from("tenants")
+    .select("id, pg_id, rent_amount, security_deposit, lock_in_end_date, notice_given_date, status")
+    .eq("id", d.tenant_id)
+    .maybeSingle();
+  if (!tenant || tenant.pg_id !== pid) return { error: "Tenant not found in this property." };
+
+  const { data: policy } = await s
+    .from("pg_policies")
+    .select("notice_period_days")
+    .eq("pg_id", pid)
+    .maybeSingle();
+
+  const res = computeSettlement({
+    pricePerMonth: tenant.rent_amount,
+    checkoutISO: d.checkout_date,
+    lastPaidUntilISO: d.last_paid_until || null,
+    noticeGivenISO: d.notice_given_date || tenant.notice_given_date || null,
+    noticePeriodDays: policy?.notice_period_days ?? 30,
+    lockInEndISO: tenant.lock_in_end_date,
+    depositAmount: tenant.security_deposit,
+    damages: d.damages ?? 0,
+  });
+
+  const { error: insErr } = await s.from("checkout_settlements").insert({
+    pg_id: pid,
+    tenant_id: d.tenant_id,
+    checkout_date: d.checkout_date,
+    last_paid_until: d.last_paid_until || null,
+    pro_rata_days_owed: res.proRataDaysOwed,
+    pro_rata_amount: res.proRataAmount,
+    notice_shortfall_days: res.noticeShortfallDays,
+    notice_penalty: res.noticePenalty,
+    lock_in_forfeiture: res.lockInForfeiture,
+    damages_deduction: res.damages,
+    deposit_amount: res.depositAmount,
+    refundable_amount: res.refundableAmount,
+    notes: d.notes || null,
+    status: "confirmed",
+  });
+  if (insErr) return { error: insErr.message };
+
+  // Check the tenant out + free their bed.
+  if (tenant.status !== "checked_out") {
+    await s
+      .from("tenants")
+      .update({
+        status: "checked_out",
+        checkout_date: d.checkout_date,
+        notice_given_date: d.notice_given_date || tenant.notice_given_date || null,
+      })
+      .eq("id", d.tenant_id);
+    await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", d.tenant_id);
+  }
+
+  revalidatePath("/dashboard/tenants");
+  revalidatePath(`/dashboard/tenants/${d.tenant_id}`);
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function deleteTenantAction(formData: FormData): Promise<void> {

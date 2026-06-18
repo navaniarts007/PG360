@@ -15,11 +15,18 @@ import {
   PaymentStatusPill,
   TenantStatusPill,
 } from "@/components/ui/status";
-import { CheckoutButton } from "@/components/admin/checkout-button";
+import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement-dialog";
+import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { requireRole } from "@/lib/guards";
-import { getBedOptions, getPayTenants, getTenantDetail } from "@/lib/db";
+import {
+  getActivePolicy,
+  getBedOptions,
+  getJoiningFees,
+  getPayTenants,
+  getTenantDetail,
+} from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenant" };
@@ -40,9 +47,11 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
+    getJoiningFees(id),
+    getActivePolicy(),
   ]);
 
   return (
@@ -70,7 +79,10 @@ export default async function TenantDetail({
           {tenant.status === "active" && (
             <>
               <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
-              <CheckoutButton id={tenant.id} />
+              <CheckoutSettlementDialog
+                tenant={tenant}
+                noticePeriodDays={policy?.notice_period_days ?? 30}
+              />
             </>
           )}
         </div>
@@ -98,15 +110,19 @@ export default async function TenantDetail({
             <MoneyRow label="Outstanding" value={inr(outstanding)} tone={outstanding > 0 ? "rose" : "teal"} />
             <div className="mt-2 rounded-xl bg-ink p-4 text-paper">
               <p className="flex items-center gap-1.5 text-xs text-paper/60">
-                <ShieldCheck className="size-3.5" /> Settlement on checkout
+                <ShieldCheck className="size-3.5" /> Indicative refund
               </p>
               <p className="mt-1 font-display text-2xl font-semibold tnum">
                 {inr(settlement)}
               </p>
-              <p className="text-xs text-paper/50">deposit − outstanding dues</p>
+              <p className="text-xs text-paper/50">
+                deposit − dues · use “Checkout &amp; settle” for the full calculation
+              </p>
             </div>
           </div>
         </Card>
+
+        <JoiningFeesCard fees={joiningFees} tenantId={tenant.id} />
 
         {/* history */}
         <Card className="lg:col-span-1">

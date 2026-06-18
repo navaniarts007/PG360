@@ -103,9 +103,24 @@ function TenantForm({
           <Input id="rent_due_day" name="rent_due_day" type="number" min={1} max={28} defaultValue={tenant?.rent_due_day ?? 5} />
         </FieldRow>
         {!tenant && (
-          <FieldRow label="Check-in date" htmlFor="checkin_date" className="col-span-2">
-            <Input id="checkin_date" name="checkin_date" type="date" required />
-          </FieldRow>
+          <>
+            <FieldRow label="Check-in date" htmlFor="checkin_date">
+              <Input id="checkin_date" name="checkin_date" type="date" required />
+            </FieldRow>
+            <FieldRow
+              label="Joining fee (₹)"
+              htmlFor="joining_fee"
+              hint="one-time, optional"
+            >
+              <Input
+                id="joining_fee"
+                name="joining_fee"
+                type="number"
+                min={0}
+                placeholder="0"
+              />
+            </FieldRow>
+          </>
         )}
       </div>
 

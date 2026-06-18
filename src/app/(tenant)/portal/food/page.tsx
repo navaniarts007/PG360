@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { UtensilsCrossed } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FoodOptGrid } from "@/components/tenant/food-opt-grid";
+import { FoodPlanToggle } from "@/components/tenant/food-plan-toggle";
 import { requireRole } from "@/lib/guards";
-import { getFoodMenu, getMyFoodOpts } from "@/lib/db";
+import { getFoodMenu, getMyFoodOpts, getMyPg, getMyTenant } from "@/lib/db";
 import { weekDates } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Food menu" };
@@ -11,9 +12,11 @@ export const metadata: Metadata = { title: "Food menu" };
 export default async function TenantFood() {
   await requireRole(["tenant"]);
   const week = weekDates();
-  const [items, opts] = await Promise.all([
+  const [items, opts, mine, pg] = await Promise.all([
     getFoodMenu(),
     getMyFoodOpts(week[0]!.iso, week[6]!.iso),
+    getMyTenant(),
+    getMyPg(),
   ]);
 
   const menu: Record<string, string> = {};
@@ -37,6 +40,13 @@ export default async function TenantFood() {
           Tap a meal to opt out — your monthly food charge follows what you eat.
         </p>
       </div>
+
+      {mine && (
+        <FoodPlanToggle
+          optOut={mine.tenant.food_opt_out}
+          deduction={pg?.food_opt_out_deduction ?? 0}
+        />
+      )}
 
       {!hasMenu ? (
         <EmptyState
