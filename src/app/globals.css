@@ -182,6 +182,13 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
+
+  /* Edge/IE inject their own password reveal + clear icons; we ship our own
+     show/hide eye button, so hide the native ones to avoid a duplicate icon. */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
 }
 
 /* =========================================================================
