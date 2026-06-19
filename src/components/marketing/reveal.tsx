@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 /** Scroll-triggered reveal. Respects prefers-reduced-motion via CSS. */
@@ -16,9 +17,14 @@ export function Reveal({
   as?: React.ElementType;
 }) {
   const ref = useRef<HTMLElement | null>(null);
+  const reduced = useReducedMotion();
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
+    if (reduced) {
+      setShown(true);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -32,7 +38,7 @@ export function Reveal({
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [reduced]);
 
   return (
     <Tag

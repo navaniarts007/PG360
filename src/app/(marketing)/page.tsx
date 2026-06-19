@@ -3,7 +3,6 @@ import {
   ArrowRight,
   BedDouble,
   CheckCircle2,
-  IndianRupee,
   LayoutDashboard,
   type LucideIcon,
   MessagesSquare,
@@ -19,7 +18,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/marketing/reveal";
 import { WifiCard } from "@/components/marketing/wifi-card";
-import { cn, inrCompact } from "@/lib/utils";
+import { HeroPreview } from "@/components/marketing/hero-preview";
+import { HeroAtmosphere } from "@/components/marketing/hero-atmosphere";
+import { cn } from "@/lib/utils";
 
 export default function LandingPage() {
   return (
@@ -41,17 +42,8 @@ export default function LandingPage() {
 function Hero() {
   return (
     <section className="relative overflow-hidden pt-32 pb-16 sm:pt-40 sm:pb-24">
-      {/* atmosphere */}
-      <div className="dotgrid pointer-events-none absolute inset-0 opacity-[0.5] [mask-image:radial-gradient(70%_55%_at_50%_30%,black,transparent)]" />
-      <div className="grain pointer-events-none absolute inset-0" />
-      <div
-        className="pointer-events-none absolute -top-40 right-[-10%] size-[34rem] rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(194,83,29,0.16), transparent 65%)" }}
-      />
-      <div
-        className="pointer-events-none absolute -bottom-40 left-[-10%] size-[30rem] rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(14,107,87,0.13), transparent 65%)" }}
-      />
+      {/* atmosphere (parallax) */}
+      <HeroAtmosphere />
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1.05fr_1fr]">
         <div className="stagger">
@@ -100,75 +92,6 @@ function Hero() {
         <HeroPreview />
       </div>
     </section>
-  );
-}
-
-function HeroPreview() {
-  const kpis = [
-    { label: "Tenants", value: "42", tone: "text-ink", icon: Users },
-    { label: "Occupancy", value: "88%", tone: "text-teal-600", icon: BedDouble },
-    { label: "Collected", value: inrCompact(486500), tone: "text-clay-600", icon: IndianRupee },
-  ];
-  const due = [
-    { name: "Karthik Reddy", room: "101", amt: "₹12,600" },
-    { name: "Aisha Khan", room: "202", amt: "₹13,200" },
-    { name: "Faisal Ahmed", room: "301", amt: "₹8,950" },
-  ];
-  return (
-    <div className="relative animate-rise [animation-delay:0.25s]">
-      <div
-        className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] opacity-60 blur-2xl"
-        style={{ background: "radial-gradient(40% 60% at 60% 20%, rgba(217,164,65,0.25), transparent)" }}
-      />
-      {/* main dashboard card */}
-      <div className="rounded-[1.6rem] border border-line bg-surface/80 p-4 shadow-pop backdrop-blur-xl sm:p-5">
-        <div className="flex items-center justify-between px-1 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-rose-300" />
-            <span className="size-2.5 rounded-full bg-gold-300" />
-            <span className="size-2.5 rounded-full bg-teal-300" />
-          </div>
-          <span className="text-xs font-medium text-ink-muted">Sunrise Stay · June</span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {kpis.map((k) => (
-            <div key={k.label} className="rounded-xl border border-line bg-paper/60 p-3">
-              <k.icon className="size-4 text-ink-muted" />
-              <p className={cn("mt-2 text-xl font-semibold tnum", k.tone)}>{k.value}</p>
-              <p className="text-[0.7rem] text-ink-muted">{k.label}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 rounded-xl border border-line bg-paper/60 p-3.5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-ink">Payments due</p>
-            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[0.7rem] font-semibold text-rose-600 ring-1 ring-rose-100">
-              3 pending
-            </span>
-          </div>
-          <div className="mt-2 space-y-1.5">
-            {due.map((d) => (
-              <div key={d.name} className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="grid size-7 place-items-center rounded-full bg-clay-50 text-[0.7rem] font-bold text-clay-600">
-                    {d.room}
-                  </span>
-                  <span className="text-ink-soft">{d.name}</span>
-                </span>
-                <span className="font-semibold text-ink tnum">{d.amt}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* floating WiFi card — the differentiator */}
-      <div className="absolute -bottom-8 -left-6 w-60 animate-float sm:-left-10 sm:w-72">
-        <WifiCard password="Sunrise@201" />
-      </div>
-    </div>
   );
 }
 
