@@ -1,27 +1,19 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
+/** The PG360 brand mark (circular logo). Sits on any background — the asset has
+ *  its own white disc. Replace public/pg360-logo.png to change it everywhere. */
 export function Mark({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "relative grid size-9 shrink-0 place-items-center rounded-[0.7rem] bg-ink text-paper shadow-soft",
-        className,
-      )}
-      aria-hidden
-    >
-      {/* a "360" rotation glyph: a ring with a clay arc, like a key/dial */}
-      <svg viewBox="0 0 24 24" className="size-5" fill="none">
-        <circle cx="12" cy="12" r="7.5" stroke="currentColor" strokeWidth="1.6" opacity="0.35" />
-        <path
-          d="M12 4.5a7.5 7.5 0 0 1 6.5 3.75"
-          stroke="var(--color-clay-400)"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        />
-        <circle cx="18.5" cy="8.25" r="1.6" fill="var(--color-gold-400)" />
-      </svg>
-    </span>
+    <Image
+      src="/pg360-logo.png"
+      alt="PG360"
+      width={40}
+      height={40}
+      priority
+      className={cn("size-9 shrink-0 rounded-full object-contain", className)}
+    />
   );
 }
 
@@ -29,10 +21,12 @@ export function Logo({
   className,
   href = "/",
   invert = false,
+  wordmark = true,
 }: {
   className?: string;
   href?: string;
   invert?: boolean;
+  wordmark?: boolean;
 }) {
   return (
     <Link
@@ -40,14 +34,16 @@ export function Logo({
       className={cn("group inline-flex items-center gap-2.5", className)}
     >
       <Mark className="transition-transform duration-500 group-hover:rotate-[20deg]" />
-      <span
-        className={cn(
-          "font-display text-[1.35rem] font-medium tracking-tight",
-          invert ? "text-paper" : "text-ink",
-        )}
-      >
-        PG<span className="text-clay-500">360</span>
-      </span>
+      {wordmark && (
+        <span
+          className={cn(
+            "font-display text-[1.35rem] font-medium tracking-tight",
+            invert ? "text-paper" : "text-ink",
+          )}
+        >
+          PG<span className="text-clay-500">360</span>
+        </span>
+      )}
     </Link>
   );
 }
