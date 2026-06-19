@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { UtensilsCrossed } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FoodOptGrid } from "@/components/tenant/food-opt-grid";
-import { FoodPlanToggle } from "@/components/tenant/food-plan-toggle";
+import { FoodMenuView } from "@/components/tenant/food-menu-view";
 import { requireRole } from "@/lib/guards";
-import { getFoodMenu, getMyFoodOpts, getMyPg, getMyTenant } from "@/lib/db";
+import { getFoodMenu } from "@/lib/db";
 import { weekDates } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Food menu" };
@@ -12,18 +11,10 @@ export const metadata: Metadata = { title: "Food menu" };
 export default async function TenantFood() {
   await requireRole(["tenant"]);
   const week = weekDates();
-  const [items, opts, mine, pg] = await Promise.all([
-    getFoodMenu(),
-    getMyFoodOpts(week[0]!.iso, week[6]!.iso),
-    getMyTenant(),
-    getMyPg(),
-  ]);
+  const items = await getFoodMenu();
 
   const menu: Record<string, string> = {};
   for (const it of items) menu[`${it.day_of_week}_${it.meal_type}`] = it.description;
-
-  const initialOpts: Record<string, boolean> = {};
-  for (const o of opts) initialOpts[`${o.date}_${o.meal_type}`] = o.opted_in;
 
   const hasMenu = items.some((i) => i.description.trim().length > 0);
 
@@ -37,16 +28,9 @@ export default async function TenantFood() {
           Food menu
         </h1>
         <p className="mt-1.5 text-ink-soft">
-          Tap a meal to opt out — your monthly food charge follows what you eat.
+          Here&apos;s what&apos;s being served this week.
         </p>
       </div>
-
-      {mine && (
-        <FoodPlanToggle
-          optOut={mine.tenant.food_opt_out}
-          deduction={pg?.food_opt_out_deduction ?? 0}
-        />
-      )}
 
       {!hasMenu ? (
         <EmptyState
@@ -55,7 +39,7 @@ export default async function TenantFood() {
           body="Your PG owner hasn't published this week's menu. Check back soon."
         />
       ) : (
-        <FoodOptGrid week={week} menu={menu} initialOpts={initialOpts} />
+        <FoodMenuView week={week} menu={menu} />
       )}
     </div>
   );

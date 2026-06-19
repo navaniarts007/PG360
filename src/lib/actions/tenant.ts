@@ -129,19 +129,3 @@ export async function tenantRecordPaymentAction(
   return { ok: true };
 }
 
-/* ------------------------------- food opt-out toggle ------------------------------- */
-
-/** Tenant turns the included meal plan on/off. Food is included by default;
- *  opting out deducts the property's food deduction from the next bill. */
-export async function tenantToggleFoodAction(formData: FormData): Promise<void> {
-  const me = await requireRole(["tenant"]);
-  if (!me.tenant_id || !me.pg_id) return;
-  const optOut = formData.get("opt_out") === "true";
-  const admin = createAdminClient();
-  await admin.from("tenants").update({ food_opt_out: optOut }).eq("id", me.tenant_id);
-  if (optOut) {
-    await notifyStaff(me.pg_id, `${me.full_name} opted out of meals`, "/dashboard/tenants");
-  }
-  revalidatePath("/portal/food");
-  revalidatePath("/portal/bill");
-}
