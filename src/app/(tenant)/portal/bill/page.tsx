@@ -12,6 +12,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { TenantRecordPaymentDialog } from "@/components/tenant/record-payment-dialog";
+import { UpiPay } from "@/components/tenant/upi-pay";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
 import { computeBill } from "@/lib/money";
@@ -213,6 +214,19 @@ export default async function MyBill() {
                 <p className="text-sm font-semibold text-ink">
                   {balance > 0 ? `How to pay ${inr(balance)}` : "Payment details"}
                 </p>
+
+                {/* one-tap direct UPI when there's something due */}
+                {pg?.upi_id && balance > 0 && (
+                  <div className="mt-3 rounded-xl border border-clay-100 bg-clay-50/50 p-3">
+                    <UpiPay
+                      vpa={pg.upi_id}
+                      payeeName={pg.owner_name || pg.pg_name || "PG"}
+                      amount={balance}
+                      note={`Rent ${monthLabel(month)}`}
+                    />
+                  </div>
+                )}
+
                 <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
                   {pg?.payment_qr_url && (
                     // eslint-disable-next-line @next/next/no-img-element

@@ -110,6 +110,10 @@ export function AppShell({
   const isActive = (item: NavItem) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
+  // Mobile bottom tab bar: up to 5 quick tabs, "More" opens the full drawer.
+  const bottomItems = nav.length > 5 ? nav.slice(0, 4) : nav;
+  const showMoreTab = nav.length > 5;
+
   const roleLabel =
     role === "super_admin"
       ? "Platform"
@@ -227,8 +231,46 @@ export function AppShell({
           <NotificationBell userId={userId} initial={notifications} />
         </header>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">{children}</main>
       </div>
+
+      {/* mobile bottom tab bar — native-app navigation */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-line bg-paper/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_12px_rgba(66,45,24,0.06)] backdrop-blur lg:hidden">
+        {bottomItems.map((item) => {
+          const active = isActive(item);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[0.62rem] font-semibold transition-colors",
+                active ? "text-clay-600" : "text-ink-muted",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-9 place-items-center rounded-xl transition-colors",
+                  active && "bg-clay-50",
+                )}
+              >
+                <item.icon className="size-5" />
+              </span>
+              <span className="max-w-[4.5rem] truncate">{item.label}</span>
+            </Link>
+          );
+        })}
+        {showMoreTab && (
+          <button
+            onClick={() => setOpen(true)}
+            className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[0.62rem] font-semibold text-ink-muted"
+          >
+            <span className="grid size-9 place-items-center rounded-xl">
+              <Menu className="size-5" />
+            </span>
+            More
+          </button>
+        )}
+      </nav>
     </div>
   );
 }
