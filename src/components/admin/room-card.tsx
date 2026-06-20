@@ -6,7 +6,7 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteRoomAction } from "@/lib/actions/admin";
 import { inr } from "@/lib/utils";
 import type { RoomBeds } from "@/lib/db";
-import type { RateCard } from "@/lib/types";
+import type { RateCard, WifiNetwork } from "@/lib/types";
 
 const TYPE: Record<string, string> = {
   single: "Single",
@@ -21,11 +21,13 @@ export function RoomCard({
   beds,
   rateCards,
   floors,
+  wifiNetworks,
 }: {
   room: RoomBeds["room"];
   beds: RoomBeds["beds"];
   rateCards: RateCard[];
   floors: { id: string; label: string }[];
+  wifiNetworks: WifiNetwork[];
 }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft">
@@ -34,9 +36,11 @@ export function RoomCard({
           <p className="font-display text-xl font-semibold text-ink">Room {room.room_number}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
             {TYPE[room.type] ?? room.type}
-            <span className="inline-flex items-center gap-1">
-              <Wifi className="size-3" /> {room.wifi_password}
-            </span>
+            {(room.wifi_ssid || room.wifi_password) && (
+              <span className="inline-flex items-center gap-1">
+                <Wifi className="size-3" /> {room.wifi_ssid ?? room.wifi_password}
+              </span>
+            )}
           </p>
         </div>
         <RoomStatusPill status={room.status} />
@@ -67,7 +71,7 @@ export function RoomCard({
           ))}
         </div>
         <div className="flex items-center gap-1">
-          <AddRoomDialog rateCards={rateCards} floors={floors} room={room} />
+          <AddRoomDialog rateCards={rateCards} floors={floors} wifiNetworks={wifiNetworks} room={room} />
           <ConfirmDelete action={deleteRoomAction} id={room.id} title="Delete room" />
         </div>
       </div>

@@ -23,9 +23,28 @@ const roomSchema = z.object({
   floor_id: z.string().min(1, "Pick a floor."),
   rate_card_id: z.string().min(1, "Pick a rate card."),
   total_beds: z.coerce.number().int().min(1, "At least 1 bed."),
-  wifi_password: z.string().min(1, "WiFi password is required."),
+  wifi_network_id: z.string().optional(),
   amenities: z.string().optional(),
 });
+
+/** Resolve a selected WiFi network into the room's denormalised wifi fields. */
+async function resolveWifi(
+  s: Awaited<ReturnType<typeof createClient>>,
+  pid: string,
+  wifiNetworkId: string | undefined,
+): Promise<{ wifi_password: string; wifi_ssid: string | null; wifi_network_id: string | null }> {
+  if (wifiNetworkId && wifiNetworkId !== "none") {
+    const { data: w } = await s
+      .from("wifi_networks")
+      .select("*")
+      .eq("id", wifiNetworkId)
+      .maybeSingle();
+    if (w && w.pg_id === pid) {
+      return { wifi_password: w.password, wifi_ssid: w.ssid, wifi_network_id: w.id };
+    }
+  }
+  return { wifi_password: "", wifi_ssid: null, wifi_network_id: null };
+}
 
 export async function addRoomAction(
   _prev: ActionState,
@@ -52,6 +71,8 @@ export async function addRoomAction(
     .eq("id", d.floor_id)
     .maybeSingle();
 
+  const wifi = await resolveWifi(s, pid, d.wifi_network_id);
+
   const { data: room, error } = await s
     .from("rooms")
     .insert({
@@ -63,7 +84,7 @@ export async function addRoomAction(
       total_beds: d.total_beds,
       occupied_beds: 0,
       rent_amount: rc.price_per_month,
-      wifi_password: d.wifi_password,
+      ...wifi,
       amenities: amenityList(d.amenities),
     })
     .select()
@@ -89,7 +110,7 @@ const roomUpdateSchema = z.object({
   room_number: z.string().min(1, "Room number is required."),
   floor_id: z.string().min(1, "Pick a floor."),
   total_beds: z.coerce.number().int().min(1, "At least 1 bed."),
-  wifi_password: z.string().min(1, "WiFi password is required."),
+  wifi_network_id: z.string().optional(),
   amenities: z.string().optional(),
   rate_card_id: z.string().optional(),
 });
@@ -121,12 +142,14 @@ export async function updateRoomAction(
     .select("sort_order")
     .eq("id", d.floor_id)
     .maybeSingle();
+  const pid = await getActiveProperty();
+  const wifi = await resolveWifi(s, pid ?? "", d.wifi_network_id);
   const patch: Record<string, unknown> = {
     room_number: d.room_number,
     floor_id: d.floor_id,
     floor: floor?.sort_order ?? 0,
     total_beds: d.total_beds,
-    wifi_password: d.wifi_password,
+    ...wifi,
     amenities: amenityList(d.amenities),
   };
   let rcPrice: number | null = null;

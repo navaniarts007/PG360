@@ -10,7 +10,7 @@ import {
   updateRoomAction,
   type ActionState,
 } from "@/lib/actions/admin";
-import type { RateCard, Room } from "@/lib/types";
+import type { RateCard, Room, WifiNetwork } from "@/lib/types";
 import { inr } from "@/lib/utils";
 
 interface FloorOption {
@@ -21,12 +21,14 @@ interface FloorOption {
 export function AddRoomDialog({
   rateCards,
   floors,
+  wifiNetworks,
   room,
   defaultFloorId,
   compact = false,
 }: {
   rateCards: RateCard[];
   floors: FloorOption[];
+  wifiNetworks: WifiNetwork[];
   room?: Room;
   defaultFloorId?: string;
   compact?: boolean;
@@ -67,6 +69,7 @@ export function AddRoomDialog({
         <RoomForm
           rateCards={rateCards}
           floors={floors}
+          wifiNetworks={wifiNetworks}
           room={room}
           defaultFloorId={defaultFloorId}
           onDone={close}
@@ -79,12 +82,14 @@ export function AddRoomDialog({
 function RoomForm({
   rateCards,
   floors,
+  wifiNetworks,
   room,
   defaultFloorId,
   onDone,
 }: {
   rateCards: RateCard[];
   floors: FloorOption[];
+  wifiNetworks: WifiNetwork[];
   room?: Room;
   defaultFloorId?: string;
   onDone: () => void;
@@ -133,8 +138,23 @@ function RoomForm({
         <FieldRow label="Total beds" htmlFor="total_beds">
           <Input id="total_beds" name="total_beds" type="number" min={1} defaultValue={room?.total_beds ?? 2} />
         </FieldRow>
-        <FieldRow label="WiFi password" htmlFor="wifi_password">
-          <Input id="wifi_password" name="wifi_password" defaultValue={room?.wifi_password ?? ""} placeholder="Sunrise@201" required />
+        <FieldRow
+          label="WiFi network"
+          htmlFor="wifi_network_id"
+          hint={wifiNetworks.length === 0 ? "add in Settings" : undefined}
+        >
+          <Select
+            id="wifi_network_id"
+            name="wifi_network_id"
+            defaultValue={room?.wifi_network_id ?? "none"}
+          >
+            <option value="none">— None —</option>
+            {wifiNetworks.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.ssid}
+              </option>
+            ))}
+          </Select>
         </FieldRow>
       </div>
       <FieldRow label="Amenities" htmlFor="amenities" hint="comma separated">

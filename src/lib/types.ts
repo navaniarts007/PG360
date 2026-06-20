@@ -105,6 +105,14 @@ export interface CheckoutSettlement {
   created_at: string;
 }
 
+export interface WifiNetwork {
+  id: string;
+  pg_id: string;
+  ssid: string;
+  password: string;
+  created_at: string;
+}
+
 export type RoomType = "single" | "double" | "triple";
 export type RoomStatus = "vacant" | "partial" | "occupied";
 export type BathType = "attached" | "common";
@@ -157,6 +165,8 @@ export interface Room {
   occupied_beds: number;
   rent_amount: number;
   wifi_password: string;
+  wifi_network_id: string | null;
+  wifi_ssid: string | null;
   amenities: string[];
   status: RoomStatus;
   created_at: string;

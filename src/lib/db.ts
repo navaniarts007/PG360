@@ -19,6 +19,7 @@ import type {
   RateCard,
   Room,
   Tenant,
+  WifiNetwork,
 } from "./types";
 
 /* =========================================================================
@@ -189,6 +190,19 @@ export async function listRateCards(): Promise<RateCard[]> {
     .eq("pg_id", pid)
     .order("price_per_month", { ascending: false });
   return (data ?? []) as RateCard[];
+}
+
+/* ------------------------------------------------------------- wifi master */
+
+export async function listWifiNetworks(): Promise<WifiNetwork[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("wifi_networks")
+    .select("*")
+    .eq("pg_id", pid)
+    .order("ssid");
+  return (data ?? []) as WifiNetwork[];
 }
 
 export interface RoomBeds {

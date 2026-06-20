@@ -8,14 +8,18 @@ import { FloorDialog } from "@/components/admin/floor-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteFloorAction } from "@/lib/actions/floor";
 import { requireRole } from "@/lib/guards";
-import { listFloorsWithRooms, listRateCards } from "@/lib/db";
+import { listFloorsWithRooms, listRateCards, listWifiNetworks } from "@/lib/db";
 import { inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Rooms & beds" };
 
 export default async function RoomsPage() {
   await requireRole(["admin", "staff"]);
-  const [floors, rateCards] = await Promise.all([listFloorsWithRooms(), listRateCards()]);
+  const [floors, rateCards, wifiNetworks] = await Promise.all([
+    listFloorsWithRooms(),
+    listRateCards(),
+    listWifiNetworks(),
+  ]);
 
   const floorOptions = floors.map((f) => ({ id: f.floor.id, label: f.floor.name }));
   const allBeds = floors.flatMap((f) => f.rooms.flatMap((r) => r.beds));
@@ -35,7 +39,7 @@ export default async function RoomsPage() {
         action={
           <>
             <FloorDialog />
-            <AddRoomDialog rateCards={rateCards} floors={floorOptions} />
+            <AddRoomDialog rateCards={rateCards} floors={floorOptions} wifiNetworks={wifiNetworks} />
           </>
         }
       />

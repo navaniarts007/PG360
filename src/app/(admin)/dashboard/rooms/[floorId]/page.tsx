@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { AddRoomDialog } from "@/components/admin/add-room-dialog";
 import { RoomCard } from "@/components/admin/room-card";
 import { requireRole } from "@/lib/guards";
-import { getFloorDetail, getFloorOptions, listRateCards } from "@/lib/db";
+import { getFloorDetail, getFloorOptions, listRateCards, listWifiNetworks } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Floor" };
 
@@ -17,10 +17,11 @@ export default async function FloorPage({
 }) {
   await requireRole(["admin", "staff"]);
   const { floorId } = await params;
-  const [detail, rateCards, floorOptions] = await Promise.all([
+  const [detail, rateCards, floorOptions, wifiNetworks] = await Promise.all([
     getFloorDetail(floorId),
     listRateCards(),
     getFloorOptions(),
+    listWifiNetworks(),
   ]);
   if (!detail) notFound();
   const { floor, rooms } = detail;
@@ -50,7 +51,7 @@ export default async function FloorPage({
             </p>
           </div>
         </div>
-        <AddRoomDialog rateCards={rateCards} floors={floorOptions} defaultFloorId={floor.id} />
+        <AddRoomDialog rateCards={rateCards} floors={floorOptions} wifiNetworks={wifiNetworks} defaultFloorId={floor.id} />
       </div>
 
       {rooms.length === 0 ? (
@@ -58,12 +59,12 @@ export default async function FloorPage({
           icon={BedDouble}
           title="No rooms on this floor yet"
           body="Add the first room — beds are created and priced from the rate card."
-          action={<AddRoomDialog rateCards={rateCards} floors={floorOptions} defaultFloorId={floor.id} />}
+          action={<AddRoomDialog rateCards={rateCards} floors={floorOptions} wifiNetworks={wifiNetworks} defaultFloorId={floor.id} />}
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {rooms.map(({ room, beds }) => (
-            <RoomCard key={room.id} room={room} beds={beds} rateCards={rateCards} floors={floorOptions} />
+            <RoomCard key={room.id} room={room} beds={beds} rateCards={rateCards} floors={floorOptions} wifiNetworks={wifiNetworks} />
           ))}
         </div>
       )}

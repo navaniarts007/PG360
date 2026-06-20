@@ -54,7 +54,7 @@ export default async function MyRoom() {
           <div className="lg:col-span-2">
             <WifiCard
               password={room.wifi_password}
-              network={`${pg?.pg_name ?? "PG"} WiFi`}
+              network={room.wifi_ssid ?? `${pg?.pg_name ?? "PG"} WiFi`}
               room={`Room ${room.room_number}`}
             />
           </div>
