@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
@@ -44,7 +45,7 @@ export async function createBookingAction(
     requested_date: d.requested_date || null,
     notes: d.notes || null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   await notifyStaff(
     d.pg_id,
@@ -93,7 +94,7 @@ export async function updateBookingAction(
       notes: d.notes || null,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard");
   return { ok: true };

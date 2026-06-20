@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -24,7 +25,7 @@ export async function createFloorAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const s = await createClient();
   const { error } = await s.from("floors").insert({ pg_id: pid, ...parsed.data });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/rooms");
   return { ok: true };
 }
@@ -39,7 +40,7 @@ export async function updateFloorAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const s = await createClient();
   const { error } = await s.from("floors").update(parsed.data).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/rooms");
   return { ok: true };
 }

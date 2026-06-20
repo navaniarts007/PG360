@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -89,7 +90,7 @@ export async function addRoomAction(
     })
     .select()
     .single();
-  if (error || !room) return { error: error?.message ?? "Could not create the room." };
+  if (error || !room) return { error: humanizeDbError(error, "Could not create the room.") };
 
   const beds = Array.from({ length: d.total_beds }, (_, i) => ({
     pg_id: pid,
@@ -99,7 +100,7 @@ export async function addRoomAction(
     price_per_month: rc.price_per_month,
   }));
   const { error: bedErr } = await s.from("beds").insert(beds);
-  if (bedErr) return { error: bedErr.message };
+  if (bedErr) return { error: humanizeDbError(bedErr) };
 
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
@@ -166,7 +167,7 @@ export async function updateRoomAction(
     }
   }
   const { error } = await s.from("rooms").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   // grow / shrink beds to match total_beds (only vacant beds are removable)
   if (d.total_beds > current.length) {
@@ -264,9 +265,9 @@ export async function addTenantAction(
   });
   if (userErr || !created.user) {
     return {
-      error: /already|registered|exists/i.test(userErr?.message ?? "")
+      error: /already|registered|exists/i.test(humanizeDbError(userErr, ""))
         ? "That email already has a login."
-        : userErr?.message ?? "Could not create the tenant login.",
+        : humanizeDbError(userErr, "Could not create the tenant login."),
     };
   }
 
@@ -290,7 +291,7 @@ export async function addTenantAction(
     .single();
   if (tErr || !tenant) {
     await admin.auth.admin.deleteUser(created.user.id);
-    return { error: tErr?.message ?? "Could not create the tenant." };
+    return { error: humanizeDbError(tErr, "Could not create the tenant.") };
   }
 
   await admin.from("profiles").upsert({
@@ -391,7 +392,7 @@ export async function updateTenantAction(
       rent_due_day: d.rent_due_day,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   if (tenant.bed_id !== newBedId) {
     if (tenant.bed_id) {
@@ -495,7 +496,7 @@ export async function saveSettlementAction(
     notes: d.notes || null,
     status: "confirmed",
   });
-  if (insErr) return { error: insErr.message };
+  if (insErr) return { error: humanizeDbError(insErr) };
 
   // Check the tenant out + free their bed.
   if (tenant.status !== "checked_out") {
@@ -588,7 +589,7 @@ export async function recordPaymentAction(
     },
     { onConflict: "tenant_id,month_for" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   await notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill");
   revalidatePath("/dashboard/payments");
@@ -632,7 +633,7 @@ export async function addExpenseAction(
     description: parsed.data.description || null,
     added_by: me.id,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
@@ -691,7 +692,7 @@ export async function updateExpenseAction(
       description: parsed.data.description || null,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
@@ -724,7 +725,7 @@ export async function updateIssueAction(
     .from("issues")
     .update({ category: parsed.data.category, description: parsed.data.description })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/issues");
   return { ok: true };
 }

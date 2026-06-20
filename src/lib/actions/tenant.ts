@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
@@ -33,7 +34,7 @@ export async function raiseIssueAction(
     category: parsed.data.category,
     description: parsed.data.description,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   await notifyStaff(
     me.pg_id,
@@ -117,7 +118,7 @@ export async function tenantRecordPaymentAction(
     },
     { onConflict: "tenant_id,month_for" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   await notifyStaff(
     me.pg_id,

@@ -1,6 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
+import { humanizeDbError } from "../errors";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -63,7 +64,7 @@ export async function savePaymentDetailsAction(
   }
   const admin = createAdminClient();
   const { error } = await admin.from("pg_accounts").update(patch).eq("id", pid);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/payments");
   revalidatePath("/portal/bill");
   return { ok: true };
@@ -93,7 +94,7 @@ export async function savePaymentScreenshotAction(
     .from("payments")
     .update({ payment_screenshot_url: url })
     .eq("id", paymentId);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/portal/bill");
   revalidatePath("/dashboard/payments");
   return { ok: true };

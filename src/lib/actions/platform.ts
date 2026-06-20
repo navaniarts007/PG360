@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { createClient } from "../supabase/server";
@@ -41,9 +42,9 @@ export async function createPgAction(
   });
   if (userErr || !created.user) {
     return {
-      error: /already|registered|exists/i.test(userErr?.message ?? "")
+      error: /already|registered|exists/i.test(humanizeDbError(userErr, ""))
         ? "That owner email already has an account."
-        : userErr?.message ?? "Could not create the owner login.",
+        : humanizeDbError(userErr, "Could not create the owner login."),
     };
   }
 
@@ -68,7 +69,7 @@ export async function createPgAction(
     .single();
   if (pgErr || !pg) {
     await admin.auth.admin.deleteUser(created.user.id); // roll back the orphan login
-    return { error: pgErr?.message ?? "Could not create the PG." };
+    return { error: humanizeDbError(pgErr, "Could not create the PG.") };
   }
 
   // 3) the owner's profile (role=admin) + property membership
@@ -79,7 +80,7 @@ export async function createPgAction(
     full_name: d.owner_name,
     phone: d.mobile,
   });
-  if (profErr) return { error: profErr.message };
+  if (profErr) return { error: humanizeDbError(profErr) };
 
   await admin
     .from("property_members")

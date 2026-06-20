@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -38,9 +39,9 @@ export async function createStaffAction(
   });
   if (userErr || !created.user) {
     return {
-      error: /already|registered|exists/i.test(userErr?.message ?? "")
+      error: /already|registered|exists/i.test(humanizeDbError(userErr, ""))
         ? "That email already has a login."
-        : userErr?.message ?? "Could not create the staff login.",
+        : humanizeDbError(userErr, "Could not create the staff login."),
     };
   }
 
@@ -53,7 +54,7 @@ export async function createStaffAction(
   });
   if (pErr) {
     await admin.auth.admin.deleteUser(created.user.id);
-    return { error: pErr.message };
+    return { error: humanizeDbError(pErr) };
   }
 
   const { error: mErr } = await admin.from("property_members").insert({
@@ -63,7 +64,7 @@ export async function createStaffAction(
   });
   if (mErr) {
     await admin.auth.admin.deleteUser(created.user.id);
-    return { error: mErr.message };
+    return { error: humanizeDbError(mErr) };
   }
 
   revalidatePath("/dashboard/staff");

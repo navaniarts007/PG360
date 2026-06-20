@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -40,7 +41,7 @@ export async function saveFoodMenuAction(
   const { error } = await s
     .from("food_menu")
     .upsert(rows, { onConflict: "pg_id,day_of_week,meal_type" });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/food");
   revalidatePath("/portal/food");
   return { ok: true };

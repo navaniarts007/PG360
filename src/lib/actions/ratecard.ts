@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -67,7 +68,7 @@ export async function updateRateCardAction(
   if ("error" in res) return { error: res.error };
   const s = await createClient();
   const { error } = await s.from("rate_cards").update(res.row).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   // keep beds on this card in sync with the new price
   await s.from("beds").update({ price_per_month: res.row.price_per_month }).eq("rate_card_id", id);
   revalidatePath("/dashboard/pricing");

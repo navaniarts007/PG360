@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { getActiveProperty, getSession, setActiveProperty } from "../auth";
 import { requireRole } from "../guards";
@@ -32,7 +33,7 @@ export async function saveSettingsAction(
   for (const k of MODULE_KEYS) settings[k] = formData.get(k) === "on";
   const admin = createAdminClient();
   const { error } = await admin.from("pg_accounts").update({ settings }).eq("id", pid);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard", "layout");
   revalidatePath("/dashboard/settings");
   return { ok: true };
@@ -78,7 +79,7 @@ export async function saveMoneySettingsAction(
       food_opt_out_deduction: d.food_opt_out_deduction,
     })
     .eq("id", pid);
-  if (pgErr) return { error: pgErr.message };
+  if (pgErr) return { error: humanizeDbError(pgErr) };
 
   const { error: polErr } = await admin
     .from("pg_policies")
@@ -93,7 +94,7 @@ export async function saveMoneySettingsAction(
       },
       { onConflict: "pg_id" },
     );
-  if (polErr) return { error: polErr.message };
+  if (polErr) return { error: humanizeDbError(polErr) };
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/tenants", "layout");
@@ -146,7 +147,7 @@ export async function createPropertyAction(
     })
     .select()
     .single();
-  if (error || !pg) return { error: error?.message ?? "Could not create the property." };
+  if (error || !pg) return { error: humanizeDbError(error, "Could not create the property.") };
 
   await admin
     .from("property_members")
@@ -168,7 +169,7 @@ export async function updatePropertyAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const s = await createClient();
   const { error } = await s.from("pg_accounts").update(parsed.data).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard", "layout");
   revalidatePath("/dashboard/properties");
   return { ok: true };

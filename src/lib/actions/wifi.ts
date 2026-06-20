@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
@@ -54,7 +55,7 @@ export async function updateWifiAction(
     .from("wifi_networks")
     .update({ ssid: parsed.data.ssid, password: parsed.data.password })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
 
   // keep rooms in sync
   await s
