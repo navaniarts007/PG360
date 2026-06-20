@@ -3,8 +3,8 @@
 import pg from "pg";
 import { readFileSync } from "node:fs";
 
-const REF = "osjzoxahgxrogebkwvoo";
-const REGION = "ap-southeast-2";
+const REF = process.env.SUPABASE_REF || "qlfltufpebcwlefvxuwz";
+const REGION = process.env.SUPABASE_REGION || "ap-south-1";
 const password = process.env.PG_PASSWORD;
 if (!password) {
   console.error("✗ Set PG_PASSWORD");
