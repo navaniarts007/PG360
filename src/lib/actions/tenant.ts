@@ -130,3 +130,26 @@ export async function tenantRecordPaymentAction(
   return { ok: true };
 }
 
+/* ------------------------------- profile photo ------------------------------- */
+
+/** Tenant sets their portal profile photo (Cloudinary URL). Uses the service
+ *  client since tenants are read-only on the tenants table under RLS. */
+export async function tenantUpdateAvatarAction(
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const me = await requireRole(["tenant"]);
+  if (!me.tenant_id) return { error: "No tenant record linked to your login." };
+  const url = String(formData.get("avatar_url") || "");
+  if (url && !/^https:\/\/res\.cloudinary\.com\//.test(url)) {
+    return { error: "Invalid image URL." };
+  }
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("tenants")
+    .update({ avatar_url: url || null })
+    .eq("id", me.tenant_id);
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { ok: true };
+}
+

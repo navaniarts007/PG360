@@ -18,7 +18,7 @@ export type SignResult =
     }
   | { ok: false; error: string };
 
-const FOLDERS = ["pg360/payments", "pg360/qr"] as const;
+const FOLDERS = ["pg360/payments", "pg360/qr", "pg360/avatars"] as const;
 type Folder = (typeof FOLDERS)[number];
 
 /** Returns a short-lived signature so the browser can upload directly to

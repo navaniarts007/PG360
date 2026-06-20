@@ -8,7 +8,7 @@ import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyTenant } from "../notify";
-import { computeSettlement } from "../money";
+import { computeBill, computeSettlement } from "../money";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -594,6 +594,81 @@ export async function recordPaymentAction(
   await notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill");
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/* ------------------------------ electricity ------------------------------ */
+
+const electricitySchema = z.object({
+  tenant_id: z.string().min(1),
+  month_for: z.string().min(1),
+  units: z.coerce.number().min(0, "Enter the units used."),
+});
+
+/** Record a tenant's electricity meter reading for the month. The charge is
+ *  computed from the property policy (free units + per-unit rate) and added to
+ *  that month's bill. */
+export async function recordElectricityAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const parsed = electricitySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const s = await createClient();
+
+  const { data: tenant } = await s
+    .from("tenants")
+    .select("pg_id, rent_amount, checkin_date, food_opt_out")
+    .eq("id", d.tenant_id)
+    .maybeSingle();
+  if (!tenant || tenant.pg_id !== pid) return { error: "That tenant is not in this property." };
+
+  const [{ data: policy }, { data: pg }, { data: existing }] = await Promise.all([
+    s.from("pg_policies").select("electricity_included_units, electricity_per_unit_rate").eq("pg_id", pid).maybeSingle(),
+    s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
+    s.from("payments").select("*").eq("tenant_id", d.tenant_id).eq("month_for", d.month_for).maybeSingle(),
+  ]);
+
+  const included = policy?.electricity_included_units ?? 0;
+  const rate = policy?.electricity_per_unit_rate ?? 0;
+  const charge = Math.max(0, Math.round((d.units - included) * rate));
+
+  const derived = computeBill({
+    pricePerMonth: tenant.rent_amount,
+    checkinISO: tenant.checkin_date,
+    month: d.month_for,
+    foodOptOut: tenant.food_opt_out,
+    foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
+  });
+
+  const { error } = await s.from("payments").upsert(
+    {
+      pg_id: pid,
+      tenant_id: d.tenant_id,
+      month_for: d.month_for,
+      base_rent: existing?.base_rent ?? derived.baseRent,
+      electricity_charge: charge,
+      food_charge: existing?.food_charge ?? 0,
+      other_charges: existing?.other_charges ?? 0,
+      food_opt_out_deduction: existing?.food_opt_out_deduction ?? derived.foodDeduction,
+      amount_paid: existing?.amount_paid ?? 0,
+      payment_mode: existing?.payment_mode ?? null,
+      verified: existing?.verified ?? false,
+      is_pro_rata: existing?.is_pro_rata ?? derived.isProRata,
+      pro_rata_days: existing?.pro_rata_days ?? (derived.isProRata ? derived.proRataDays : null),
+    },
+    { onConflict: "tenant_id,month_for" },
+  );
+  if (error) return { error: humanizeDbError(error) };
+
+  await notifyTenant(pid, d.tenant_id, `Electricity for ${d.month_for}: ₹${charge.toLocaleString("en-IN")} added to your bill.`, "/portal/bill");
+  revalidatePath("/dashboard/payments");
+  revalidatePath(`/dashboard/tenants/${d.tenant_id}`);
+  revalidatePath("/portal/bill");
   return { ok: true };
 }
 

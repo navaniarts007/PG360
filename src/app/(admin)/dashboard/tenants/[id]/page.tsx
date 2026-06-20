@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/status";
 import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement-dialog";
 import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
+import { ElectricityDialog } from "@/components/admin/electricity-dialog";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { requireRole } from "@/lib/guards";
@@ -79,6 +80,12 @@ export default async function TenantDetail({
           {tenant.status === "active" && (
             <>
               <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
+              <ElectricityDialog
+                tenantId={tenant.id}
+                month={currentMonth()}
+                includedUnits={policy?.electricity_included_units ?? 0}
+                perUnitRate={policy?.electricity_per_unit_rate ?? 0}
+              />
               <CheckoutSettlementDialog
                 tenant={tenant}
                 noticePeriodDays={policy?.notice_period_days ?? 30}

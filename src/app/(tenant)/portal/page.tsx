@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WifiCard } from "@/components/marketing/wifi-card";
+import { AvatarUpload } from "@/components/tenant/avatar-upload";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyPg, getMyTenant, getRoommateNames } from "@/lib/db";
 import { currentMonth, initials, inr } from "@/lib/utils";
@@ -37,14 +38,17 @@ export default async function MyRoom() {
 
   return (
     <div className="space-y-7">
-      <div>
-        <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-clay-500">
-          {pg?.pg_name ?? "My PG"}
-        </p>
-        <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-ink sm:text-[2.1rem]">
-          Hi {tenant.name.split(" ")[0]} 👋
-        </h1>
-        <p className="mt-1.5 text-ink-soft">Everything about your stay, in one place.</p>
+      <div className="flex items-center gap-4">
+        <AvatarUpload name={tenant.name} url={tenant.avatar_url} />
+        <div>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-clay-500">
+            {pg?.pg_name ?? "My PG"}
+          </p>
+          <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-ink sm:text-[2.1rem]">
+            Hi {tenant.name.split(" ")[0]} 👋
+          </h1>
+          <p className="mt-1.5 text-ink-soft">Everything about your stay, in one place.</p>
+        </div>
       </div>
 
       {!room ? (
