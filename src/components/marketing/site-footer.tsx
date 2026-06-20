@@ -34,8 +34,9 @@ const cols = [
 
 export function SiteFooter() {
   return (
-    <footer className="relative mt-24 border-t border-line bg-paper-2/60">
-      <div className="mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+    <footer className="relative mt-24 px-4 pb-6 sm:px-6">
+      <div className="section-shell mx-auto max-w-6xl rounded-[2rem]">
+        <div className="mx-auto grid gap-12 px-6 py-16 lg:grid-cols-[1.5fr_1fr_1fr_1fr] lg:px-10">
         <div>
           <Logo />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-muted">
@@ -45,13 +46,13 @@ export function SiteFooter() {
           <div className="mt-5 flex gap-2">
             <a
               href="tel:+919000000001"
-              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:text-clay-600"
+              className="hover-card inline-flex items-center gap-2 rounded-xl border border-line bg-surface/80 px-3 py-2 text-sm font-medium text-ink-soft"
             >
               <Phone className="size-4" /> Call us
             </a>
             <a
               href="https://wa.me/919000000001"
-              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:text-teal-600"
+              className="hover-card inline-flex items-center gap-2 rounded-xl border border-line bg-surface/80 px-3 py-2 text-sm font-medium text-ink-soft"
             >
               <MessageCircle className="size-4" /> WhatsApp
             </a>
@@ -60,7 +61,7 @@ export function SiteFooter() {
 
         {cols.map((col) => (
           <div key={col.title}>
-            <h4 className="font-display text-sm font-semibold tracking-wide text-ink uppercase">
+            <h4 className="eyebrow text-ink">
               {col.title}
             </h4>
             <ul className="mt-4 space-y-2.5">
@@ -68,7 +69,7 @@ export function SiteFooter() {
                 <li key={l.label}>
                   <Link
                     href={l.href}
-                    className="text-sm text-ink-muted transition-colors hover:text-clay-600"
+                    className="luxe-link text-sm text-ink-muted transition-colors hover:text-clay-600"
                   >
                     {l.label}
                   </Link>
@@ -77,12 +78,13 @@ export function SiteFooter() {
             </ul>
           </div>
         ))}
-      </div>
+        </div>
 
-      <div className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-ink-muted sm:flex-row sm:px-6">
+        <div className="border-t border-line/80">
+          <div className="mx-auto flex flex-col items-center justify-between gap-3 px-6 py-6 text-sm text-ink-muted sm:flex-row lg:px-10">
           <p>© {new Date().getFullYear()} PG360. Made in India 🇮🇳</p>
           <p className="tnum">GST-ready invoices · UPI &amp; bank · Asia/Kolkata</p>
+          </div>
         </div>
       </div>
     </footer>

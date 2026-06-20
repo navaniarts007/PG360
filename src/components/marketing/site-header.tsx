@@ -31,18 +31,18 @@ export function SiteHeader() {
         className={cn(
           "mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 transition-all duration-300 sm:px-6",
           scrolled
-            ? "mt-2.5 rounded-2xl border border-line bg-paper/80 py-2.5 shadow-soft backdrop-blur-xl sm:mx-4 lg:mx-auto"
-            : "mt-0 border-transparent py-4",
+            ? "mt-3 rounded-[1.55rem] border border-line/90 bg-paper/75 py-2.5 shadow-lift backdrop-blur-2xl sm:mx-4 lg:mx-auto"
+            : "mt-0 border-transparent py-5",
         )}
       >
         <Logo />
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 rounded-full border border-line/80 bg-surface/70 p-1 shadow-soft md:flex">
           {NAV.map((n) => (
             <a
               key={n.href}
               href={n.href}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-paper-2 hover:text-ink"
+              className="luxe-link rounded-full px-4 py-2 text-sm font-medium text-ink-soft transition-all duration-300 hover:bg-paper hover:text-ink"
             >
               {n.label}
             </a>
@@ -60,7 +60,7 @@ export function SiteHeader() {
 
         <button
           onClick={() => setOpen((o) => !o)}
-          className="grid size-10 place-items-center rounded-xl text-ink md:hidden"
+          className="grid size-10 place-items-center rounded-xl border border-line/70 bg-surface/70 text-ink shadow-soft md:hidden"
           aria-label="Toggle menu"
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -68,14 +68,14 @@ export function SiteHeader() {
       </div>
 
       {open && (
-        <div className="mx-3 mt-2 rounded-2xl border border-line bg-paper/95 p-3 shadow-lift backdrop-blur-xl md:hidden">
+        <div className="section-shell mx-3 mt-2 rounded-[1.6rem] p-3 shadow-lift backdrop-blur-xl md:hidden">
           <nav className="flex flex-col">
             {NAV.map((n) => (
               <a
                 key={n.href}
                 href={n.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-soft hover:bg-paper-2"
+                className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink"
               >
                 {n.label}
               </a>

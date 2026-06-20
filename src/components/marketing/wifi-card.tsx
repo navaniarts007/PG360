@@ -31,13 +31,18 @@ export function WifiCard({
   return (
     <div
       className={cn(
-        "grain relative overflow-hidden rounded-2xl bg-ink p-5 text-paper shadow-pop",
+        "grain group relative overflow-hidden rounded-[1.7rem] border border-white/10 bg-ink p-5 text-paper shadow-pop transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1",
         className,
       )}
     >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_15%,rgba(255,255,255,0.12)_48%,transparent_74%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
       <div
-        className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full blur-2xl"
+        className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full blur-2xl transition-transform duration-700 group-hover:scale-110"
         style={{ background: "radial-gradient(circle, rgba(217,164,65,0.5), transparent 70%)" }}
+      />
+      <div
+        className="pointer-events-none absolute -bottom-16 left-[-10%] size-36 rounded-full opacity-70 blur-3xl"
+        style={{ background: "radial-gradient(circle, rgba(14,107,87,0.32), transparent 70%)" }}
       />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -56,7 +61,7 @@ export function WifiCard({
 
       <button
         onClick={copy}
-        className="group relative mt-4 flex w-full items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3.5 text-left ring-1 ring-white/10 transition-colors hover:bg-white/10"
+        className="group relative mt-4 flex w-full items-center justify-between gap-3 rounded-[1.1rem] bg-white/5 px-4 py-3.5 text-left ring-1 ring-white/10 transition-all duration-300 hover:bg-white/10 hover:ring-white/20"
       >
         <div>
           <p className="text-[0.7rem] uppercase tracking-wider text-paper/50">Password</p>
