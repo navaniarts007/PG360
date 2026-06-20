@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "@/components/app/logout-button";
 import { getSession } from "@/lib/auth";
+import { CONTACT } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Account suspended" };
 
@@ -27,7 +28,9 @@ export default async function SuspendedPage() {
               : "Please sign in."}
           </p>
           <a
-            href="https://wa.me/919000000001"
+            href={CONTACT.whatsapp}
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-6 inline-flex items-center justify-center rounded-xl bg-clay-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-clay-700"
           >
             Contact support

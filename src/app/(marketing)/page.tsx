@@ -4,22 +4,19 @@ import {
   BedDouble,
   CheckCircle2,
   LayoutDashboard,
-  type LucideIcon,
   MessagesSquare,
   ReceiptText,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   UserRound,
-  Users,
-  Utensils,
   Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/marketing/reveal";
 import { WifiCard } from "@/components/marketing/wifi-card";
-import { HeroPreview } from "@/components/marketing/hero-preview";
-import { HeroAtmosphere } from "@/components/marketing/hero-atmosphere";
+import { Hero } from "@/components/marketing/hero";
+import { FeatureFlow } from "@/components/marketing/feature-flow";
+import { DownloadCards } from "@/components/marketing/download-cards";
 import { cn } from "@/lib/utils";
 
 export default function LandingPage() {
@@ -27,10 +24,11 @@ export default function LandingPage() {
     <>
       <Hero />
       <Marquee />
-      <Features />
+      <FeatureFlow />
       <PortalSpotlight />
       <HowItWorks />
       <Pricing />
+      <Downloads />
       <Testimonials />
       <FinalCta />
     </>
@@ -64,66 +62,6 @@ function SectionIntro({
   );
 }
 
-function Hero() {
-  return (
-    <section className="relative overflow-hidden px-4 pt-32 pb-20 sm:px-6 sm:pt-40 sm:pb-28">
-      <HeroAtmosphere />
-
-      <div className="section-shell grain relative mx-auto max-w-6xl rounded-[2.25rem] px-6 py-10 sm:px-10 sm:py-14">
-        <div className="hero-mesh pointer-events-none absolute inset-0 opacity-60" />
-        <div className="pointer-events-none absolute left-10 top-10 h-24 w-24 rounded-full border border-line/80" />
-        <div className="pointer-events-none absolute right-8 top-16 h-40 w-40 rounded-full border border-clay-200/70" />
-
-        <div className="relative grid items-center gap-14 lg:grid-cols-[1.02fr_1fr]">
-          <div className="stagger">
-            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/80 px-4 py-2 text-sm font-medium text-ink-soft shadow-soft backdrop-blur">
-              <Sparkles className="size-4 text-clay-500" />
-              Built for Indian PG &amp; hostel owners
-            </span>
-
-            <h1 className="mt-7 max-w-4xl text-balance font-display text-5xl leading-[0.94] font-semibold tracking-[-0.05em] text-ink sm:text-6xl lg:text-[5.4rem]">
-              Run your PG like a{" "}
-              <span className="relative inline-block whitespace-nowrap">
-                <span className="clay-text italic">five-star</span>
-              </span>{" "}
-              property.
-            </h1>
-
-            <p className="mt-7 max-w-xl text-lg leading-8 text-ink-soft">
-              Rooms, tenants, rent, food, complaints and P&amp;L — in one calm
-              dashboard. And every resident gets their own login to see their room,
-              WiFi password and bill. No spreadsheets. No chaos.
-            </p>
-
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Button asChild size="lg">
-                <Link href="/login">
-                  Start free <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/login">See a live demo</Link>
-              </Button>
-            </div>
-
-            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-ink-muted">
-              {["No card required", "Set up in 10 minutes", "RLS-secured data"].map(
-                (t) => (
-                  <span key={t} className="inline-flex items-center gap-2">
-                    <CheckCircle2 className="size-4 text-teal-500" /> {t}
-                  </span>
-                ),
-              )}
-            </div>
-          </div>
-
-          <HeroPreview />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function Marquee() {
   const items = [
     "₹4.8 Cr rent tracked",
@@ -146,86 +84,6 @@ function Marquee() {
               <span className="size-1.5 rounded-full bg-clay-400" />
               {t}
             </span>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-interface Feature {
-  icon: LucideIcon;
-  title: string;
-  body: string;
-  tone: string;
-  span?: string;
-}
-
-function Features() {
-  const features: Feature[] = [
-    {
-      icon: BedDouble,
-      title: "Rooms & beds",
-      body: "Track every room, bed and floor with live vacant / partial / occupied status that updates as tenants move in and out.",
-      tone: "text-clay-600",
-      span: "lg:col-span-2",
-    },
-    {
-      icon: Users,
-      title: "Tenants & KYC",
-      body: "Onboard residents with Aadhaar, deposit and check-in date — each gets their own login automatically.",
-      tone: "text-teal-600",
-    },
-    {
-      icon: ReceiptText,
-      title: "Rent & dues",
-      body: "Record rent with an electricity + food + other breakdown. See exactly who paid and who is due this month.",
-      tone: "text-clay-600",
-    },
-    {
-      icon: Utensils,
-      title: "Food & mess",
-      body: "Weekly menus and per-meal opt in / out that flows straight into each tenant's monthly bill.",
-      tone: "text-gold-600",
-    },
-    {
-      icon: MessagesSquare,
-      title: "Complaints",
-      body: "Tenants raise issues with photos; you triage open → in-progress → resolved without the WhatsApp mess.",
-      tone: "text-teal-600",
-    },
-    {
-      icon: TrendingUp,
-      title: "P&L & reports",
-      body: "Collected minus expenses, occupancy and turnover — exportable, so you always know your real profit.",
-      tone: "text-clay-600",
-      span: "lg:col-span-2",
-    },
-  ];
-
-  return (
-    <section
-      id="features"
-      className="relative mx-auto max-w-6xl scroll-mt-24 px-4 py-24 sm:px-6"
-    >
-      <div className="section-shell rounded-[2.1rem] px-6 py-10 sm:px-10 sm:py-14">
-        <SectionIntro
-          label="Everything in one place"
-          title="The whole PG, finally on one screen."
-          body="Six tightly-built modules replace your registers, spreadsheets and a dozen WhatsApp groups."
-        />
-
-        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f, i) => (
-            <Reveal key={f.title} blur delay={i * 60} className={f.span}>
-              <article className="editorial-card hover-card h-full rounded-[1.65rem] p-6 sm:p-7">
-                <span className="inline-grid size-12 place-items-center rounded-[1.1rem] bg-paper ring-1 ring-line transition-colors group-hover:bg-clay-50">
-                  <f.icon className={cn("size-5.5", f.tone)} />
-                </span>
-                <h3 className="mt-5 text-[1.45rem] leading-tight text-ink">{f.title}</h3>
-                <p className="mt-3 text-[0.98rem] leading-7 text-ink-soft">{f.body}</p>
-              </article>
-            </Reveal>
           ))}
         </div>
       </div>
@@ -381,13 +239,7 @@ function Pricing() {
       price: "₹5,000",
       cadence: "/year",
       tagline: "For a single PG getting organised.",
-      features: [
-        "1 PG",
-        "Up to 30 beds",
-        "Rooms, tenants & rent",
-        "Tenant portal",
-        "Email support",
-      ],
+      features: ["1 PG", "Up to 30 beds", "Rooms, tenants & rent", "Tenant portal", "Email support"],
       highlight: false,
     },
     {
@@ -410,13 +262,7 @@ function Pricing() {
       price: "₹10,000",
       cadence: "once",
       tagline: "Pay once. Yours forever.",
-      features: [
-        "Everything in Pro",
-        "One-time payment",
-        "Free updates",
-        "Onboarding call",
-        "WhatsApp support",
-      ],
+      features: ["Everything in Pro", "One-time payment", "Free updates", "Onboarding call", "WhatsApp support"],
       highlight: false,
     },
   ];
@@ -452,27 +298,13 @@ function Pricing() {
                 ) : null}
 
                 <div className="relative">
-                  <h3 className={cn("text-2xl", p.highlight ? "text-paper" : "text-ink")}>
-                    {p.name}
-                  </h3>
-                  <p
-                    className={cn(
-                      "mt-2 text-sm leading-6",
-                      p.highlight ? "text-paper/70" : "text-ink-muted",
-                    )}
-                  >
+                  <h3 className={cn("text-2xl", p.highlight ? "text-paper" : "text-ink")}>{p.name}</h3>
+                  <p className={cn("mt-2 text-sm leading-6", p.highlight ? "text-paper/70" : "text-ink-muted")}>
                     {p.tagline}
                   </p>
                   <div className="mt-6 flex items-end gap-1">
-                    <span className="tnum font-display text-5xl font-semibold tracking-tight">
-                      {p.price}
-                    </span>
-                    <span
-                      className={cn(
-                        "pb-1 text-sm",
-                        p.highlight ? "text-paper/60" : "text-ink-muted",
-                      )}
-                    >
+                    <span className="tnum font-display text-5xl font-semibold tracking-tight">{p.price}</span>
+                    <span className={cn("pb-1 text-sm", p.highlight ? "text-paper/60" : "text-ink-muted")}>
                       {p.cadence}
                     </span>
                   </div>
@@ -480,32 +312,39 @@ function Pricing() {
                   <ul className="mt-7 space-y-3">
                     {p.features.map((f) => (
                       <li key={f} className="flex items-center gap-2.5 text-sm">
-                        <CheckCircle2
-                          className={cn(
-                            "size-4.5 shrink-0",
-                            p.highlight ? "text-gold-300" : "text-teal-500",
-                          )}
-                        />
-                        <span className={p.highlight ? "text-paper/90" : "text-ink-soft"}>
-                          {f}
-                        </span>
+                        <CheckCircle2 className={cn("size-4.5 shrink-0", p.highlight ? "text-gold-300" : "text-teal-500")} />
+                        <span className={p.highlight ? "text-paper/90" : "text-ink-soft"}>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
                 <div className="mt-auto pt-8">
-                  <Button
-                    asChild
-                    className="w-full"
-                    variant={p.highlight ? "primary" : "outline"}
-                  >
+                  <Button asChild className="w-full" variant={p.highlight ? "primary" : "outline"}>
                     <Link href="/login">Choose {p.name}</Link>
                   </Button>
                 </div>
               </div>
             </Reveal>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Downloads() {
+  return (
+    <section id="download" className="relative scroll-mt-24 px-4 py-10 sm:px-6">
+      <div className="section-shell mx-auto max-w-6xl rounded-[2.1rem] px-6 py-10 sm:px-10 sm:py-14">
+        <SectionIntro
+          label="Get the app"
+          title="PG360, everywhere you work."
+          body="Use it in any browser, or install the native app on Android and Windows. Same login, same data — hosted in India 🇮🇳."
+          align="center"
+        />
+        <div className="mx-auto mt-12 max-w-4xl">
+          <DownloadCards />
         </div>
       </div>
     </section>
@@ -581,29 +420,22 @@ function FinalCta() {
         <div className="grain relative overflow-hidden rounded-[2.4rem] bg-ink px-8 py-16 text-center shadow-pop sm:px-16 sm:py-20">
           <div
             className="pointer-events-none absolute -right-20 -top-20 size-80 rounded-full blur-3xl"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(194,83,29,0.4), transparent 70%)",
-            }}
+            style={{ background: "radial-gradient(circle, rgba(194,83,29,0.4), transparent 70%)" }}
           />
           <div
             className="pointer-events-none absolute -bottom-24 -left-16 size-80 rounded-full blur-3xl"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(217,164,65,0.22), transparent 70%)",
-            }}
+            style={{ background: "radial-gradient(circle, rgba(217,164,65,0.22), transparent 70%)" }}
           />
           <div className="relative">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-paper/80 ring-1 ring-white/15">
-              <ShieldCheck className="size-4 text-teal-300" /> RLS-secured ·
-              multi-tenant by design
+              <ShieldCheck className="size-4 text-teal-300" /> RLS-secured · data hosted in India
             </span>
             <h2 className="mx-auto mt-7 max-w-3xl text-balance font-display text-4xl font-semibold tracking-tight text-paper sm:text-6xl">
               Your PG deserves better than a register.
             </h2>
             <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-paper/70">
-              Start free today. Add your first PG, onboard tenants, and collect
-              your first rent on PG360 this week.
+              Start free today. Add your first PG, onboard tenants, and collect your first rent on
+              PG360 this week.
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg" className="bg-clay-500 hover:bg-clay-600">
@@ -617,7 +449,7 @@ function FinalCta() {
                 variant="outline"
                 className="border-white/20 bg-white/5 text-paper hover:bg-white/10 hover:ring-white/30"
               >
-                <Link href="/login">Talk to us</Link>
+                <Link href="/contact">Talk to us</Link>
               </Button>
             </div>
           </div>

@@ -1,33 +1,34 @@
 import Link from "next/link";
-import { MessageCircle, Phone } from "lucide-react";
+import { Mail, MessageCircle, Phone } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
+import { CONTACT } from "@/lib/site";
 
 const cols = [
   {
     title: "Product",
     links: [
-      { label: "Features", href: "#features" },
-      { label: "Tenant portal", href: "#portal" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "How it works", href: "#how" },
+      { label: "Features", href: "/#features" },
+      { label: "Tenant portal", href: "/#portal" },
+      { label: "Pricing", href: "/#pricing" },
+      { label: "Download apps", href: "/download" },
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "About", href: "#" },
-      { label: "Contact", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Careers", href: "#" },
+      { label: "About", href: "/about" },
+      { label: "Contact", href: "/contact" },
+      { label: "Blog", href: "/blog" },
+      { label: "Careers", href: "/careers" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { label: "Terms", href: "#" },
-      { label: "Privacy", href: "#" },
-      { label: "Refund policy", href: "#" },
-      { label: "Security", href: "#" },
+      { label: "Terms", href: "/terms" },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Refund policy", href: "/refund" },
+      { label: "Security", href: "/security" },
     ],
   },
 ];
@@ -43,20 +44,28 @@ export function SiteFooter() {
             The operating system for PG &amp; hostel owners in India. Rooms, rent,
             food, complaints and P&amp;L — calm and in control.
           </p>
-          <div className="mt-5 flex gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             <a
-              href="tel:+919000000001"
+              href={CONTACT.tel}
               className="hover-card inline-flex items-center gap-2 rounded-xl border border-line bg-surface/80 px-3 py-2 text-sm font-medium text-ink-soft"
             >
-              <Phone className="size-4" /> Call us
+              <Phone className="size-4" /> {CONTACT.phone}
             </a>
             <a
-              href="https://wa.me/919000000001"
+              href={CONTACT.whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
               className="hover-card inline-flex items-center gap-2 rounded-xl border border-line bg-surface/80 px-3 py-2 text-sm font-medium text-ink-soft"
             >
               <MessageCircle className="size-4" /> WhatsApp
             </a>
           </div>
+          <a
+            href={`mailto:${CONTACT.emails[0]}`}
+            className="mt-2 inline-flex items-center gap-2 text-sm text-ink-muted transition-colors hover:text-clay-600"
+          >
+            <Mail className="size-4" /> {CONTACT.emails[0]}
+          </a>
         </div>
 
         {cols.map((col) => (

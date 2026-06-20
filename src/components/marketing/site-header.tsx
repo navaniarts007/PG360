@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "#features", label: "Features" },
-  { href: "#portal", label: "Tenant portal" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#how", label: "How it works" },
+  { href: "/#features", label: "Features" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/#how", label: "How it works" },
+  { href: "/download", label: "Download" },
 ];
 
 export function SiteHeader() {

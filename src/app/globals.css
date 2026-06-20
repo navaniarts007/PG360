@@ -61,6 +61,7 @@
 
   /* ---- Typography ---- */
   --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-editorial: "Instrument Serif", Georgia, "Times New Roman", serif;
   --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 
