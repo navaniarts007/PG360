@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { CalendarCheck, Link2, Phone } from "lucide-react";
+import { CalendarCheck, Phone } from "lucide-react";
+import { BookingLink } from "@/components/admin/booking-link";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,9 @@ export default async function BookingsPage() {
   const user = await requireRole(["admin", "staff"]);
   const bookings = await listBookings();
   const pending = bookings.filter((b) => b.status === "pending").length;
-  const bookingLink = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/book/${user.pg_id}`;
+  const base = process.env.NEXT_PUBLIC_APP_URL || "https://pg360.software";
+  const propertyId = user.activePropertyId ?? user.pg_id;
+  const bookingLink = propertyId ? `${base}/book/${propertyId}` : null;
 
   return (
     <div className="space-y-7">
@@ -31,19 +34,14 @@ export default async function BookingsPage() {
         subtitle={`${pending} pending · ${bookings.length} total`}
       />
 
-      <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-clay-50 text-clay-600 ring-1 ring-clay-100">
-            <Link2 className="size-5" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-ink">Your public booking link</p>
-            <p className="text-xs text-ink-muted">Share it anywhere — requests land here.</p>
-          </div>
-        </div>
-        <code className="truncate rounded-lg border border-line bg-paper-2/60 px-3 py-2 font-mono text-xs text-ink-soft">
-          {bookingLink}
-        </code>
+      <Card className="p-5">
+        {bookingLink ? (
+          <BookingLink url={bookingLink} />
+        ) : (
+          <p className="text-sm text-ink-muted">
+            Select a property to get its public booking link.
+          </p>
+        )}
       </Card>
 
       {bookings.length === 0 ? (

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { MoneySettingsForm } from "@/components/admin/money-settings-form";
 import { WifiNetworksCard } from "@/components/admin/wifi-networks-card";
+import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
 import { getPgAccount, getPgPolicy, listWifiNetworks } from "@/lib/db";
@@ -33,6 +34,19 @@ export default async function SettingsPage() {
         <h2 className="font-display text-xl font-semibold tracking-tight text-ink">Modules</h2>
         <div className="max-w-2xl">
           <SettingsForm settings={pg.settings ?? {}} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
+          Payment details
+        </h2>
+        <div className="max-w-2xl">
+          <PaymentDetailsCard
+            upiId={pg.upi_id ?? null}
+            bankDetails={pg.bank_details ?? null}
+            qrUrl={pg.payment_qr_url ?? null}
+          />
         </div>
       </section>
 

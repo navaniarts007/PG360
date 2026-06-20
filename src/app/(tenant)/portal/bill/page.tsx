@@ -207,43 +207,48 @@ export default async function MyBill() {
               )}
             </div>
 
-            {/* how to pay */}
-            {balance > 0 && (
+            {/* how to pay — always visible once the owner has set their details */}
+            {hasPayInfo && (
               <div className="mt-4 rounded-xl border border-line bg-surface p-4">
-                <p className="text-sm font-semibold text-ink">How to pay {inr(balance)}</p>
-                {hasPayInfo ? (
-                  <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
-                    {pg?.payment_qr_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={pg.payment_qr_url}
-                        alt="Payment QR"
-                        className="size-32 shrink-0 rounded-xl border border-line bg-white object-contain p-1"
-                      />
+                <p className="text-sm font-semibold text-ink">
+                  {balance > 0 ? `How to pay ${inr(balance)}` : "Payment details"}
+                </p>
+                <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
+                  {pg?.payment_qr_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={pg.payment_qr_url}
+                      alt="Payment QR"
+                      className="size-32 shrink-0 rounded-xl border border-line bg-white object-contain p-1"
+                    />
+                  )}
+                  <div className="space-y-2 text-sm">
+                    {pg?.upi_id && (
+                      <div>
+                        <span className="text-xs text-ink-muted">UPI ID</span>
+                        <p className="font-mono font-semibold text-ink">{pg.upi_id}</p>
+                      </div>
                     )}
-                    <div className="space-y-2 text-sm">
-                      {pg?.upi_id && (
-                        <div>
-                          <span className="text-xs text-ink-muted">UPI ID</span>
-                          <p className="font-mono font-semibold text-ink">{pg.upi_id}</p>
-                        </div>
-                      )}
-                      {pg?.bank_details && (
-                        <div>
-                          <span className="text-xs text-ink-muted">Bank transfer</span>
-                          <p className="whitespace-pre-line text-ink-soft">{pg.bank_details}</p>
-                        </div>
-                      )}
-                    </div>
+                    {pg?.bank_details && (
+                      <div>
+                        <span className="text-xs text-ink-muted">Bank transfer</span>
+                        <p className="whitespace-pre-line text-ink-soft">{pg.bank_details}</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <p className="mt-1 text-xs text-ink-muted">
+                </div>
+              </div>
+            )}
+
+            {/* record a payment — when something is still due */}
+            {balance > 0 && (
+              <div className="mt-4">
+                {!hasPayInfo && (
+                  <p className="mb-2 text-xs text-ink-muted">
                     Pay your PG owner by UPI, cash or bank transfer, then record it below.
                   </p>
                 )}
-                <div className="mt-4">
-                  <TenantRecordPaymentDialog month={month} balance={balance} />
-                </div>
+                <TenantRecordPaymentDialog month={month} balance={balance} />
               </div>
             )}
 

@@ -1,27 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BedDouble, ChevronRight, Eye, IndianRupee, Layers, Tag } from "lucide-react";
+import { BedDouble, ChevronRight, Eye, IndianRupee, Layers } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { AddRoomDialog } from "@/components/admin/add-room-dialog";
 import { FloorDialog } from "@/components/admin/floor-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteFloorAction } from "@/lib/actions/floor";
 import { requireRole } from "@/lib/guards";
-import { listFloorsWithRooms, listRateCards, listWifiNetworks } from "@/lib/db";
+import { listFloorsWithRooms } from "@/lib/db";
 import { inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Rooms & beds" };
 
 export default async function RoomsPage() {
   await requireRole(["admin", "staff"]);
-  const [floors, rateCards, wifiNetworks] = await Promise.all([
-    listFloorsWithRooms(),
-    listRateCards(),
-    listWifiNetworks(),
-  ]);
+  const floors = await listFloorsWithRooms();
 
-  const floorOptions = floors.map((f) => ({ id: f.floor.id, label: f.floor.name }));
   const allBeds = floors.flatMap((f) => f.rooms.flatMap((r) => r.beds));
   const totalBeds = allBeds.length;
   const occupied = allBeds.filter((b) => b.status === "occupied").length;
@@ -36,24 +30,8 @@ export default async function RoomsPage() {
         eyebrow="Inventory"
         title="Rooms & beds"
         subtitle={`${floors.length} ${floors.length === 1 ? "floor" : "floors"} · ${occupied}/${totalBeds} beds filled`}
-        action={
-          <>
-            <FloorDialog />
-            <AddRoomDialog rateCards={rateCards} floors={floorOptions} wifiNetworks={wifiNetworks} />
-          </>
-        }
+        action={<FloorDialog />}
       />
-
-      {rateCards.length === 0 && (
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-gold-200 bg-gold-50 p-4">
-          <p className="flex items-center gap-2 text-sm font-medium text-gold-600">
-            <Tag className="size-4" /> Add a rate card first — rooms price their beds from it.
-          </p>
-          <Link href="/dashboard/pricing" className="text-sm font-semibold text-clay-600 hover:text-clay-700">
-            Go to Pricing →
-          </Link>
-        </div>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryStat icon={BedDouble} accent="teal" label="Beds filled" value={`${occupied}/${totalBeds}`} sub={`${totalBeds ? Math.round((occupied / totalBeds) * 100) : 0}% occupancy`} />

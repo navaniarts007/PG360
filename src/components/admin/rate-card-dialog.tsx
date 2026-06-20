@@ -68,7 +68,7 @@ function RateForm({ card, onDone }: { card?: RateCard; onDone: () => void }) {
             <option value="dorm">Dormitory</option>
           </Select>
         </FieldRow>
-        <FieldRow label="Price / bed / month (₹)" htmlFor="price_per_month">
+        <FieldRow label="Rent per bed / month (₹)" htmlFor="price_per_month">
           <Input id="price_per_month" name="price_per_month" type="number" min={0} defaultValue={card?.price_per_month ?? ""} placeholder="12000" required />
         </FieldRow>
         <FieldRow label="AC" htmlFor="ac">

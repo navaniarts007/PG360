@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ChevronRight, Phone, Users } from "lucide-react";
+import { Eye, Phone, Users } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -81,11 +81,14 @@ export default async function TenantsPage() {
                     </td>
                     <td className="px-6 py-3.5">
                       <div className="flex items-center justify-end gap-1">
+                        <Link
+                          href={`/dashboard/tenants/${t.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-clay-50 px-3 py-1.5 text-xs font-semibold text-clay-700 transition-colors hover:bg-clay-100"
+                        >
+                          <Eye className="size-3.5" /> View
+                        </Link>
                         <AddTenantDialog beds={beds} tenant={t} />
                         <ConfirmDelete action={deleteTenantAction} id={t.id} title="Delete tenant" />
-                        <Link href={`/dashboard/tenants/${t.id}`} className="inline-grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-paper-2 hover:text-clay-600">
-                          <ChevronRight className="size-4" />
-                        </Link>
                       </div>
                     </td>
                   </tr>

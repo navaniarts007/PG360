@@ -3,13 +3,9 @@ import { CheckCircle2, Clock, ExternalLink, IndianRupee } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
-import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
-import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
-import { VerifyPaymentButton } from "@/components/admin/verify-payment-button";
-import { RemindButton } from "@/components/admin/remind-button";
+import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthBill, getPayTenants, getPgAccount } from "@/lib/db";
-import { getActiveProperty } from "@/lib/auth";
+import { adminKpis, getMonthBill } from "@/lib/db";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -19,13 +15,7 @@ const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 export default async function PaymentsPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const pid = await getActiveProperty();
-  const [kpis, payTenants, rows, pg] = await Promise.all([
-    adminKpis(month),
-    getPayTenants(),
-    getMonthBill(month),
-    pid ? getPgAccount(pid) : Promise.resolve(null),
-  ]);
+  const [kpis, rows] = await Promise.all([adminKpis(month), getMonthBill(month)]);
 
   const paidCount = rows.filter((r) => r.status === "paid").length;
   const pendingVerify = rows.filter((r) => r.paymentId && !r.verified && r.paid > 0).length;
@@ -33,10 +23,9 @@ export default async function PaymentsPage() {
   return (
     <div className="space-y-7">
       <PageHeader
-        eyebrow={`${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}`}
+        eyebrow={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
         title="Payments"
-        subtitle="Every active tenant's bill for the month — collect dues and verify tenant-submitted payments."
-        action={<RecordPaymentDialog tenants={payTenants} month={month} />}
+        subtitle="Every tenant's bill this month. Verify or reject what tenants submit."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -51,16 +40,15 @@ export default async function PaymentsPage() {
             <thead>
               <tr className="border-b border-line bg-paper-2/40 text-left text-xs uppercase tracking-wide text-ink-muted">
                 <th className="px-6 py-3.5 font-semibold">Tenant</th>
-                <th className="px-6 py-3.5 font-semibold">Billed</th>
-                <th className="px-6 py-3.5 font-semibold">Paid</th>
-                <th className="px-6 py-3.5 font-semibold">Balance</th>
+                <th className="px-6 py-3.5 font-semibold">Monthly rent</th>
+                <th className="px-6 py-3.5 font-semibold">Paid this month</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 text-right font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
-                const unverified = !!r.paymentId && !r.verified && r.paid > 0;
+                const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
                 return (
                   <tr key={r.tenant_id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
                     <td className="px-6 py-3.5">
@@ -72,26 +60,28 @@ export default async function PaymentsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.total)}</td>
-                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.paid)}</td>
                     <td className="px-6 py-3.5 tnum">
-                      {r.balance > 0 ? (
-                        <span className="font-semibold text-rose-600">{inr(r.balance)}</span>
+                      {r.paid > 0 ? (
+                        <span className="font-semibold text-ink">{inr(r.paid)}</span>
                       ) : (
                         <span className="text-ink-muted">—</span>
                       )}
+                      {r.payment_mode && (
+                        <span className="ml-2 text-xs text-ink-muted">{MODE[r.payment_mode]}</span>
+                      )}
                     </td>
                     <td className="px-6 py-3.5">
-                      <div className="flex items-center gap-2">
+                      {r.paid <= 0 ? (
+                        <span className="inline-flex rounded-full bg-paper-2 px-2.5 py-0.5 text-xs font-semibold text-ink-muted ring-1 ring-line">
+                          Unpaid
+                        </span>
+                      ) : awaiting ? (
+                        <span className="inline-flex rounded-full bg-gold-50 px-2.5 py-0.5 text-xs font-semibold text-gold-600 ring-1 ring-gold-100">
+                          Awaiting review
+                        </span>
+                      ) : (
                         <PaymentStatusPill status={r.status} />
-                        {unverified && (
-                          <span className="rounded-full bg-gold-50 px-2 py-0.5 text-[0.7rem] font-semibold text-gold-600 ring-1 ring-gold-100">
-                            unverified
-                          </span>
-                        )}
-                        {r.payment_mode && (
-                          <span className="text-xs text-ink-muted">{MODE[r.payment_mode]}</span>
-                        )}
-                      </div>
+                      )}
                     </td>
                     <td className="px-6 py-3.5">
                       <div className="flex items-center justify-end gap-2">
@@ -106,20 +96,13 @@ export default async function PaymentsPage() {
                             <ExternalLink className="size-4" />
                           </a>
                         )}
-                        {unverified && <VerifyPaymentButton paymentId={r.paymentId!} />}
-                        {r.balance > 0 ? (
-                          <>
-                            <RemindButton tenantId={r.tenant_id} month={month} balance={r.balance} />
-                            <RecordPaymentDialog
-                              tenants={payTenants}
-                              month={month}
-                              preselectId={r.tenant_id}
-                              variant="collect"
-                            />
-                          </>
-                        ) : r.verified ? (
-                          <span className="text-xs text-teal-600">✓ Verified</span>
-                        ) : null}
+                        {awaiting ? (
+                          <VerifyRejectButtons paymentId={r.paymentId!} />
+                        ) : r.paid > 0 && r.verified ? (
+                          <span className="text-xs font-semibold text-teal-600">✓ Verified</span>
+                        ) : (
+                          <span className="text-xs text-ink-muted">Pending payment</span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -129,12 +112,6 @@ export default async function PaymentsPage() {
           </table>
         </div>
       </Card>
-
-      <PaymentDetailsCard
-        upiId={pg?.upi_id ?? null}
-        bankDetails={pg?.bank_details ?? null}
-        qrUrl={pg?.payment_qr_url ?? null}
-      />
     </div>
   );
 }

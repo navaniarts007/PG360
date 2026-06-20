@@ -192,6 +192,18 @@ export async function listRateCards(): Promise<RateCard[]> {
   return (data ?? []) as RateCard[];
 }
 
+/** How many beds currently price off each rate card (for the Pricing page). */
+export async function rateCardBedCounts(): Promise<Record<string, number>> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s.from("beds").select("rate_card_id").eq("pg_id", pid);
+  const counts: Record<string, number> = {};
+  for (const b of (data ?? []) as { rate_card_id: string | null }[]) {
+    if (b.rate_card_id) counts[b.rate_card_id] = (counts[b.rate_card_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /* ------------------------------------------------------------- wifi master */
 
 export async function listWifiNetworks(): Promise<WifiNetwork[]> {

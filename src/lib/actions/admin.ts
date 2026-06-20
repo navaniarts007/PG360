@@ -644,7 +644,54 @@ export async function verifyPaymentAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
   const id = String(formData.get("id"));
   const s = await createClient();
+  const { data: p } = await s
+    .from("payments")
+    .select("pg_id, tenant_id, month_for")
+    .eq("id", id)
+    .maybeSingle();
   await s.from("payments").update({ verified: true }).eq("id", id);
+  if (p) {
+    await notifyTenant(
+      p.pg_id as string,
+      p.tenant_id as string,
+      `Your payment for ${p.month_for} was confirmed ✓`,
+      "/portal/bill",
+    );
+  }
+  revalidatePath("/dashboard/payments");
+  revalidatePath("/dashboard");
+  revalidatePath("/portal/bill");
+}
+
+/** Owner rejects a tenant-submitted payment: clears the claimed amount + proof
+ *  so the bill returns to unpaid and the tenant can re-submit. */
+export async function rejectPaymentAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  const s = await createClient();
+  const { data: p } = await s
+    .from("payments")
+    .select("pg_id, tenant_id, month_for")
+    .eq("id", id)
+    .maybeSingle();
+  await s
+    .from("payments")
+    .update({
+      amount_paid: 0,
+      verified: false,
+      payment_mode: null,
+      payment_date: null,
+      payment_screenshot_url: null,
+    })
+    .eq("id", id);
+  if (p) {
+    await notifyTenant(
+      p.pg_id as string,
+      p.tenant_id as string,
+      `Your payment for ${p.month_for} couldn't be confirmed — please re-submit.`,
+      "/portal/bill",
+    );
+  }
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
   revalidatePath("/portal/bill");
