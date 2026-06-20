@@ -445,8 +445,12 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
 export async function listStaff(): Promise<
   { id: string; full_name: string; phone: string | null; role: string }[]
 > {
-  const s = await sb();
+  // RLS only lets a user see their own membership + profile rows, so reading the
+  // team needs the service client. Safe: the staff page is admin-only and we
+  // scope strictly to the caller's validated active property.
+  const s = createAdminClient();
   const pid = await getActiveProperty();
+  if (!pid) return [];
   // members of the active property who are staff (+ the owner admins)
   const { data: members } = await s
     .from("property_members")
