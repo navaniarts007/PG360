@@ -319,4 +319,6 @@ export interface SessionUser {
   properties: PropertyRef[];
   /** The property the admin is currently acting on (cookie-selected, validated). */
   activePropertyId: string | null;
+  /** Whether the relevant PG is suspended (resolved once, with the session). */
+  suspended: boolean;
 }

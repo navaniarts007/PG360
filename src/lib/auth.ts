@@ -62,18 +62,42 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
 
   const role = profile.role as Role;
 
-  let tenant_id: string | null = null;
-  if (role === "tenant") {
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    tenant_id = t?.id ?? null;
-  }
+  // Role-dependent lookups in parallel. The pg `status` is fetched here too, so
+  // the per-page suspension check costs no extra round-trip (see requireRole).
+  const [tenantRes, membersRes] = await Promise.all([
+    role === "tenant"
+      ? supabase
+          .from("tenants")
+          .select("id, pg:pg_accounts(status)")
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    role === "admin" || role === "staff"
+      ? supabase
+          .from("property_members")
+          .select("property_id, pg:pg_accounts(pg_name, status)")
+          .eq("user_id", user.id)
+      : Promise.resolve({ data: [] }),
+  ]);
 
-  const properties = await loadProperties(supabase, role, user.id);
+  const tenantRow = tenantRes.data as { id: string; pg: { status: string } | null } | null;
+  const tenant_id = role === "tenant" ? tenantRow?.id ?? null : null;
+
+  type MRow = { property_id: string; pg: { pg_name: string; status: string } | null };
+  const memberRows = (membersRes.data ?? []) as unknown as MRow[];
+  const properties: PropertyRef[] = memberRows
+    .map((m) => ({ id: m.property_id, name: m.pg?.pg_name ?? "Property" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const statusById = new Map(memberRows.map((m) => [m.property_id, m.pg?.status]));
+
   const activePropertyId = await resolveActiveProperty(role, profile.pg_id, properties);
+
+  let suspended = false;
+  if (role === "tenant") {
+    suspended = tenantRow?.pg?.status === "suspended";
+  } else if (role === "admin" || role === "staff") {
+    suspended = activePropertyId ? statusById.get(activePropertyId) === "suspended" : false;
+  }
 
   return {
     id: profile.id,
@@ -84,6 +108,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     email: user.email ?? "",
     properties,
     activePropertyId,
+    suspended,
   };
 });
 
@@ -137,6 +162,7 @@ export async function signIn(
       email: data.user.email ?? "",
       properties,
       activePropertyId,
+      suspended: false, // freshly authenticated; the next page's getSession resolves it
     },
   };
 }
