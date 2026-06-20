@@ -182,6 +182,7 @@ export interface Tenant {
   name: string;
   phone: string;
   email: string;
+  avatar_url: string | null;
   aadhaar_number: string | null;
   emergency_contact: string | null;
   rent_amount: number;
