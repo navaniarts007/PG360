@@ -7,15 +7,15 @@
    ========================================================================= */
 
 @theme {
-  /* ---- Warm neutrals (the "paper & ink" base) ---- */
-  --color-paper: #faf6ef;
-  --color-paper-2: #f4eee3;
-  --color-surface: #fffdf9;
-  --color-ink: #211c15;
-  --color-ink-soft: #574d40;
-  --color-ink-muted: #8b8071;
-  --color-line: #ebe2d4;
-  --color-line-strong: #dccfba;
+  /* ---- Clean neutrals (white base, terracotta accent) ---- */
+  --color-paper: #ffffff;
+  --color-paper-2: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-ink: #1b1a18;
+  --color-ink-soft: #4f4d49;
+  --color-ink-muted: #8a8884;
+  --color-line: #ebedf0;
+  --color-line-strong: #dde1e6;
 
   /* ---- Clay / terracotta — the brand accent ---- */
   --color-clay-50: #fbf2ec;
@@ -41,14 +41,14 @@
   --color-teal-800: #093a31;
   --color-teal-900: #082e27;
 
-  /* ---- Gold — the WiFi / highlight micro-feature ---- */
-  --color-gold-50: #fbf4e1;
-  --color-gold-100: #f6e7bb;
-  --color-gold-200: #eecf83;
-  --color-gold-300: #e4b64f;
-  --color-gold-400: #d9a441;
-  --color-gold-500: #bd8327;
-  --color-gold-600: #99681e;
+  /* ---- "Gold" removed — remapped to terracotta so the brand stays single-accent ---- */
+  --color-gold-50: #fbf2ec;
+  --color-gold-100: #f6e0d2;
+  --color-gold-200: #eec2a7;
+  --color-gold-300: #e29f78;
+  --color-gold-400: #d2794b;
+  --color-gold-500: #c2531d;
+  --color-gold-600: #a64518;
 
   /* ---- Rose — dues / danger (warm red, not clinical) ---- */
   --color-rose-50: #fbeee9;
@@ -298,12 +298,9 @@
   .section-shell {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(220, 207, 186, 0.75);
-    background:
-      linear-gradient(180deg, rgba(255, 253, 249, 0.94), rgba(250, 246, 239, 0.92)),
-      radial-gradient(circle at top right, rgba(194, 83, 29, 0.08), transparent 32%);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(12px);
+    border: 1px solid var(--color-line);
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), var(--shadow-soft);
   }
 
   .section-shell::before {
@@ -311,20 +308,17 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 18%),
-      linear-gradient(90deg, rgba(220, 207, 186, 0.16), transparent 18%, transparent 82%, rgba(220, 207, 186, 0.16));
+    background: radial-gradient(circle at top right, rgba(194, 83, 29, 0.05), transparent 34%);
   }
 
   .editorial-card {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(220, 207, 186, 0.8);
-    background:
-      linear-gradient(180deg, rgba(255, 253, 249, 0.95), rgba(244, 238, 227, 0.82)),
-      rgba(255, 255, 255, 0.55);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(12px);
+    border: 1px solid var(--color-line);
+    background: #ffffff;
+    box-shadow:
+      0 1px 2px rgba(20, 20, 20, 0.04),
+      0 8px 24px -12px rgba(20, 20, 20, 0.1);
   }
 
   .editorial-card::after {
