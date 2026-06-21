@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/marketing/reveal";
 import { WifiCard } from "@/components/marketing/wifi-card";
 import { Hero } from "@/components/marketing/hero";
-import { FeatureFlow } from "@/components/marketing/feature-flow";
+import { BeforeAfter } from "@/components/marketing/before-after";
+import { FeatureWeb } from "@/components/marketing/feature-web";
 import { DownloadCards } from "@/components/marketing/download-cards";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,8 @@ export default function LandingPage() {
     <>
       <Hero />
       <Marquee />
-      <FeatureFlow />
+      <BeforeAfter />
+      <FeatureWeb />
       <PortalSpotlight />
       <HowItWorks />
       <Pricing />
