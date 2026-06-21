@@ -66,3 +66,14 @@ export const DOWNLOADS: DownloadTarget[] = [
 export function downloadHref(d: DownloadTarget): string {
   return DOWNLOADS_READY ? d.url : RELEASES_PAGE;
 }
+
+/* ----------------------------------------------------- scroll-scrub hero ---
+ * A 10s video exported to a 30fps WebP frame sequence (300 frames), scrubbed by
+ * scroll. Generate with `node scripts/extract-frames.mjs <video.mp4>`, then set
+ * SEQUENCE.ready = true and frameCount to the number printed.
+ * Frames live at public/frames/hero/0001.webp … */
+export const SEQUENCE = {
+  ready: false,
+  frameCount: 300,
+  srcFor: (i: number) => `/frames/hero/${String(i).padStart(4, "0")}.webp`,
+};
