@@ -24,15 +24,20 @@ export const DEFAULT_CLIENT: ClientConfig = {
   portalEnabled: true,
 };
 
+// GVM Comforts client (custom edition). Reachable on either spelling of the
+// subdomain so DNS typos don't break it.
+const gvmComforts: ClientConfig = {
+  slug: "gvrconforts",
+  brandName: "GVM Comforts",
+  regPrefix: "GVM",
+  edition: "gvm",
+  portalEnabled: false,
+};
+
 /** Registered clients, keyed by subdomain slug. */
 export const CLIENTS: Record<string, ClientConfig> = {
-  gvmconforts: {
-    slug: "gvmconforts",
-    brandName: "GVM Comforts",
-    regPrefix: "GVM",
-    edition: "gvm",
-    portalEnabled: false,
-  },
+  gvrconforts: gvmComforts,
+  gvmconforts: gvmComforts,
 };
 
 /** Hosts whose first label is NOT a client slug (the root product). */
