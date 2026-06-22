@@ -9,6 +9,8 @@ import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyTenant } from "../notify";
 import { computeBill, computeSettlement } from "../money";
+import { getClient } from "../get-client";
+import { logTenantEvent } from "../events";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -271,6 +273,14 @@ export async function addTenantAction(
     };
   }
 
+  // sequential registration number for editions that use one (e.g. GVM-0001)
+  let regNo: string | null = null;
+  const client = await getClient();
+  if (client.regPrefix) {
+    const { data: n } = await admin.rpc("next_tenant_no", { p_pg: pid });
+    if (typeof n === "number") regNo = `${client.regPrefix}-${String(n).padStart(4, "0")}`;
+  }
+
   const { data: tenant, error: tErr } = await admin
     .from("tenants")
     .insert({
@@ -281,6 +291,7 @@ export async function addTenantAction(
       name: d.name,
       phone: d.phone,
       email: d.email,
+      reg_no: regNo,
       aadhaar_number: d.aadhaar_number || null,
       rent_amount: rent,
       security_deposit: d.security_deposit,
@@ -308,6 +319,14 @@ export async function addTenantAction(
       .update({ status: "occupied", current_tenant_id: tenant.id })
       .eq("id", bedId);
   }
+
+  await logTenantEvent({
+    pgId: pid,
+    tenantId: tenant.id,
+    type: "joined",
+    detail: roomId ? "Checked in" : "Added (no bed yet)",
+    roomId,
+  });
 
   // One-time joining/admission fee (non-refundable), if entered.
   if (d.joining_fee && d.joining_fee > 0) {
@@ -401,6 +420,10 @@ export async function updateTenantAction(
     if (newBedId && tenant.status === "active") {
       await s.from("beds").update({ status: "occupied", current_tenant_id: id }).eq("id", newBedId);
     }
+    const pid = await getActiveProperty();
+    if (pid && newBedId) {
+      await logTenantEvent({ pgId: pid, tenantId: id, type: "room_changed", detail: "Moved room", roomId });
+    }
   }
 
   revalidatePath("/dashboard/tenants");
@@ -426,6 +449,8 @@ export async function checkoutTenantAction(formData: FormData): Promise<void> {
     .eq("id", id);
   // free their bed (trigger re-syncs the room's occupancy)
   await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", id);
+  const pid = await getActiveProperty();
+  if (pid) await logTenantEvent({ pgId: pid, tenantId: id, type: "checked_out", detail: "Checked out" });
   revalidatePath("/dashboard/tenants");
   revalidatePath(`/dashboard/tenants/${id}`);
   revalidatePath("/dashboard/rooms");
@@ -509,6 +534,12 @@ export async function saveSettlementAction(
       })
       .eq("id", d.tenant_id);
     await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", d.tenant_id);
+    await logTenantEvent({
+      pgId: pid,
+      tenantId: d.tenant_id,
+      type: "checked_out",
+      detail: `Checked out · refund ₹${res.refundableAmount.toLocaleString("en-IN")}`,
+    });
   }
 
   revalidatePath("/dashboard/tenants");
@@ -592,6 +623,14 @@ export async function recordPaymentAction(
   if (error) return { error: humanizeDbError(error) };
 
   await notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill");
+  if (d.amount_paid > 0) {
+    await logTenantEvent({
+      pgId: pid,
+      tenantId: d.tenant_id,
+      type: "payment",
+      detail: `Paid ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`,
+    });
+  }
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
   return { ok: true };

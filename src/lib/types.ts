@@ -182,8 +182,10 @@ export interface Tenant {
   name: string;
   phone: string;
   email: string;
+  reg_no: string | null;
   avatar_url: string | null;
   aadhaar_number: string | null;
+  aadhaar_photo_url: string | null;
   emergency_contact: string | null;
   rent_amount: number;
   security_deposit: number;
@@ -196,6 +198,26 @@ export interface Tenant {
   notice_given_date: string | null;
   lock_in_end_date: string | null;
   status: TenantStatus;
+  created_at: string;
+}
+
+export type TenantEventType =
+  | "joined"
+  | "room_changed"
+  | "payment"
+  | "complaint"
+  | "note"
+  | "checked_out";
+
+export interface TenantEvent {
+  id: string;
+  pg_id: string;
+  tenant_id: string;
+  type: TenantEventType;
+  detail: string | null;
+  room_id: string | null;
+  floor: number | null;
+  created_by: string | null;
   created_at: string;
 }
 

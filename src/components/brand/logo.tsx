@@ -50,11 +50,14 @@ export function Logo({
   href = "/",
   invert = false,
   wordmark = true,
+  label,
 }: {
   className?: string;
   href?: string;
   invert?: boolean;
   wordmark?: boolean;
+  /** White-label brand name. Defaults to the PG360 wordmark. */
+  label?: string;
 }) {
   return (
     <Link
@@ -69,7 +72,13 @@ export function Logo({
             invert ? "text-paper" : "text-ink",
           )}
         >
-          PG<span className="text-clay-500">360</span>
+          {label ? (
+            label
+          ) : (
+            <>
+              PG<span className="text-clay-500">360</span>
+            </>
+          )}
         </span>
       )}
     </Link>

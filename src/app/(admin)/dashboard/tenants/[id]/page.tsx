@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import {
   ArrowLeft,
   CalendarDays,
+  FileText,
   IdCard,
   Phone,
   ShieldCheck,
@@ -27,8 +28,18 @@ import {
   getJoiningFees,
   getPayTenants,
   getTenantDetail,
+  listTenantEvents,
 } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
+
+const EVENT_LABEL: Record<string, string> = {
+  joined: "Joined",
+  room_changed: "Room change",
+  payment: "Payment",
+  complaint: "Complaint",
+  note: "Note",
+  checked_out: "Checked out",
+};
 
 export const metadata: Metadata = { title: "Tenant" };
 
@@ -48,11 +59,12 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
     getActivePolicy(),
+    listTenantEvents(id),
   ]);
 
   return (
@@ -70,12 +82,19 @@ export default async function TenantDetail({
             <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">{tenant.name}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <TenantStatusPill status={tenant.status} />
+              {tenant.reg_no && <Badge tone="neutral">{tenant.reg_no}</Badge>}
               {room && <Badge tone="clay">Room {room.room_number}</Badge>}
-              {tenant.food_plan_active && <Badge tone="gold">Food plan</Badge>}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/record/${tenant.id}`}
+            target="_blank"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:text-clay-600"
+          >
+            <FileText className="size-3.5" /> Print record
+          </Link>
           <AddTenantDialog beds={beds} tenant={tenant} />
           {tenant.status === "active" && (
             <>
@@ -130,6 +149,29 @@ export default async function TenantDetail({
         </Card>
 
         <JoiningFeesCard fees={joiningFees} tenantId={tenant.id} />
+
+        {/* stay timeline — the police-style activity record */}
+        <Card className="lg:col-span-2">
+          <div className="border-b border-line p-5 sm:p-6">
+            <h3 className="text-lg text-ink">Stay timeline</h3>
+            <p className="mt-0.5 text-sm text-ink-muted">Full activity record for verification.</p>
+          </div>
+          {events.length === 0 ? (
+            <p className="p-6 text-sm text-ink-muted">No activity recorded yet.</p>
+          ) : (
+            <ol className="divide-y divide-line">
+              {events.map((e) => (
+                <li key={e.id} className="flex items-baseline gap-3 px-5 py-3 sm:px-6">
+                  <span className="w-28 shrink-0 text-xs text-ink-muted tnum">
+                    {formatDate(e.created_at)}
+                  </span>
+                  <span className="text-sm font-semibold text-ink">{EVENT_LABEL[e.type] ?? e.type}</span>
+                  {e.detail && <span className="text-sm text-ink-soft">— {e.detail}</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </Card>
 
         {/* history */}
         <Card className="lg:col-span-1">

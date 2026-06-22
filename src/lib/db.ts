@@ -19,6 +19,7 @@ import type {
   RateCard,
   Room,
   Tenant,
+  TenantEvent,
   WifiNetwork,
 } from "./types";
 
@@ -190,6 +191,56 @@ export async function listRateCards(): Promise<RateCard[]> {
     .eq("pg_id", pid)
     .order("price_per_month", { ascending: false });
   return (data ?? []) as RateCard[];
+}
+
+/* ----------------------------------------------- tenant records (events) */
+
+export async function listTenantEvents(tenantId: string): Promise<TenantEvent[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("tenant_events")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as TenantEvent[];
+}
+
+/** Recent activity across the active property (for the GVM home feed). */
+export async function listRecentEvents(
+  limit = 12,
+): Promise<Array<TenantEvent & { tenant_name: string }>> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("tenant_events")
+    .select("*, tenant:tenants(name)")
+    .eq("pg_id", pid)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  type Row = TenantEvent & { tenant: { name: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((e) => ({
+    ...e,
+    tenant_name: e.tenant?.name ?? "Tenant",
+  }));
+}
+
+/** Checked-out tenants (the "Vacated Master") for the active property. */
+export async function listVacated(): Promise<
+  Array<Tenant & { room_number: string | null }>
+> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("tenants")
+    .select("*, room:rooms(room_number)")
+    .eq("pg_id", pid)
+    .eq("status", "checked_out")
+    .order("checkout_date", { ascending: false });
+  type Row = Tenant & { room: { room_number: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((t) => ({
+    ...t,
+    room_number: t.room?.room_number ?? null,
+  }));
 }
 
 /** How many beds currently price off each rate card (for the Pricing page). */

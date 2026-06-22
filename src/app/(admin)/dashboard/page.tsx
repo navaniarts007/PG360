@@ -14,7 +14,9 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IssueStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
+import { GvmHome } from "@/components/admin/gvm-home";
 import { requireRole } from "@/lib/guards";
+import { getClient } from "@/lib/get-client";
 import {
   adminKpis,
   getMonthBill,
@@ -36,6 +38,13 @@ const ISSUE_CATEGORY: Record<string, string> = {
 
 export default async function AdminDashboard() {
   const user = await requireRole(["admin", "staff"]);
+
+  // GVM-style editions get a stripped, mobile-first quick-action home.
+  const client = await getClient();
+  if (client.edition === "gvm") {
+    return <GvmHome ownerName={client.brandName} />;
+  }
+
   const month = currentMonth();
 
   const [kpis, payTenants, bill, allIssues] = await Promise.all([

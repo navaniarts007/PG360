@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Archive,
   BarChart3,
   BedDouble,
   Building2,
@@ -24,6 +25,7 @@ import {
   Wifi,
   X,
 } from "lucide-react";
+import type { Edition } from "@/lib/clients";
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
@@ -45,7 +47,16 @@ interface NavItem {
   module?: keyof PropertySettings;
 }
 
-const NAVS: Record<"super" | "admin" | "tenant", NavItem[]> = {
+const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
+  // Stripped, owner-only edition for customized clients (e.g. GVM Comforts).
+  gvm: [
+    { href: "/dashboard", label: "Home", icon: LayoutDashboard, exact: true },
+    { href: "/dashboard/tenants", label: "Tenants", icon: Users },
+    { href: "/dashboard/vacated", label: "Vacated", icon: Archive },
+    { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+    { href: "/dashboard/rooms", label: "Rooms", icon: BedDouble },
+    { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  ],
   super: [
     { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/platform/accounts", label: "PG Accounts", icon: Building2 },
@@ -89,6 +100,8 @@ export function AppShell({
   properties,
   activePropertyId,
   settings,
+  edition = "full",
+  brandName,
   children,
 }: {
   role: Role;
@@ -99,9 +112,16 @@ export function AppShell({
   properties: PropertyRef[];
   activePropertyId: string | null;
   settings: PropertySettings;
+  edition?: Edition;
+  brandName?: string;
   children: React.ReactNode;
 }) {
-  const nav = NAVS[navKey(role)].filter(
+  // GVM-style editions get a stripped owner-only nav; everyone else by role.
+  const key =
+    edition === "gvm" && (role === "admin" || role === "staff")
+      ? "gvm"
+      : navKey(role);
+  const nav = NAVS[key].filter(
     (item) => !item.module || settings[item.module] !== false,
   );
   const pathname = usePathname();
@@ -126,7 +146,7 @@ export function AppShell({
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-5">
-        <Logo />
+        <Logo label={brandName} />
         <button
           onClick={() => setOpen(false)}
           className="grid size-9 place-items-center rounded-lg text-ink-muted hover:bg-paper-2 lg:hidden"
@@ -222,7 +242,7 @@ export function AppShell({
           >
             <Menu className="size-5" />
           </button>
-          <Logo />
+          <Logo label={brandName} />
           <NotificationBell userId={userId} initial={notifications} />
         </header>
 

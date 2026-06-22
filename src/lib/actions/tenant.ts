@@ -8,6 +8,7 @@ import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyStaff } from "../notify";
 import { computeBill } from "../money";
+import { logTenantEvent } from "../events";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -41,6 +42,12 @@ export async function raiseIssueAction(
     `New ${parsed.data.category} complaint from ${me.full_name}`,
     "/dashboard/issues",
   );
+  await logTenantEvent({
+    pgId: me.pg_id,
+    tenantId: me.tenant_id,
+    type: "complaint",
+    detail: `${parsed.data.category}: ${parsed.data.description.slice(0, 80)}`,
+  });
   revalidatePath("/portal/issues");
   return { ok: true };
 }

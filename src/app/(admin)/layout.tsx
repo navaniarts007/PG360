@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app/app-shell";
 import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getPgAccount } from "@/lib/db";
+import { getClient } from "@/lib/get-client";
 
 export default async function AdminLayout({
   children,
@@ -8,9 +9,10 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole(["admin", "staff"]);
-  const [pg, notifications] = await Promise.all([
+  const [pg, notifications, client] = await Promise.all([
     user.activePropertyId ? getPgAccount(user.activePropertyId) : Promise.resolve(null),
     getMyNotifications(),
+    getClient(),
   ]);
   return (
     <AppShell
@@ -22,6 +24,8 @@ export default async function AdminLayout({
       properties={user.properties}
       activePropertyId={user.activePropertyId}
       settings={pg?.settings ?? {}}
+      edition={client.edition}
+      brandName={client.brandName}
     >
       {children}
     </AppShell>
