@@ -64,9 +64,18 @@ export default async function TenantsPage() {
                   <tr key={t.id} className="group border-b border-line last:border-0 hover:bg-paper-2/30">
                     <td className="px-6 py-3.5">
                       <Link href={`/dashboard/tenants/${t.id}`} className="flex items-center gap-3">
-                        <span className="grid size-9 place-items-center rounded-full bg-ink text-xs font-semibold text-paper">
-                          {initials(t.name)}
-                        </span>
+                        {t.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={t.avatar_url}
+                            alt={t.name}
+                            className="size-9 rounded-full object-cover ring-1 ring-line"
+                          />
+                        ) : (
+                          <span className="grid size-9 place-items-center rounded-full bg-ink text-xs font-semibold text-paper">
+                            {initials(t.name)}
+                          </span>
+                        )}
                         <div>
                           <p className="font-semibold text-ink group-hover:text-clay-700">{t.name}</p>
                           <p className="text-xs text-ink-muted">{t.email}</p>

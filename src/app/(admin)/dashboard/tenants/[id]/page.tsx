@@ -75,9 +75,18 @@ export default async function TenantDetail({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <span className="grid size-16 place-items-center rounded-2xl bg-ink text-xl font-semibold text-paper shadow-lift">
-            {initials(tenant.name)}
-          </span>
+          {tenant.avatar_url || tenant.aadhaar_photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={tenant.avatar_url ?? tenant.aadhaar_photo_url ?? ""}
+              alt={tenant.name}
+              className="size-16 rounded-2xl object-cover shadow-lift ring-1 ring-line"
+            />
+          ) : (
+            <span className="grid size-16 place-items-center rounded-2xl bg-ink text-xl font-semibold text-paper shadow-lift">
+              {initials(tenant.name)}
+            </span>
+          )}
           <div>
             <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">{tenant.name}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
