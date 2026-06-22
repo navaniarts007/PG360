@@ -6,9 +6,11 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TenantStatusPill } from "@/components/ui/status";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
+import { AddRecordDialog } from "@/components/admin/add-record-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
+import { getClient } from "@/lib/get-client";
 import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
 import { initials, inr } from "@/lib/utils";
 
@@ -16,10 +18,14 @@ export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, beds] = await Promise.all([
+  const [tenants, beds, client] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
+    getClient(),
   ]);
+  // Custom editions register residents as records (no login + ID capture).
+  const addTenant =
+    client.edition === "gvm" ? <AddRecordDialog beds={beds} /> : <AddTenantDialog beds={beds} />;
 
   const active = tenants.filter((t) => t.status === "active").length;
 
@@ -29,15 +35,15 @@ export default async function TenantsPage() {
         eyebrow="People"
         title="Tenants"
         subtitle={`${active} active · ${tenants.length - active} checked out`}
-        action={<AddTenantDialog beds={beds} />}
+        action={addTenant}
       />
 
       {tenants.length === 0 ? (
         <EmptyState
           icon={Users}
           title="No tenants yet"
-          body="Add a resident — they'll get their own login automatically."
-          action={<AddTenantDialog beds={beds} />}
+          body="Add a resident to start their record."
+          action={addTenant}
         />
       ) : (
         <Card className="overflow-hidden">

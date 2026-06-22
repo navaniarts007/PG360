@@ -343,6 +343,90 @@ export async function addTenantAction(
   return { ok: true };
 }
 
+/* ---- lean record onboarding (custom editions: no login, ID capture) ------ */
+
+const recordSchema = z.object({
+  name: z.string().min(2, "Name is required."),
+  phone: z.string().min(8, "Enter a valid phone."),
+  aadhaar_number: z.string().optional(),
+  aadhaar_photo_url: z.string().optional(),
+  bed_id: z.string().optional(),
+  security_deposit: z.coerce.number().min(0).optional(),
+  checkin_date: z.string().min(1, "Check-in date is required."),
+});
+
+/** Register a resident as a RECORD only — no tenant login is created. Captures
+ *  ID + photo and assigns a sequential reg-no. Used by the GVR-style editions. */
+export async function addTenantRecordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const parsed = recordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  if (d.aadhaar_photo_url && !/^https:\/\/res\.cloudinary\.com\//.test(d.aadhaar_photo_url)) {
+    return { error: "Invalid ID photo." };
+  }
+  const admin = createAdminClient();
+
+  const bedId = d.bed_id && d.bed_id !== "none" ? d.bed_id : null;
+  let roomId: string | null = null;
+  let rent = 0;
+  if (bedId) {
+    const { data: bed } = await admin.from("beds").select("*").eq("id", bedId).maybeSingle();
+    if (!bed || bed.pg_id !== pid || bed.status !== "vacant") {
+      return { error: "That bed is no longer available." };
+    }
+    roomId = bed.room_id;
+    rent = bed.price_per_month;
+  }
+
+  let regNo: string | null = null;
+  const client = await getClient();
+  if (client.regPrefix) {
+    const { data: n } = await admin.rpc("next_tenant_no", { p_pg: pid });
+    if (typeof n === "number") regNo = `${client.regPrefix}-${String(n).padStart(4, "0")}`;
+  }
+
+  const { data: tenant, error } = await admin
+    .from("tenants")
+    .insert({
+      pg_id: pid,
+      room_id: roomId,
+      bed_id: bedId,
+      name: d.name,
+      phone: d.phone,
+      reg_no: regNo,
+      aadhaar_number: d.aadhaar_number || null,
+      aadhaar_photo_url: d.aadhaar_photo_url || null,
+      rent_amount: rent,
+      security_deposit: d.security_deposit ?? 0,
+      checkin_date: d.checkin_date,
+    })
+    .select()
+    .single();
+  if (error || !tenant) return { error: humanizeDbError(error, "Could not save the record.") };
+
+  if (bedId) {
+    await admin.from("beds").update({ status: "occupied", current_tenant_id: tenant.id }).eq("id", bedId);
+  }
+  await logTenantEvent({
+    pgId: pid,
+    tenantId: tenant.id,
+    type: "joined",
+    detail: roomId ? "Checked in" : "Registered",
+    roomId,
+  });
+
+  revalidatePath("/dashboard/tenants");
+  revalidatePath("/dashboard/rooms");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 /** Toggle a joining fee between paid / unpaid. */
 export async function toggleJoiningFeePaidAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
