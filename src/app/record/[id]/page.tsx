@@ -65,11 +65,11 @@ export default async function RecordPage({
 
           {/* identity + photo */}
           <section className="mt-6 flex gap-5">
-            {tenant.aadhaar_photo_url ? (
+            {tenant.avatar_url || tenant.aadhaar_photo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={tenant.aadhaar_photo_url}
-                alt="ID"
+                src={tenant.avatar_url ?? tenant.aadhaar_photo_url ?? ""}
+                alt="Tenant"
                 className="size-28 shrink-0 rounded-xl border border-line object-cover"
               />
             ) : (

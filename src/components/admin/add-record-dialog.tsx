@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { AlertCircle, ImageUp, Loader2, UserPlus } from "lucide-react";
+import { AlertCircle, Camera, ImageUp, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
@@ -30,9 +30,11 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     addTenantRecordAction,
     {},
   );
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [selfie, setSelfie] = useState<string | null>(null); // check-in photo
+  const [photo, setPhoto] = useState<string | null>(null); // ID document
+  const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const selfieRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -41,11 +43,11 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
 
   const options = beds.filter((b) => b.status === "vacant");
 
-  const upload = async (file: File) => {
-    setUploading(true);
+  const upload = async (file: File, which: "selfie" | "id") => {
+    setBusy(which);
     setUploadErr(null);
     try {
-      const sig = await getUploadSignatureAction("pg360/kyc");
+      const sig = await getUploadSignatureAction(which === "selfie" ? "pg360/avatars" : "pg360/kyc");
       if (!sig.ok) throw new Error(sig.error);
       const fd = new FormData();
       fd.append("file", file);
@@ -59,22 +61,59 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
       );
       const json = (await res.json()) as { secure_url?: string };
       if (!json.secure_url) throw new Error("Upload failed");
-      setPhoto(json.secure_url);
+      (which === "selfie" ? setSelfie : setPhoto)(json.secure_url);
     } catch (e) {
       setUploadErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
-      setUploading(false);
+      setBusy(null);
     }
   };
 
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="aadhaar_photo_url" value={photo ?? ""} />
+      <input type="hidden" name="avatar_url" value={selfie ?? ""} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
         </div>
       )}
+
+      {/* check-in photo — take a live photo of the tenant */}
+      <div className="flex items-center gap-4 rounded-xl border border-clay-100 bg-clay-50/40 p-4">
+        {selfie ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={selfie} alt="Tenant" className="size-20 rounded-xl object-cover ring-2 ring-clay-200" />
+        ) : (
+          <div className="grid size-20 place-items-center rounded-xl bg-paper text-ink-muted ring-1 ring-line">
+            <Camera className="size-7" />
+          </div>
+        )}
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-ink">Check-in photo</p>
+          <p className="mb-2 text-xs text-ink-muted">A quick photo of the tenant at check-in.</p>
+          <input
+            ref={selfieRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f, "selfie");
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => selfieRef.current?.click()}
+            disabled={busy === "selfie"}
+            className="inline-flex items-center gap-2 rounded-lg bg-clay-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-clay-700 disabled:opacity-60"
+          >
+            {busy === "selfie" ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+            {selfie ? "Retake photo" : "Take photo"}
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <FieldRow label="Full name" htmlFor="name" className="col-span-2">
@@ -125,16 +164,16 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void upload(f);
+              if (f) void upload(f, "id");
             }}
           />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            disabled={uploading}
+            disabled={busy === "id"}
             className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
           >
-            {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImageUp className="size-4" />}
+            {busy === "id" ? <Loader2 className="size-4 animate-spin" /> : <ImageUp className="size-4" />}
             {photo ? "Replace photo" : "Upload photo"}
           </button>
         </div>
@@ -145,7 +184,7 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" className="flex-1" disabled={pending || uploading}>
+        <Button type="submit" className="flex-1" disabled={pending || busy !== null}>
           {pending ? (
             <>
               <Loader2 className="size-4 animate-spin" /> Saving…

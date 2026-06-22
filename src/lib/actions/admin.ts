@@ -350,6 +350,7 @@ const recordSchema = z.object({
   phone: z.string().min(8, "Enter a valid phone."),
   aadhaar_number: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
+  avatar_url: z.string().optional(), // live check-in photo of the tenant
   bed_id: z.string().optional(),
   security_deposit: z.coerce.number().min(0).optional(),
   checkin_date: z.string().min(1, "Check-in date is required."),
@@ -367,9 +368,9 @@ export async function addTenantRecordAction(
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
-  if (d.aadhaar_photo_url && !/^https:\/\/res\.cloudinary\.com\//.test(d.aadhaar_photo_url)) {
-    return { error: "Invalid ID photo." };
-  }
+  const cloud = /^https:\/\/res\.cloudinary\.com\//;
+  if (d.aadhaar_photo_url && !cloud.test(d.aadhaar_photo_url)) return { error: "Invalid ID photo." };
+  if (d.avatar_url && !cloud.test(d.avatar_url)) return { error: "Invalid tenant photo." };
   const admin = createAdminClient();
 
   const bedId = d.bed_id && d.bed_id !== "none" ? d.bed_id : null;
@@ -402,6 +403,7 @@ export async function addTenantRecordAction(
       reg_no: regNo,
       aadhaar_number: d.aadhaar_number || null,
       aadhaar_photo_url: d.aadhaar_photo_url || null,
+      avatar_url: d.avatar_url || null,
       rent_amount: rent,
       security_deposit: d.security_deposit ?? 0,
       checkin_date: d.checkin_date,
