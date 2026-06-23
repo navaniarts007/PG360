@@ -51,6 +51,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
   // Stripped, owner-only edition for customized clients (e.g. GVM Comforts).
   gvm: [
     { href: "/dashboard", label: "Home", icon: LayoutDashboard, exact: true },
+    { href: "/dashboard/properties", label: "Properties", icon: Building2 },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
     { href: "/dashboard/vacated", label: "Vacated", icon: Archive },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
