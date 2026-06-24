@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
+import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthBill } from "@/lib/db";
+import { adminKpis, getMonthBill, getPayTenants } from "@/lib/db";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -15,7 +16,11 @@ const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 export default async function PaymentsPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, rows] = await Promise.all([adminKpis(month), getMonthBill(month)]);
+  const [kpis, rows, payTenants] = await Promise.all([
+    adminKpis(month),
+    getMonthBill(month),
+    getPayTenants(),
+  ]);
 
   const paidCount = rows.filter((r) => r.status === "paid").length;
   const pendingVerify = rows.filter((r) => r.paymentId && !r.verified && r.paid > 0).length;
@@ -25,7 +30,8 @@ export default async function PaymentsPage() {
       <PageHeader
         eyebrow={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
         title="Payments"
-        subtitle="Every tenant's bill this month. Verify or reject what tenants submit."
+        subtitle="Every tenant's bill this month. Record a payment, or verify what tenants submit."
+        action={<RecordPaymentDialog tenants={payTenants} month={month} />}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -101,7 +107,12 @@ export default async function PaymentsPage() {
                         ) : r.paid > 0 && r.verified ? (
                           <span className="text-xs font-semibold text-teal-600">✓ Verified</span>
                         ) : (
-                          <span className="text-xs text-ink-muted">Pending payment</span>
+                          <RecordPaymentDialog
+                            tenants={payTenants}
+                            month={month}
+                            preselectId={r.tenant_id}
+                            variant="collect"
+                          />
                         )}
                       </div>
                     </td>
