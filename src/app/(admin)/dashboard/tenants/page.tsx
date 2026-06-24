@@ -10,7 +10,7 @@ import { AddRecordDialog } from "@/components/admin/add-record-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
-import { getClient } from "@/lib/get-client";
+import { getEdition } from "@/lib/get-client";
 import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
 import { initials, inr } from "@/lib/utils";
 
@@ -21,7 +21,7 @@ export default async function TenantsPage() {
   const [tenants, beds, client] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
-    getClient(),
+    getEdition(),
   ]);
   // Custom editions register residents as records (no login + ID capture).
   const addTenant =

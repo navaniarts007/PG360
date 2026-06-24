@@ -9,7 +9,7 @@ import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 import { notifyTenant } from "../notify";
 import { computeBill, computeSettlement } from "../money";
-import { getClient } from "../get-client";
+import { getEdition } from "../get-client";
 import { logTenantEvent } from "../events";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -275,10 +275,10 @@ export async function addTenantAction(
 
   // sequential registration number for editions that use one (e.g. GVM-0001)
   let regNo: string | null = null;
-  const client = await getClient();
-  if (client.regPrefix) {
+  const { regPrefix } = await getEdition();
+  if (regPrefix) {
     const { data: n } = await admin.rpc("next_tenant_no", { p_pg: pid });
-    if (typeof n === "number") regNo = `${client.regPrefix}-${String(n).padStart(4, "0")}`;
+    if (typeof n === "number") regNo = `${regPrefix}-${String(n).padStart(4, "0")}`;
   }
 
   const { data: tenant, error: tErr } = await admin
@@ -386,10 +386,10 @@ export async function addTenantRecordAction(
   }
 
   let regNo: string | null = null;
-  const client = await getClient();
-  if (client.regPrefix) {
+  const { regPrefix } = await getEdition();
+  if (regPrefix) {
     const { data: n } = await admin.rpc("next_tenant_no", { p_pg: pid });
-    if (typeof n === "number") regNo = `${client.regPrefix}-${String(n).padStart(4, "0")}`;
+    if (typeof n === "number") regNo = `${regPrefix}-${String(n).padStart(4, "0")}`;
   }
 
   const { data: tenant, error } = await admin

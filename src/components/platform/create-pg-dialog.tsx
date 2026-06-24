@@ -75,6 +75,15 @@ function CreatePgForm({ onDone }: { onDone: () => void }) {
             <option value="lifetime">Lifetime — ₹10,000</option>
           </Select>
         </FieldRow>
+        <FieldRow label="Edition" htmlFor="edition">
+          <Select id="edition" name="edition" defaultValue="full">
+            <option value="full">Full — all modules + portal</option>
+            <option value="gvm">Stripped — owner-only records</option>
+          </Select>
+        </FieldRow>
+        <FieldRow label="Reg-no prefix" htmlFor="reg_prefix">
+          <Input id="reg_prefix" name="reg_prefix" placeholder="optional, e.g. GVR" />
+        </FieldRow>
       </div>
 
       <div className="rounded-xl border border-line bg-paper-2/50 p-4">

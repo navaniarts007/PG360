@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
+  Archive,
   ArrowUpRight,
   BedDouble,
+  CreditCard,
   IndianRupee,
   MessagesSquare,
   TrendingDown,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
@@ -16,7 +19,7 @@ import { IssueStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { GvmHome } from "@/components/admin/gvm-home";
 import { requireRole } from "@/lib/guards";
-import { getClient } from "@/lib/get-client";
+import { getEdition } from "@/lib/get-client";
 import {
   adminKpis,
   getMonthBill,
@@ -26,6 +29,13 @@ import {
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+const QUICK_ACTIONS = [
+  { href: "/dashboard/tenants", label: "Tenants", icon: Users },
+  { href: "/dashboard/tenants", label: "Add tenant", icon: UserPlus },
+  { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+  { href: "/dashboard/vacated", label: "Vacated", icon: Archive },
+] as const;
 
 const ISSUE_CATEGORY: Record<string, string> = {
   electricity: "Electricity",
@@ -40,7 +50,7 @@ export default async function AdminDashboard() {
   const user = await requireRole(["admin", "staff"]);
 
   // GVM-style editions get a stripped, mobile-first quick-action home.
-  const client = await getClient();
+  const client = await getEdition();
   if (client.edition === "gvm") {
     return <GvmHome ownerName={client.brandName} />;
   }
@@ -64,6 +74,22 @@ export default async function AdminDashboard() {
         subtitle="Here's how your PG is doing this month."
         action={<RecordPaymentDialog tenants={payTenants} month={month} />}
       />
+
+      {/* quick actions — the everyday jobs, one tap away */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {QUICK_ACTIONS.map((q) => (
+          <Link
+            key={q.label}
+            href={q.href}
+            className="hover-card group flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-soft"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-clay-50 text-clay-600 ring-1 ring-inset ring-clay-100">
+              <q.icon className="size-5" />
+            </span>
+            <span className="text-sm font-semibold text-ink group-hover:text-clay-700">{q.label}</span>
+          </Link>
+        ))}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Active tenants" value={String(kpis.totalTenants)} icon={Users} accent="clay" hint={`${kpis.roomCount} rooms`} />

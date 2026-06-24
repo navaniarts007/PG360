@@ -59,6 +59,9 @@ export interface PgAccount {
   property_address: string | null;
   food_included_default: boolean;
   food_opt_out_deduction: number;
+  edition: "full" | "gvm";
+  portal_enabled: boolean;
+  reg_prefix: string | null;
 }
 
 /** Per-property money rules (notice / lock-in / deposit / electricity cap). */

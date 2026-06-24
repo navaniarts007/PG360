@@ -57,6 +57,37 @@ export async function getPgAccount(id: string): Promise<PgAccount | null> {
   return (data as PgAccount) ?? null;
 }
 
+/** Recent tenant activity for one PG (super-admin account view). */
+export async function getAccountActivity(
+  pgId: string,
+  limit = 15,
+): Promise<Array<TenantEvent & { tenant_name: string }>> {
+  const s = await sb();
+  const { data } = await s
+    .from("tenant_events")
+    .select("*, tenant:tenants(name)")
+    .eq("pg_id", pgId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  type Row = TenantEvent & { tenant: { name: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((e) => ({
+    ...e,
+    tenant_name: e.tenant?.name ?? "Tenant",
+  }));
+}
+
+/** Headline counts for one PG (super-admin account view). */
+export async function getAccountStats(
+  pgId: string,
+): Promise<{ tenants: number; rooms: number }> {
+  const s = await sb();
+  const [t, r] = await Promise.all([
+    s.from("tenants").select("id", { count: "exact", head: true }).eq("pg_id", pgId).eq("status", "active"),
+    s.from("rooms").select("id", { count: "exact", head: true }).eq("pg_id", pgId),
+  ]);
+  return { tenants: t.count ?? 0, rooms: r.count ?? 0 };
+}
+
 /** The active property's money policy, guaranteed non-null (schema defaults when
  *  no row exists yet) — convenient for settings forms. */
 export async function getPgPolicy(pgId: string): Promise<PgPolicy> {

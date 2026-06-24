@@ -19,6 +19,8 @@ const pgSchema = z.object({
   subscription_plan: z.enum(["starter", "pro", "lifetime"]),
   owner_email: z.string().email("Enter a valid owner email."),
   owner_password: z.string().min(6, "Password must be at least 6 characters."),
+  edition: z.enum(["full", "gvm"]).default("full"),
+  reg_prefix: z.string().max(12).optional(),
 });
 
 export async function createPgAction(
@@ -64,6 +66,9 @@ export async function createPgAction(
       subscription_expiry: expiry.toISOString().slice(0, 10),
       created_by: me.id,
       owner_id: created.user.id,
+      edition: d.edition,
+      portal_enabled: d.edition !== "gvm",
+      reg_prefix: d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null,
     })
     .select()
     .single();
@@ -89,6 +94,88 @@ export async function createPgAction(
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
   return { ok: true };
+}
+
+const editSchema = z.object({
+  id: z.string().uuid(),
+  owner_name: z.string().min(2, "Owner name is required."),
+  mobile: z.string().min(8, "Enter a valid mobile number."),
+  location: z.string().min(2, "Location is required."),
+  subscription_plan: z.enum(["starter", "pro", "lifetime"]),
+  edition: z.enum(["full", "gvm"]),
+  reg_prefix: z.string().max(12).optional(),
+});
+
+/** Edit a PG account's details + edition/access (super-admin only). */
+export async function updateAccountAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["super_admin"]);
+  const raw = Object.fromEntries(formData);
+  const parsed = editSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  }
+  const d = parsed.data;
+  const portalEnabled = formData.get("portal_enabled") === "on";
+  const prefix = d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("pg_accounts")
+    .update({
+      owner_name: d.owner_name,
+      mobile: d.mobile,
+      location: d.location,
+      subscription_plan: d.subscription_plan,
+      edition: d.edition,
+      portal_enabled: portalEnabled,
+      reg_prefix: prefix,
+    })
+    .eq("id", d.id);
+  if (error) return { error: humanizeDbError(error, "Could not update the account.") };
+
+  revalidatePath("/platform");
+  revalidatePath("/platform/accounts");
+  revalidatePath(`/platform/accounts/${d.id}`);
+  return { ok: true };
+}
+
+/** Permanently delete a PG account and all its data (super-admin only).
+ *  Child tables cascade on pg_account delete; we also remove the owner +
+ *  tenant auth logins so no orphan accounts are left behind. */
+export async function deleteAccountAction(formData: FormData): Promise<void> {
+  await requireRole(["super_admin"]);
+  const id = String(formData.get("id"));
+  if (!id) return;
+  const admin = createAdminClient();
+
+  // collect auth logins to clean up before the cascade removes their rows
+  const { data: pg } = await admin
+    .from("pg_accounts")
+    .select("owner_id")
+    .eq("id", id)
+    .maybeSingle();
+  const { data: tenantRows } = await admin
+    .from("tenants")
+    .select("user_id")
+    .eq("pg_id", id);
+
+  const { error } = await admin.from("pg_accounts").delete().eq("id", id);
+  if (error) return; // FK/RLS guard — surfaced as a no-op; account stays put
+
+  const userIds = new Set<string>();
+  if (pg?.owner_id) userIds.add(pg.owner_id);
+  for (const t of (tenantRows ?? []) as { user_id: string | null }[]) {
+    if (t.user_id) userIds.add(t.user_id);
+  }
+  for (const uid of userIds) {
+    await admin.auth.admin.deleteUser(uid).catch(() => {});
+  }
+
+  revalidatePath("/platform");
+  revalidatePath("/platform/accounts");
 }
 
 export async function togglePgStatusAction(formData: FormData): Promise<void> {

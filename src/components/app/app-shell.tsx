@@ -73,6 +73,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
     { href: "/dashboard/rooms", label: "Rooms & beds", icon: BedDouble },
     { href: "/dashboard/pricing", label: "Pricing", icon: Tag },
     { href: "/dashboard/tenants", label: "Tenants", icon: Users },
+    { href: "/dashboard/vacated", label: "Vacated", icon: Archive },
     { href: "/dashboard/staff", label: "Staff", icon: UserCog },
     { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, module: "bookings" },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },

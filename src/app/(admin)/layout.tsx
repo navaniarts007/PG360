@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app/app-shell";
 import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getPgAccount } from "@/lib/db";
-import { getClient } from "@/lib/get-client";
+import { getEdition } from "@/lib/get-client";
 
 export default async function AdminLayout({
   children,
@@ -12,7 +12,7 @@ export default async function AdminLayout({
   const [pg, notifications, client] = await Promise.all([
     user.activePropertyId ? getPgAccount(user.activePropertyId) : Promise.resolve(null),
     getMyNotifications(),
-    getClient(),
+    getEdition(),
   ]);
   return (
     <AppShell

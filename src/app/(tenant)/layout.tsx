@@ -2,18 +2,18 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
 import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getMyPg } from "@/lib/db";
-import { getClient } from "@/lib/get-client";
+import { getEdition } from "@/lib/get-client";
 
 export default async function TenantLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Editions without a tenant portal (e.g. GVM) never serve /portal.
-  const client = await getClient();
-  if (!client.portalEnabled) redirect("/dashboard");
-
   const user = await requireRole(["tenant"]);
+  // Editions without a tenant portal (e.g. GVM) never serve /portal.
+  const { portalEnabled } = await getEdition();
+  if (!portalEnabled) redirect("/dashboard");
+
   const [pg, notifications] = await Promise.all([getMyPg(), getMyNotifications()]);
   return (
     <AppShell
