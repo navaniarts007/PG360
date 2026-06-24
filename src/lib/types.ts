@@ -346,4 +346,6 @@ export interface SessionUser {
   activePropertyId: string | null;
   /** Whether the relevant PG is suspended (resolved once, with the session). */
   suspended: boolean;
+  /** Set when a super-admin is viewing a PG as its owner ("open / view as"). */
+  impersonating?: { pgId: string; pgName: string } | null;
 }

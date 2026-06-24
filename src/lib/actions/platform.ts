@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
+import { clearImpersonation, setImpersonation } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 
@@ -176,6 +178,21 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
 
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
+}
+
+/** Super-admin "open / view as": enter a PG and manage it as its owner. */
+export async function startImpersonationAction(formData: FormData): Promise<void> {
+  await requireRole(["super_admin"]);
+  const id = String(formData.get("id"));
+  if (!id) return;
+  await setImpersonation(id);
+  redirect("/dashboard");
+}
+
+/** Exit impersonation and return to the platform panel. */
+export async function stopImpersonationAction(): Promise<void> {
+  await clearImpersonation();
+  redirect("/platform/accounts");
 }
 
 export async function togglePgStatusAction(formData: FormData): Promise<void> {

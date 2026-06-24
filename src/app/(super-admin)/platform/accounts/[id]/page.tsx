@@ -5,12 +5,14 @@ import {
   ArrowLeft,
   BedDouble,
   Building2,
+  LogIn,
   Mail,
   MapPin,
   Phone,
   Trash2,
   Users,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PgStatusPill } from "@/components/ui/status";
@@ -18,7 +20,7 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { EditAccountDialog } from "@/components/platform/edit-account-dialog";
 import { PgStatusToggle } from "@/components/platform/pg-status-toggle";
 import { requireRole } from "@/lib/guards";
-import { deleteAccountAction } from "@/lib/actions/platform";
+import { deleteAccountAction, startImpersonationAction } from "@/lib/actions/platform";
 import { getAccountActivity, getAccountStats, getPgAccount } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import type { TenantEventType } from "@/lib/types";
@@ -84,6 +86,12 @@ export default async function AccountDetail({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <form action={startImpersonationAction}>
+            <input type="hidden" name="id" value={account.id} />
+            <Button type="submit" variant="outline">
+              <LogIn className="size-4" /> Open dashboard
+            </Button>
+          </form>
           <PgStatusToggle id={account.id} status={account.status} />
           <EditAccountDialog account={account} />
         </div>

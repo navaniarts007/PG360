@@ -26,6 +26,7 @@ export default async function AdminLayout({
       settings={pg?.settings ?? {}}
       edition={client.edition}
       brandName={client.brandName}
+      impersonating={user.impersonating ?? null}
     >
       {children}
     </AppShell>

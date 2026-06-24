@@ -12,6 +12,7 @@ import type { PropertyRef, Role, SessionUser } from "./types";
    ========================================================================= */
 
 const ACTIVE_PROPERTY_COOKIE = "pg360_active_property";
+const IMPERSONATE_COOKIE = "pg360_impersonate";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -61,6 +62,35 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
   if (!profile) return null;
 
   const role = profile.role as Role;
+
+  // Super-admin "open / view as": when impersonating a PG, present an effective
+  // admin session scoped to it. RLS still sees the real super_admin role (via
+  // current_role()), so reads/writes are permitted by the super_admin policies.
+  if (role === "super_admin") {
+    const store = await cookies();
+    const pgId = store.get(IMPERSONATE_COOKIE)?.value;
+    if (pgId) {
+      const { data: pg } = await supabase
+        .from("pg_accounts")
+        .select("pg_name")
+        .eq("id", pgId)
+        .maybeSingle();
+      if (pg) {
+        return {
+          id: profile.id,
+          role: "admin",
+          pg_id: pgId,
+          tenant_id: null,
+          full_name: profile.full_name,
+          email: user.email ?? "",
+          properties: [{ id: pgId, name: pg.pg_name }],
+          activePropertyId: pgId,
+          suspended: false,
+          impersonating: { pgId, pgName: pg.pg_name },
+        };
+      }
+    }
+  }
 
   // Role-dependent lookups in parallel. The pg `status` is fetched here too, so
   // the per-page suspension check costs no extra round-trip (see requireRole).
@@ -181,6 +211,23 @@ export async function setActiveProperty(propertyId: string): Promise<void> {
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });
+}
+
+/** Super-admin starts/stops "open / view as" for a PG. */
+export async function setImpersonation(pgId: string): Promise<void> {
+  const store = await cookies();
+  store.set(IMPERSONATE_COOKIE, pgId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 6, // a working session; cleared on exit
+  });
+}
+
+export async function clearImpersonation(): Promise<void> {
+  const store = await cookies();
+  store.delete(IMPERSONATE_COOKIE);
 }
 
 /** Landing path for a given role after login. */

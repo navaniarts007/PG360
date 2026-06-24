@@ -10,6 +10,7 @@ import {
   Building2,
   CalendarCheck,
   CreditCard,
+  Eye,
   LayoutDashboard,
   type LucideIcon,
   Menu,
@@ -26,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import type { Edition } from "@/lib/clients";
+import { stopImpersonationAction } from "@/lib/actions/platform";
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
@@ -109,6 +111,7 @@ export function AppShell({
   settings,
   edition = "full",
   brandName,
+  impersonating,
   children,
 }: {
   role: Role;
@@ -121,6 +124,7 @@ export function AppShell({
   settings: PropertySettings;
   edition?: Edition;
   brandName?: string;
+  impersonating?: { pgId: string; pgName: string } | null;
   children: React.ReactNode;
 }) {
   // GVM-style editions get a stripped owner-only nav; everyone else by role.
@@ -240,6 +244,24 @@ export function AppShell({
       )}
 
       <div className="flex min-h-screen flex-col">
+        {/* impersonation banner — super-admin viewing a PG as its owner */}
+        {impersonating && (
+          <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-ink px-4 py-2 text-paper sm:px-6">
+            <span className="flex items-center gap-2 text-sm">
+              <Eye className="size-4" />
+              Viewing <strong className="font-semibold">{impersonating.pgName}</strong> as its owner
+            </span>
+            <form action={stopImpersonationAction}>
+              <button
+                type="submit"
+                className="rounded-lg bg-paper/15 px-3 py-1 text-xs font-semibold text-paper transition-colors hover:bg-paper/25"
+              >
+                Exit to platform
+              </button>
+            </form>
+          </div>
+        )}
+
         {/* mobile topbar */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line bg-paper/80 px-4 backdrop-blur lg:hidden">
           <button
