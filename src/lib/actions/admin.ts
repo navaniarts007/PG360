@@ -233,6 +233,8 @@ const tenantSchema = z.object({
   rent_due_day: z.coerce.number().int().min(1).max(28),
   login_password: z.string().min(6, "Password must be 6+ characters."),
   joining_fee: z.coerce.number().int().min(0).optional(),
+  avatar_url: z.string().optional(),
+  aadhaar_photo_url: z.string().optional(),
 });
 
 export async function addTenantAction(
@@ -293,6 +295,8 @@ export async function addTenantAction(
       email: d.email,
       reg_no: regNo,
       aadhaar_number: d.aadhaar_number || null,
+      avatar_url: d.avatar_url || null,
+      aadhaar_photo_url: d.aadhaar_photo_url || null,
       rent_amount: rent,
       security_deposit: d.security_deposit,
       checkin_date: d.checkin_date,
@@ -451,6 +455,8 @@ const tenantUpdateSchema = z.object({
   bed_id: z.string().optional(),
   security_deposit: z.coerce.number().min(0),
   rent_due_day: z.coerce.number().int().min(1).max(28),
+  avatar_url: z.string().optional(),
+  aadhaar_photo_url: z.string().optional(),
 });
 
 export async function updateTenantAction(
@@ -490,6 +496,8 @@ export async function updateTenantAction(
       phone: d.phone,
       email: d.email,
       aadhaar_number: d.aadhaar_number || null,
+      ...(d.avatar_url ? { avatar_url: d.avatar_url } : {}),
+      ...(d.aadhaar_photo_url ? { aadhaar_photo_url: d.aadhaar_photo_url } : {}),
       bed_id: newBedId,
       room_id: roomId,
       rent_amount: rent,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { AlertCircle, Loader2, Pencil, UserPlus } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { AlertCircle, Camera, ImageUp, Loader2, Pencil, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
@@ -10,6 +10,7 @@ import {
   updateTenantAction,
   type ActionState,
 } from "@/lib/actions/admin";
+import { getUploadSignatureAction } from "@/lib/actions/upload";
 import type { BedOption } from "@/lib/db";
 import type { Tenant } from "@/lib/types";
 
@@ -62,20 +63,92 @@ function TenantForm({
     tenant ? updateTenantAction : addTenantAction,
     {},
   );
+  const [selfie, setSelfie] = useState<string | null>(tenant?.avatar_url ?? null); // check-in photo
+  const [photo, setPhoto] = useState<string | null>(tenant?.aadhaar_photo_url ?? null); // ID document
+  const [busy, setBusy] = useState<null | "selfie" | "id">(null);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const selfieRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
   const options = beds.filter((b) => b.status === "vacant" || b.id === tenant?.bed_id);
 
+  const upload = async (file: File, which: "selfie" | "id") => {
+    setBusy(which);
+    setUploadErr(null);
+    try {
+      const sig = await getUploadSignatureAction(which === "selfie" ? "pg360/avatars" : "pg360/kyc");
+      if (!sig.ok) throw new Error(sig.error);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("api_key", sig.apiKey);
+      fd.append("timestamp", String(sig.timestamp));
+      fd.append("signature", sig.signature);
+      fd.append("folder", sig.folder);
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
+        { method: "POST", body: fd },
+      );
+      const json = (await res.json()) as { secure_url?: string };
+      if (!json.secure_url) throw new Error("Upload failed");
+      (which === "selfie" ? setSelfie : setPhoto)(json.secure_url);
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <form action={action} className="space-y-4">
       {tenant && <input type="hidden" name="id" value={tenant.id} />}
+      <input type="hidden" name="avatar_url" value={selfie ?? ""} />
+      <input type="hidden" name="aadhaar_photo_url" value={photo ?? ""} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
         </div>
       )}
+
+      {/* check-in photo — take a live photo of the tenant */}
+      <div className="flex items-center gap-4 rounded-xl border border-clay-100 bg-clay-50/40 p-4">
+        {selfie ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={selfie} alt="Tenant" className="size-20 rounded-xl object-cover ring-2 ring-clay-200" />
+        ) : (
+          <div className="grid size-20 place-items-center rounded-xl bg-paper text-ink-muted ring-1 ring-line">
+            <Camera className="size-7" />
+          </div>
+        )}
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-ink">Check-in photo</p>
+          <p className="mb-2 text-xs text-ink-muted">A quick photo of the tenant at check-in.</p>
+          <input
+            ref={selfieRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f, "selfie");
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => selfieRef.current?.click()}
+            disabled={busy === "selfie"}
+            className="inline-flex items-center gap-2 rounded-lg bg-clay-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-clay-700 disabled:opacity-60"
+          >
+            {busy === "selfie" ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+            {selfie ? "Retake photo" : "Take photo"}
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <FieldRow label="Full name" htmlFor="name" className="col-span-2">
           <Input id="name" name="name" defaultValue={tenant?.name ?? ""} placeholder="Arjun Nair" required />
@@ -124,6 +197,43 @@ function TenantForm({
         )}
       </div>
 
+      {/* Aadhaar / ID photo */}
+      <div className="rounded-xl border border-line bg-paper-2/50 p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          ID photo (Aadhaar / proof)
+        </p>
+        <div className="flex items-center gap-3">
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photo} alt="ID" className="size-16 rounded-lg border border-line object-cover" />
+          ) : (
+            <div className="grid size-16 place-items-center rounded-lg border border-dashed border-line-strong text-ink-muted">
+              <ImageUp className="size-5" />
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f, "id");
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy === "id"}
+            className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
+          >
+            {busy === "id" ? <Loader2 className="size-4 animate-spin" /> : <ImageUp className="size-4" />}
+            {photo ? "Replace photo" : "Upload photo"}
+          </button>
+        </div>
+        {uploadErr && <p className="mt-1.5 text-xs text-rose-600">{uploadErr}</p>}
+      </div>
+
       {!tenant ? (
         <div className="rounded-xl border border-line bg-paper-2/50 p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -148,7 +258,7 @@ function TenantForm({
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" className="flex-1" disabled={pending}>
+        <Button type="submit" className="flex-1" disabled={pending || busy !== null}>
           {pending ? (
             <><Loader2 className="size-4 animate-spin" /> Saving…</>
           ) : tenant ? (
