@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BedDouble,
   Building2,
+  FileText,
   LogIn,
   Mail,
   MapPin,
@@ -18,11 +19,17 @@ import { Badge } from "@/components/ui/badge";
 import { PgStatusPill } from "@/components/ui/status";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { EditAccountDialog } from "@/components/platform/edit-account-dialog";
+import { CreateInvoiceDialog } from "@/components/platform/create-invoice-dialog";
 import { PgStatusToggle } from "@/components/platform/pg-status-toggle";
 import { requireRole } from "@/lib/guards";
-import { deleteAccountAction, startImpersonationAction } from "@/lib/actions/platform";
-import { getAccountActivity, getAccountStats, getPgAccount } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import {
+  deleteAccountAction,
+  deleteInvoiceAction,
+  startImpersonationAction,
+  toggleInvoicePaidAction,
+} from "@/lib/actions/platform";
+import { getAccountActivity, getAccountStats, getPgAccount, listInvoices } from "@/lib/db";
+import { formatDate, inr } from "@/lib/utils";
 import type { TenantEventType } from "@/lib/types";
 
 export const metadata: Metadata = { title: "PG account" };
@@ -52,9 +59,10 @@ export default async function AccountDetail({
   const account = await getPgAccount(id);
   if (!account) notFound();
 
-  const [stats, activity] = await Promise.all([
+  const [stats, activity, invoices] = await Promise.all([
     getAccountStats(id),
     getAccountActivity(id),
+    listInvoices(id),
   ]);
 
   return (
@@ -137,6 +145,65 @@ export default async function AccountDetail({
               iconOnly={false}
             />
           </div>
+        </Card>
+
+        {/* billing invoices */}
+        <Card className="lg:col-span-3">
+          <div className="flex items-center justify-between border-b border-line p-5 sm:p-6">
+            <div>
+              <h3 className="text-lg text-ink">Invoices</h3>
+              <p className="mt-0.5 text-sm text-ink-muted">PG360 subscription billing for this client.</p>
+            </div>
+            <CreateInvoiceDialog pgId={account.id} />
+          </div>
+          {invoices.length === 0 ? (
+            <p className="p-6 text-sm text-ink-muted">No invoices yet — generate the first one.</p>
+          ) : (
+            <div className="divide-y divide-line">
+              {invoices.map((iv) => {
+                const total = iv.amount + Math.round((iv.amount * iv.tax_percent) / 100);
+                return (
+                  <div key={iv.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 font-semibold text-ink">
+                        INV-{iv.number}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            iv.status === "paid"
+                              ? "bg-teal-50 text-teal-600 ring-1 ring-teal-100"
+                              : "bg-gold-50 text-gold-600 ring-1 ring-gold-100"
+                          }`}
+                        >
+                          {iv.status}
+                        </span>
+                      </p>
+                      <p className="truncate text-xs text-ink-muted">
+                        {iv.description} · {formatDate(iv.issue_date)}
+                        {iv.period_label ? ` · ${iv.period_label}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-ink tnum">{inr(total)}</span>
+                      <Link
+                        href={`/invoice/${iv.id}`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-clay-50 px-3 py-1.5 text-xs font-semibold text-clay-700 hover:bg-clay-100"
+                      >
+                        <FileText className="size-3.5" /> Print
+                      </Link>
+                      <form action={toggleInvoicePaidAction}>
+                        <input type="hidden" name="id" value={iv.id} />
+                        <button className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600">
+                          {iv.status === "paid" ? "Mark unpaid" : "Mark paid"}
+                        </button>
+                      </form>
+                      <ConfirmDelete action={deleteInvoiceAction} id={iv.id} title="Delete invoice" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
 
         {/* activity */}

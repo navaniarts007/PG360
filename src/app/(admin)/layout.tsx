@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
 import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getPgAccount } from "@/lib/db";
@@ -9,6 +10,8 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole(["admin", "staff"]);
+  // First-login terms acceptance (skipped for an impersonating super-admin).
+  if (!user.termsAcceptedAt && !user.impersonating) redirect("/accept-terms");
   const [pg, notifications, client] = await Promise.all([
     user.activePropertyId ? getPgAccount(user.activePropertyId) : Promise.resolve(null),
     getMyNotifications(),

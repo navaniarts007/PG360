@@ -56,12 +56,13 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, pg_id, full_name")
+    .select("id, role, pg_id, full_name, terms_accepted_at")
     .eq("id", user.id)
     .single();
   if (!profile) return null;
 
   const role = profile.role as Role;
+  const termsAcceptedAt = (profile as { terms_accepted_at: string | null }).terms_accepted_at ?? null;
 
   // Super-admin "open / view as": when impersonating a PG, present an effective
   // admin session scoped to it. RLS still sees the real super_admin role (via
@@ -87,6 +88,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
           activePropertyId: pgId,
           suspended: false,
           impersonating: { pgId, pgName: pg.pg_name },
+          termsAcceptedAt: new Date().toISOString(), // never gate an impersonating super-admin
         };
       }
     }
@@ -139,6 +141,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     properties,
     activePropertyId,
     suspended,
+    termsAcceptedAt,
   };
 });
 

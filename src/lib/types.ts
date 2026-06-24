@@ -348,4 +348,22 @@ export interface SessionUser {
   suspended: boolean;
   /** Set when a super-admin is viewing a PG as its owner ("open / view as"). */
   impersonating?: { pgId: string; pgName: string } | null;
+  /** When the user accepted the current terms (null = not yet, gate them). */
+  termsAcceptedAt?: string | null;
+}
+
+export interface PlatformInvoice {
+  id: string;
+  pg_id: string;
+  number: number;
+  description: string;
+  amount: number;
+  tax_percent: number;
+  period_label: string | null;
+  issue_date: string;
+  due_date: string | null;
+  status: "unpaid" | "paid";
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
 }

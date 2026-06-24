@@ -195,6 +195,75 @@ export async function stopImpersonationAction(): Promise<void> {
   redirect("/platform/accounts");
 }
 
+/* ----------------------------------------------------- billing invoices --- */
+
+const invoiceSchema = z.object({
+  pg_id: z.string().uuid(),
+  description: z.string().min(2, "Description is required."),
+  amount: z.coerce.number().min(0, "Enter an amount."),
+  tax_percent: z.coerce.number().min(0).max(100).default(0),
+  period_label: z.string().optional(),
+  due_date: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export async function createInvoiceAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const me = await requireRole(["super_admin"]);
+  const parsed = invoiceSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  }
+  const d = parsed.data;
+  const admin = createAdminClient();
+  const { error } = await admin.from("platform_invoices").insert({
+    pg_id: d.pg_id,
+    description: d.description,
+    amount: d.amount,
+    tax_percent: d.tax_percent,
+    period_label: d.period_label?.trim() || null,
+    due_date: d.due_date?.trim() || null,
+    notes: d.notes?.trim() || null,
+    created_by: me.id,
+  });
+  if (error) return { error: humanizeDbError(error, "Could not create the invoice.") };
+  revalidatePath(`/platform/accounts/${d.pg_id}`);
+  return { ok: true };
+}
+
+export async function toggleInvoicePaidAction(formData: FormData): Promise<void> {
+  await requireRole(["super_admin"]);
+  const id = String(formData.get("id"));
+  const admin = createAdminClient();
+  const { data: inv } = await admin
+    .from("platform_invoices")
+    .select("status, pg_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!inv) return;
+  await admin
+    .from("platform_invoices")
+    .update({ status: inv.status === "paid" ? "unpaid" : "paid" })
+    .eq("id", id);
+  revalidatePath(`/platform/accounts/${inv.pg_id}`);
+  revalidatePath(`/invoice/${id}`);
+}
+
+export async function deleteInvoiceAction(formData: FormData): Promise<void> {
+  await requireRole(["super_admin"]);
+  const id = String(formData.get("id"));
+  const admin = createAdminClient();
+  const { data: inv } = await admin
+    .from("platform_invoices")
+    .select("pg_id")
+    .eq("id", id)
+    .maybeSingle();
+  await admin.from("platform_invoices").delete().eq("id", id);
+  if (inv) revalidatePath(`/platform/accounts/${inv.pg_id}`);
+}
+
 export async function togglePgStatusAction(formData: FormData): Promise<void> {
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));

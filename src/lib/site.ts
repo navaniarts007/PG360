@@ -11,6 +11,25 @@ export const CONTACT = {
   emails: ["contact@pg360.software", "pg360software@gmail.com"],
 } as const;
 
+/* ----------------------------------------------- billing (we bill clients) ---
+ * Seller details printed on PG360 subscription invoices. Fill in the real
+ * company/GST/bank details before sending invoices to clients. */
+export const BILLING = {
+  company: "PG360 Software",
+  tagline: "PG & Hostel Management Platform",
+  address: "Bengaluru, Karnataka, India",
+  email: "pg360software@gmail.com",
+  phone: "+91 63834 34721",
+  gstin: "", // optional — fill if GST-registered
+  pan: "", // optional
+  // where the client pays us
+  upi: "", // e.g. pg360@okhdfcbank
+  bank: "", // e.g. "HDFC Bank · A/C 1234567890 · IFSC HDFC0000123"
+} as const;
+
+/** Current terms version. Bump this string to force everyone to re-accept. */
+export const TERMS_VERSION = "2026-06-24";
+
 const REPO = "https://github.com/navaniarts007/PG360";
 
 /**

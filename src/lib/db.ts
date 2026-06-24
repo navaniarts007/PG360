@@ -15,6 +15,7 @@ import type {
   MealType,
   Payment,
   PgAccount,
+  PlatformInvoice,
   PgPolicy,
   RateCard,
   Room,
@@ -74,6 +75,37 @@ export async function getAccountActivity(
     ...e,
     tenant_name: e.tenant?.name ?? "Tenant",
   }));
+}
+
+/** PG360 subscription invoices for one PG (super-admin / owner read). */
+export async function listInvoices(pgId: string): Promise<PlatformInvoice[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("platform_invoices")
+    .select("*")
+    .eq("pg_id", pgId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as PlatformInvoice[];
+}
+
+/** One invoice + its billed PG account (for the printable invoice page). */
+export async function getInvoiceWithPg(
+  id: string,
+): Promise<{ invoice: PlatformInvoice; pg: PgAccount } | null> {
+  const s = await sb();
+  const { data: invoice } = await s
+    .from("platform_invoices")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!invoice) return null;
+  const { data: pg } = await s
+    .from("pg_accounts")
+    .select("*")
+    .eq("id", (invoice as PlatformInvoice).pg_id)
+    .maybeSingle();
+  if (!pg) return null;
+  return { invoice: invoice as PlatformInvoice, pg: pg as PgAccount };
 }
 
 /** Headline counts for one PG (super-admin account view). */
