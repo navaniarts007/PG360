@@ -195,6 +195,23 @@ export async function stopImpersonationAction(): Promise<void> {
   redirect("/platform/accounts");
 }
 
+/** Reset a PG owner's login password (super-admin only). */
+export async function resetOwnerPasswordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["super_admin"]);
+  const ownerId = String(formData.get("owner_id"));
+  const password = String(formData.get("new_password") ?? "");
+  if (!ownerId) return { error: "This account has no owner login linked." };
+  if (password.length < 6) return { error: "Password must be at least 6 characters." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(ownerId, { password });
+  if (error) return { error: humanizeDbError(error, "Could not reset the password.") };
+  return { ok: true };
+}
+
 /* ----------------------------------------------------- billing invoices --- */
 
 const invoiceSchema = z.object({

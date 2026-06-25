@@ -20,6 +20,7 @@ import { PgStatusPill } from "@/components/ui/status";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { EditAccountDialog } from "@/components/platform/edit-account-dialog";
 import { CreateInvoiceDialog } from "@/components/platform/create-invoice-dialog";
+import { ResetPasswordDialog } from "@/components/platform/reset-password-dialog";
 import { PgStatusToggle } from "@/components/platform/pg-status-toggle";
 import { requireRole } from "@/lib/guards";
 import {
@@ -28,7 +29,13 @@ import {
   startImpersonationAction,
   toggleInvoicePaidAction,
 } from "@/lib/actions/platform";
-import { getAccountActivity, getAccountStats, getPgAccount, listInvoices } from "@/lib/db";
+import {
+  getAccountActivity,
+  getAccountStats,
+  getAuthEmail,
+  getPgAccount,
+  listInvoices,
+} from "@/lib/db";
 import { formatDate, inr } from "@/lib/utils";
 import type { TenantEventType } from "@/lib/types";
 
@@ -59,10 +66,11 @@ export default async function AccountDetail({
   const account = await getPgAccount(id);
   if (!account) notFound();
 
-  const [stats, activity, invoices] = await Promise.all([
+  const [stats, activity, invoices, ownerEmail] = await Promise.all([
     getAccountStats(id),
     getAccountActivity(id),
     listInvoices(id),
+    getAuthEmail(account.owner_id),
   ]);
 
   return (
@@ -100,6 +108,7 @@ export default async function AccountDetail({
               <LogIn className="size-4" /> Open dashboard
             </Button>
           </form>
+          <ResetPasswordDialog ownerId={account.owner_id} ownerEmail={ownerEmail} />
           <PgStatusToggle id={account.id} status={account.status} />
           <EditAccountDialog account={account} />
         </div>
@@ -110,9 +119,10 @@ export default async function AccountDetail({
           <h3 className="text-lg text-ink">Owner &amp; plan</h3>
           <dl className="mt-4 space-y-3 text-sm">
             <Row icon={Users} label="Owner" value={account.owner_name} />
+            <Row icon={Mail} label="Login email" value={ownerEmail ?? "—"} />
             <Row icon={Phone} label="Mobile" value={account.mobile} />
             <Row icon={MapPin} label="Location" value={account.location} />
-            <Row icon={Mail} label="Plan" value={`${PLAN_LABEL[account.subscription_plan] ?? account.subscription_plan} · expires ${formatDate(account.subscription_expiry)}`} />
+            <Row icon={FileText} label="Plan" value={`${PLAN_LABEL[account.subscription_plan] ?? account.subscription_plan} · expires ${formatDate(account.subscription_expiry)}`} />
           </dl>
         </Card>
 

@@ -77,6 +77,14 @@ export async function getAccountActivity(
   }));
 }
 
+/** The login email for an auth user (super-admin account view). */
+export async function getAuthEmail(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const admin = createAdminClient();
+  const { data } = await admin.auth.admin.getUserById(userId);
+  return data.user?.email ?? null;
+}
+
 /** PG360 subscription invoices for one PG (super-admin / owner read). */
 export async function listInvoices(pgId: string): Promise<PlatformInvoice[]> {
   const s = await sb();
