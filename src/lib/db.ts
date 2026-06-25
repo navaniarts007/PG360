@@ -77,6 +77,22 @@ export async function getAccountActivity(
   }));
 }
 
+/** All PG360 invoices across the platform (super-admin), newest first. */
+export async function listAllInvoices(): Promise<
+  Array<PlatformInvoice & { pg_name: string }>
+> {
+  const s = await sb();
+  const { data } = await s
+    .from("platform_invoices")
+    .select("*, pg:pg_accounts(pg_name)")
+    .order("created_at", { ascending: false });
+  type Row = PlatformInvoice & { pg: { pg_name: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((iv) => ({
+    ...iv,
+    pg_name: iv.pg?.pg_name ?? "—",
+  }));
+}
+
 /** The login email for an auth user (super-admin account view). */
 export async function getAuthEmail(userId: string | null): Promise<string | null> {
   if (!userId) return null;

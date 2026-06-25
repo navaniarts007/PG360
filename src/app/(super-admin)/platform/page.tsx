@@ -13,14 +13,24 @@ import { Card } from "@/components/ui/card";
 import { PgStatusPill } from "@/components/ui/status";
 import { Badge } from "@/components/ui/badge";
 import { CreatePgDialog } from "@/components/platform/create-pg-dialog";
-import { listPgAccounts, platformStats } from "@/lib/db";
+import { listAllInvoices, listPgAccounts, platformStats } from "@/lib/db";
 import { formatDate, inrCompact, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Platform overview" };
 
 export default async function PlatformOverview() {
-  const [stats, all] = await Promise.all([platformStats(), listPgAccounts()]);
+  const [stats, all, invoices] = await Promise.all([
+    platformStats(),
+    listPgAccounts(),
+    listAllInvoices(),
+  ]);
   const recent = all.slice(0, 5);
+  const recentInvoices = invoices.slice(0, 6);
+  const invTotal = (iv: (typeof invoices)[number]) =>
+    iv.amount + Math.round((iv.amount * iv.tax_percent) / 100);
+  const outstanding = invoices
+    .filter((iv) => iv.status === "unpaid")
+    .reduce((s, iv) => s + invTotal(iv), 0);
 
   return (
     <div className="space-y-7">
@@ -82,6 +92,67 @@ export default async function PlatformOverview() {
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between p-5 sm:p-6">
+          <div>
+            <h3 className="text-lg text-ink">Recent invoices</h3>
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {inr(outstanding)} outstanding across the platform.
+            </p>
+          </div>
+          <Link
+            href="/platform/invoices"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-clay-600 hover:text-clay-700"
+          >
+            View all <ArrowUpRight className="size-4" />
+          </Link>
+        </div>
+        {recentInvoices.length === 0 ? (
+          <p className="px-6 pb-6 text-sm text-ink-muted">
+            No invoices yet — open a PG account to generate one.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-y border-line bg-paper-2/40 text-left text-xs uppercase tracking-wide text-ink-muted">
+                  <th className="px-6 py-3 font-semibold">Invoice</th>
+                  <th className="px-6 py-3 font-semibold">PG</th>
+                  <th className="px-6 py-3 font-semibold">Amount</th>
+                  <th className="px-6 py-3 font-semibold">Status</th>
+                  <th className="px-6 py-3 font-semibold">Issued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentInvoices.map((iv) => (
+                  <tr key={iv.id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
+                    <td className="px-6 py-3.5 font-semibold text-ink">
+                      <Link href={`/invoice/${iv.id}`} target="_blank" className="hover:text-clay-600">
+                        INV-{iv.number}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-3.5 text-ink-soft">{iv.pg_name}</td>
+                    <td className="px-6 py-3.5 font-semibold text-ink tnum">{inr(invTotal(iv))}</td>
+                    <td className="px-6 py-3.5">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          iv.status === "paid"
+                            ? "bg-teal-50 text-teal-600 ring-1 ring-teal-100"
+                            : "bg-gold-50 text-gold-600 ring-1 ring-gold-100"
+                        }`}
+                      >
+                        {iv.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3.5 text-ink-muted tnum">{formatDate(iv.issue_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       <div className="rounded-2xl border border-line bg-gradient-to-br from-clay-50 to-paper-2/40 p-6">

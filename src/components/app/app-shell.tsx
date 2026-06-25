@@ -68,6 +68,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
   super: [
     { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/platform/accounts", label: "PG Accounts", icon: Building2 },
+    { href: "/platform/invoices", label: "Invoices", icon: Receipt },
   ],
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
