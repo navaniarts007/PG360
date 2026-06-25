@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, IndianRupee, Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -82,10 +83,14 @@ function PaymentForm({
   const [food, setFood] = useState(0);
   const [other, setOther] = useState(0);
   const [paid, setPaid] = useState(0);
+  const router = useRouter();
 
   useEffect(() => {
-    if (state.ok) onDone();
-  }, [state.ok, onDone]);
+    if (state.ok) {
+      router.refresh();
+      onDone();
+    }
+  }, [state.ok, onDone, router]);
 
   // keep rent in sync when tenant changes
   useEffect(() => {

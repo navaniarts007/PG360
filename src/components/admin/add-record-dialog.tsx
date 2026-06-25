@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Camera, ImageUp, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -36,10 +37,14 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    if (state.ok) onDone();
-  }, [state.ok, onDone]);
+    if (state.ok) {
+      router.refresh();
+      onDone();
+    }
+  }, [state.ok, onDone, router]);
 
   const options = beds.filter((b) => b.status === "vacant");
 
