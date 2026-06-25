@@ -268,10 +268,13 @@ export async function addTenantAction(
     user_metadata: { full_name: d.name },
   });
   if (userErr || !created.user) {
+    const m = userErr?.message ?? "";
+    const code = (userErr as { code?: string } | null)?.code ?? "";
+    const exists = code === "email_exists" || /already|registered|exists|duplicate/i.test(m);
     return {
-      error: /already|registered|exists/i.test(humanizeDbError(userErr, ""))
-        ? "That email already has a login."
-        : humanizeDbError(userErr, "Could not create the tenant login."),
+      error: exists
+        ? "That email already has a login. Use a different email for this tenant."
+        : m || "Could not create the tenant login.",
     };
   }
 
