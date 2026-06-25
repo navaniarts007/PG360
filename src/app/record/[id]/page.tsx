@@ -42,7 +42,12 @@ export default async function RecordPage({
 
   return (
     <main className="min-h-screen bg-paper-2 px-4 py-8 print:bg-white print:p-0">
-      <style>{`@media print { .no-print { display:none !important; } @page { margin: 14mm; } }`}</style>
+      <style>{`@media print {
+        .no-print { display:none !important; }
+        @page { margin: 14mm; }
+        img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        section { break-inside: avoid; }
+      }`}</style>
       <div className="mx-auto max-w-2xl">
         <div className="no-print mb-5 flex items-center justify-between">
           <Link href="/dashboard/tenants" className="text-sm font-semibold text-clay-600 hover:text-clay-700">
@@ -63,27 +68,55 @@ export default async function RecordPage({
             </div>
           </header>
 
-          {/* identity + photo */}
+          {/* identity + profile photo */}
           <section className="mt-6 flex gap-5">
-            {tenant.avatar_url || tenant.aadhaar_photo_url ? (
+            {tenant.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={tenant.avatar_url ?? tenant.aadhaar_photo_url ?? ""}
+                src={tenant.avatar_url}
                 alt="Tenant"
-                className="size-28 shrink-0 rounded-xl border border-line object-cover"
+                loading="eager"
+                className="h-40 w-32 shrink-0 rounded-xl border border-line bg-paper-2 object-cover"
+                style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+              />
+            ) : tenant.aadhaar_photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tenant.aadhaar_photo_url}
+                alt="Tenant ID"
+                loading="eager"
+                className="h-40 w-32 shrink-0 rounded-xl border border-line bg-paper-2 object-contain"
+                style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
               />
             ) : (
-              <div className="grid size-28 shrink-0 place-items-center rounded-xl border border-dashed border-line text-xs text-ink-muted">
+              <div className="grid h-40 w-32 shrink-0 place-items-center rounded-xl border border-dashed border-line text-xs text-ink-muted">
                 No photo
               </div>
             )}
-            <div className="grid flex-1 grid-cols-2 gap-4">
+            <div className="grid flex-1 grid-cols-2 gap-4 self-center">
               <Field label="Name" value={tenant.name} />
               <Field label="Phone" value={tenant.phone} />
               <Field label="Aadhaar / ID" value={tenant.aadhaar_number} />
               <Field label="Status" value={tenant.status === "checked_out" ? "Vacated" : "Staying"} />
             </div>
           </section>
+
+          {/* ID document — the Aadhaar / proof card uploaded at check-in, shown
+              large and uncropped so it is clearly legible on the printed page. */}
+          {tenant.aadhaar_photo_url && (
+            <section className="mt-6 break-inside-avoid">
+              <h2 className="font-display text-lg text-ink">Identity document</h2>
+              <p className="mb-2 text-xs text-ink-muted">Aadhaar / ID proof submitted at check-in.</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={tenant.aadhaar_photo_url}
+                alt="Aadhaar / ID proof"
+                loading="eager"
+                className="w-full max-w-md rounded-xl border border-line bg-white object-contain"
+                style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+              />
+            </section>
+          )}
 
           {/* stay */}
           <section className="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-line bg-paper-2/40 p-5 sm:grid-cols-4">
