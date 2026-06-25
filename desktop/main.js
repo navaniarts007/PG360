@@ -2,7 +2,7 @@
 // live, server-rendered web app — so website deploys reach the desktop app with
 // no rebuild. The installer is only rebuilt for native/version changes.
 
-const { app, BrowserWindow, shell, Menu } = require("electron");
+const { app, BrowserWindow, shell, Menu, ipcMain } = require("electron");
 const path = require("node:path");
 
 const APP_URL = "https://pg360.software";
@@ -65,6 +65,13 @@ function createWindow() {
   });
 }
 
+// Print / Save-as-PDF the current in-app page (keeps the logged-in session).
+function printWindow() {
+  if (!mainWindow) return;
+  mainWindow.webContents.print({ printBackground: true });
+}
+ipcMain.handle("pg360:print", printWindow);
+
 // Minimal menu: keep standard edit shortcuts (copy/paste) + reload, drop the
 // noisy default template.
 function buildMenu() {
@@ -72,6 +79,8 @@ function buildMenu() {
     {
       label: "PG360",
       submenu: [
+        { label: "Print…", accelerator: "CmdOrCtrl+P", click: printWindow },
+        { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
         { type: "separator" },
