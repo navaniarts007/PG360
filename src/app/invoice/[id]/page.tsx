@@ -9,6 +9,13 @@ import { PrintButton } from "@/components/tenant/print-button";
 
 export const metadata: Metadata = { title: "Invoice" };
 
+const CYCLE_LABEL: Record<string, string> = {
+  one_time: "One-time payment",
+  monthly: "Monthly subscription",
+  yearly: "Annual subscription",
+};
+const CYCLE_SUFFIX: Record<string, string> = { monthly: " / month", yearly: " / year", one_time: "" };
+
 export default async function InvoicePage({
   params,
 }: {
@@ -71,12 +78,11 @@ export default async function InvoicePage({
               <p className="text-sm text-ink-muted">{pg.location}</p>
               <p className="text-sm text-ink-muted">{pg.mobile}</p>
             </div>
-            {iv.period_label && (
-              <div className="sm:text-right">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Billing period</p>
-                <p className="mt-1 font-medium text-ink">{iv.period_label}</p>
-              </div>
-            )}
+            <div className="sm:text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Billing</p>
+              <p className="mt-1 font-medium text-ink">{CYCLE_LABEL[iv.billing_cycle]}</p>
+              {iv.period_label && <p className="text-sm text-ink-muted">{iv.period_label}</p>}
+            </div>
           </div>
 
           {/* line items */}
@@ -106,7 +112,10 @@ export default async function InvoicePage({
               <p className="text-sm text-ink-muted">Total payable</p>
               <p className="mt-0.5 text-sm text-ink-soft">{rupeesInWords(total)}</p>
             </div>
-            <p className="font-display text-3xl font-semibold text-ink tnum">{inr(total)}</p>
+            <p className="font-display text-3xl font-semibold text-ink tnum">
+              {inr(total)}
+              <span className="text-base font-medium text-ink-muted">{CYCLE_SUFFIX[iv.billing_cycle]}</span>
+            </p>
           </div>
 
           {/* pay-to + notes */}

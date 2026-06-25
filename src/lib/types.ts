@@ -359,6 +359,7 @@ export interface PlatformInvoice {
   description: string;
   amount: number;
   tax_percent: number;
+  billing_cycle: "one_time" | "monthly" | "yearly";
   period_label: string | null;
   issue_date: string;
   due_date: string | null;

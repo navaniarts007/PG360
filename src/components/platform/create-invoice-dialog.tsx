@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { AlertCircle, FilePlus2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { FieldRow, Input } from "@/components/ui/field";
+import { FieldRow, Input, Select } from "@/components/ui/field";
 import { createInvoiceAction, type ActionState } from "@/lib/actions/platform";
 import { inr } from "@/lib/utils";
 
@@ -49,6 +49,14 @@ function InvoiceForm({ pgId, onDone }: { pgId: string; onDone: () => void }) {
 
       <FieldRow label="Description" htmlFor="description">
         <Input id="description" name="description" defaultValue="PG360 subscription" required />
+      </FieldRow>
+
+      <FieldRow label="Billing cycle" htmlFor="billing_cycle">
+        <Select id="billing_cycle" name="billing_cycle" defaultValue="one_time">
+          <option value="one_time">One-time payment</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </Select>
       </FieldRow>
 
       <div className="grid grid-cols-2 gap-3">
