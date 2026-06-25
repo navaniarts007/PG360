@@ -3,6 +3,7 @@ import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty } from "./auth";
 import { computeBill } from "./money";
+import { dueDateFor } from "./rent";
 import type {
   AppNotification,
   Bed,
@@ -534,6 +535,9 @@ export interface BillRow {
   verified: boolean;
   payment_mode: string | null;
   screenshot_url: string | null;
+  rent_due_day: number;
+  checkin_date: string;
+  due_date: string;
 }
 
 /** Every active tenant's bill for the month — a real invoice row if recorded,
@@ -544,7 +548,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
   const [{ data: tenants }, { data: pays }, { data: pg }] = await Promise.all([
     s
       .from("tenants")
-      .select("id, name, rent_amount, checkin_date, food_opt_out, room:rooms(room_number)")
+      .select("id, name, rent_amount, checkin_date, rent_due_day, food_opt_out, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
     s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
@@ -557,6 +561,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
     name: string;
     rent_amount: number;
     checkin_date: string;
+    rent_due_day: number;
     food_opt_out: boolean;
     room: { room_number: string } | null;
   };
@@ -587,6 +592,9 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         verified: p?.verified ?? false,
         payment_mode: p?.payment_mode ?? null,
         screenshot_url: p?.payment_screenshot_url ?? null,
+        rent_due_day: t.rent_due_day,
+        checkin_date: t.checkin_date,
+        due_date: dueDateFor(month, t.rent_due_day),
       };
     })
     .sort((a, b) => order[a.status] - order[b.status] || b.balance - a.balance);

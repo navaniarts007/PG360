@@ -26,7 +26,7 @@ import {
   getPayTenants,
   listIssuesWithTenant,
 } from "@/lib/db";
-import { currentMonth, inr, inrCompact } from "@/lib/utils";
+import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -63,7 +63,10 @@ export default async function AdminDashboard() {
     getMonthBill(month),
     listIssuesWithTenant(),
   ]);
-  const dueRows = bill.filter((r) => r.balance > 0);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const dueRows = bill
+    .filter((r) => r.balance > 0)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
   const openIssues = allIssues.filter((i) => i.status !== "resolved").slice(0, 4);
 
   return (
@@ -102,11 +105,11 @@ export default async function AdminDashboard() {
         <Card className="lg:col-span-2">
           <div className="flex items-center justify-between p-5 sm:p-6">
             <div>
-              <h3 className="text-lg text-ink">Payments due this month</h3>
-              <p className="mt-0.5 text-sm text-ink-muted">Who still owes rent.</p>
+              <h3 className="text-lg text-ink">Collections due this month</h3>
+              <p className="mt-0.5 text-sm text-ink-muted">Sorted by due date — collect on time.</p>
             </div>
-            <Link href="/dashboard/payments" className="inline-flex items-center gap-1 text-sm font-semibold text-clay-600 hover:text-clay-700">
-              All payments <ArrowUpRight className="size-4" />
+            <Link href="/dashboard/calendar" className="inline-flex items-center gap-1 text-sm font-semibold text-clay-600 hover:text-clay-700">
+              Calendar <ArrowUpRight className="size-4" />
             </Link>
           </div>
           {dueRows.length === 0 ? (
@@ -123,7 +126,9 @@ export default async function AdminDashboard() {
                     </span>
                     <div>
                       <p className="text-sm font-semibold text-ink">{row.name}</p>
-                      <p className="text-xs capitalize text-ink-muted">{row.status}</p>
+                      <p className={`text-xs ${row.due_date < todayISO ? "font-semibold text-rose-600" : "text-ink-muted"}`}>
+                        Due {formatDate(row.due_date)}{row.due_date < todayISO ? " · overdue" : ""}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/status";
 import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement-dialog";
 import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
+import { RentCalendarCard } from "@/components/admin/rent-calendar-card";
 import { ElectricityDialog } from "@/components/admin/electricity-dialog";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
@@ -158,6 +159,13 @@ export default async function TenantDetail({
         </Card>
 
         <JoiningFeesCard fees={joiningFees} tenantId={tenant.id} />
+
+        <RentCalendarCard
+          checkinDate={tenant.checkin_date}
+          rentDueDay={tenant.rent_due_day}
+          payments={payments}
+        />
+
 
         {/* stay timeline — the police-style activity record */}
         <Card className="lg:col-span-2">
