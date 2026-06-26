@@ -1,6 +1,6 @@
 "use server";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { humanizeDbError } from "../errors";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
@@ -39,6 +39,25 @@ export async function getUploadSignatureAction(
   const toSign = `folder=${folder}&timestamp=${timestamp}`;
   const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
   return { ok: true, cloudName, apiKey, timestamp, signature, folder };
+}
+
+export type KycUploadResult =
+  | { ok: true; signedUrl: string; path: string }
+  | { ok: false; error: string };
+
+/** Hands the browser a one-time signed URL to upload an Aadhaar/KYC document
+ *  directly into the PRIVATE `kyc` bucket. The file is never publicly reachable;
+ *  we store only the storage path and sign short-lived view URLs on display. */
+export async function getKycUploadUrlAction(ext: string): Promise<KycUploadResult> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { ok: false, error: "No active property selected." };
+  const safeExt = /^(png|jpe?g|webp)$/i.test(ext) ? ext.toLowerCase() : "png";
+  const path = `${pid}/${randomUUID()}.${safeExt}`;
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from("kyc").createSignedUploadUrl(path);
+  if (error || !data) return { ok: false, error: "Could not start the secure upload." };
+  return { ok: true, signedUrl: data.signedUrl, path: data.path };
 }
 
 /** Admin saves the PG's payment details (UPI + bank) and/or QR image URL.

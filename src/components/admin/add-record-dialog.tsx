@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
 import { addTenantRecordAction, type ActionState } from "@/lib/actions/admin";
 import { getUploadSignatureAction } from "@/lib/actions/upload";
+import { uploadKyc } from "@/lib/upload-client";
 import type { BedOption } from "@/lib/db";
 
 export function AddRecordDialog({ beds }: { beds: BedOption[] }) {
@@ -31,8 +32,9 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     addTenantRecordAction,
     {},
   );
-  const [selfie, setSelfie] = useState<string | null>(null); // check-in photo
-  const [photo, setPhoto] = useState<string | null>(null); // ID document
+  const [selfie, setSelfie] = useState<string | null>(null); // check-in photo (Cloudinary URL)
+  const [photo, setPhoto] = useState<string | null>(null); // ID document (private storage path)
+  const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of the ID
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
@@ -52,7 +54,14 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     setBusy(which);
     setUploadErr(null);
     try {
-      const sig = await getUploadSignatureAction(which === "selfie" ? "pg360/avatars" : "pg360/kyc");
+      // ID/Aadhaar → PRIVATE Supabase Storage (returns a storage path).
+      if (which === "id") {
+        setIdPreview(URL.createObjectURL(file));
+        setPhoto(await uploadKyc(file));
+        return;
+      }
+      // Check-in selfie (not PII) stays on Cloudinary.
+      const sig = await getUploadSignatureAction("pg360/avatars");
       if (!sig.ok) throw new Error(sig.error);
       const fd = new FormData();
       fd.append("file", file);
@@ -66,7 +75,7 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
       );
       const json = (await res.json()) as { secure_url?: string };
       if (!json.secure_url) throw new Error("Upload failed");
-      (which === "selfie" ? setSelfie : setPhoto)(json.secure_url);
+      setSelfie(json.secure_url);
     } catch (e) {
       setUploadErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -154,9 +163,9 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
           ID photo (Aadhaar / proof)
         </p>
         <div className="flex items-center gap-3">
-          {photo ? (
+          {idPreview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={photo} alt="ID" className="size-16 rounded-lg border border-line object-cover" />
+            <img src={idPreview} alt="ID" className="size-16 rounded-lg border border-line object-cover" />
           ) : (
             <div className="grid size-16 place-items-center rounded-lg border border-dashed border-line-strong text-ink-muted">
               <ImageUp className="size-5" />

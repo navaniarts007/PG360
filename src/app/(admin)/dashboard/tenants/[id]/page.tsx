@@ -27,6 +27,7 @@ import {
   getActivePolicy,
   getBedOptions,
   getJoiningFees,
+  getKycSignedUrl,
   getPayTenants,
   getTenantDetail,
   listTenantEvents,
@@ -60,12 +61,13 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrl] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
     getActivePolicy(),
     listTenantEvents(id),
+    getKycSignedUrl(tenant.aadhaar_photo_url),
   ]);
 
   return (
@@ -76,10 +78,10 @@ export default async function TenantDetail({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          {tenant.avatar_url || tenant.aadhaar_photo_url ? (
+          {tenant.avatar_url || aadhaarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={tenant.avatar_url ?? tenant.aadhaar_photo_url ?? ""}
+              src={tenant.avatar_url ?? aadhaarUrl ?? ""}
               alt={tenant.name}
               className="size-16 rounded-2xl object-cover shadow-lift ring-1 ring-line"
             />

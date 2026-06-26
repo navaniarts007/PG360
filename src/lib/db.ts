@@ -94,6 +94,17 @@ export async function listAllInvoices(): Promise<
   }));
 }
 
+/** Turn a stored KYC value into a viewable URL. New uploads store a private
+ *  storage path → return a short-lived signed URL. Legacy Cloudinary values
+ *  (full http URLs) are returned as-is. */
+export async function getKycSignedUrl(value: string | null): Promise<string | null> {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value; // legacy Cloudinary
+  const admin = createAdminClient();
+  const { data } = await admin.storage.from("kyc").createSignedUrl(value, 60 * 10);
+  return data?.signedUrl ?? null;
+}
+
 /** The login email for an auth user (super-admin account view). */
 export async function getAuthEmail(userId: string | null): Promise<string | null> {
   if (!userId) return null;

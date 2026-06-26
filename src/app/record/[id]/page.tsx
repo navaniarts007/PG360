@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/guards";
-import { getTenantDetail, getPgAccount, listTenantEvents } from "@/lib/db";
+import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
 import type { TenantEventType } from "@/lib/types";
@@ -28,9 +28,10 @@ export default async function RecordPage({
   const detail = await getTenantDetail(id);
   if (!detail) notFound();
   const { tenant, room } = detail;
-  const [pg, events] = await Promise.all([
+  const [pg, events, aadhaarUrl] = await Promise.all([
     getPgAccount(tenant.pg_id),
     listTenantEvents(id),
+    getKycSignedUrl(tenant.aadhaar_photo_url),
   ]);
 
   const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -79,10 +80,10 @@ export default async function RecordPage({
                 className="h-40 w-32 shrink-0 rounded-xl border border-line bg-paper-2 object-cover"
                 style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
               />
-            ) : tenant.aadhaar_photo_url ? (
+            ) : aadhaarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={tenant.aadhaar_photo_url}
+                src={aadhaarUrl}
                 alt="Tenant ID"
                 loading="eager"
                 className="h-40 w-32 shrink-0 rounded-xl border border-line bg-paper-2 object-contain"
@@ -103,13 +104,13 @@ export default async function RecordPage({
 
           {/* ID document — the Aadhaar / proof card uploaded at check-in, shown
               large and uncropped so it is clearly legible on the printed page. */}
-          {tenant.aadhaar_photo_url && (
+          {aadhaarUrl && (
             <section className="mt-6 break-inside-avoid">
               <h2 className="font-display text-lg text-ink">Identity document</h2>
               <p className="mb-2 text-xs text-ink-muted">Aadhaar / ID proof submitted at check-in.</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={tenant.aadhaar_photo_url}
+                src={aadhaarUrl}
                 alt="Aadhaar / ID proof"
                 loading="eager"
                 className="w-full max-w-md rounded-xl border border-line bg-white object-contain"
