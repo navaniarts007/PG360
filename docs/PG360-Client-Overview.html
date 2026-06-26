@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PG360 — Product Overview & Roadmap</title>
+<style>
+  :root{
+    --clay:#b9542d; --clay-d:#9a431f; --clay-50:#f7ede7;
+    --ink:#2a2018; --ink-soft:#5c5048; --ink-mute:#8a7d72;
+    --paper:#faf6ef; --line:#e7ddd1; --teal:#0f766e; --gold:#b8860b;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{size:A4;margin:0;}
+  html,body{margin:0;padding:0;}
+  body{font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#fff;font-size:13px;line-height:1.55;}
+  h1,h2,h3,.serif{font-family:Georgia,"Times New Roman",serif;}
+  .page{padding:46px 54px;page-break-after:always;position:relative;min-height:1040px;}
+  .page:last-child{page-break-after:auto;}
+
+  /* cover */
+  .cover{page-break-after:always;height:1122px;color:#fff;
+    background:linear-gradient(150deg,#b9542d 0%,#8a3d1c 55%,#3a2317 100%);
+    padding:80px 64px;display:flex;flex-direction:column;justify-content:space-between;}
+  .brand{font-family:Georgia,serif;font-size:34px;font-weight:700;letter-spacing:.5px;}
+  .brand small{display:block;font-family:"Segoe UI";font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;opacity:.8;margin-top:6px;}
+  .cover h1{font-size:54px;line-height:1.05;margin:0 0 18px;font-weight:700;}
+  .cover h1 em{font-style:italic;color:#ffd9c2;}
+  .cover .sub{font-size:17px;max-width:560px;opacity:.92;line-height:1.5;}
+  .pill{display:inline-block;border:1px solid rgba(255,255,255,.4);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:26px;}
+  .cover-foot{display:flex;justify-content:space-between;align-items:flex-end;font-size:12.5px;opacity:.9;}
+  .cover-foot b{font-size:14px;}
+
+  /* headings */
+  .eyebrow{color:var(--clay);font-weight:700;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 6px;}
+  h2.sec{font-size:30px;margin:0 0 6px;line-height:1.1;}
+  .lead{color:var(--ink-soft);font-size:14px;max-width:620px;margin:0 0 26px;}
+  .rule{height:3px;width:54px;background:var(--clay);border-radius:2px;margin:0 0 24px;}
+
+  /* feature groups */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .card{border:1px solid var(--line);border-radius:14px;padding:18px 20px;background:var(--paper);break-inside:avoid;}
+  .card h3{margin:0 0 10px;font-size:16px;color:var(--ink);display:flex;align-items:center;gap:9px;}
+  .ic{width:26px;height:26px;border-radius:8px;background:var(--clay-50);color:var(--clay);display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto;}
+  ul.feat{margin:0;padding:0;list-style:none;}
+  ul.feat li{position:relative;padding:3px 0 3px 20px;color:var(--ink-soft);font-size:12.3px;}
+  ul.feat li:before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:50%;background:var(--teal);}
+  ul.feat li b{color:var(--ink);font-weight:600;}
+
+  /* roadmap */
+  .road{border-left:2px solid var(--line);margin-left:8px;padding-left:0;}
+  .road .item{position:relative;padding:0 0 18px 28px;break-inside:avoid;}
+  .road .item:before{content:"";position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--clay);border:3px solid #fff;}
+  .road .item h4{margin:0 0 3px;font-size:14.5px;color:var(--ink);}
+  .road .item p{margin:0;color:var(--ink-soft);font-size:12.3px;}
+  .tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;}
+  .tag.soon{background:#fef3c7;color:#92600a;}
+  .tag.plan{background:#e7ddd1;color:#6b5d50;}
+
+  .band{background:var(--ink);color:#fff;border-radius:16px;padding:26px 30px;margin-top:8px;}
+  .band h3{margin:0 0 14px;font-size:19px;color:#fff;}
+  .band .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 26px;}
+  .band .row{display:flex;gap:10px;font-size:12.6px;color:#e9e0d6;}
+  .band .row b{color:#fff;}
+  .chk{color:#7fd1c8;font-weight:700;}
+
+  .foot{position:absolute;bottom:26px;left:54px;right:54px;display:flex;justify-content:space-between;color:var(--ink-mute);font-size:10.5px;border-top:1px solid var(--line);padding-top:10px;}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  .note{background:var(--clay-50);border:1px solid #eed9cc;border-radius:12px;padding:14px 16px;font-size:12.3px;color:var(--ink-soft);}
+  .cta{background:linear-gradient(140deg,#b9542d,#7e3a1b);color:#fff;border-radius:16px;padding:30px 34px;}
+  .cta h2{color:#fff;font-size:26px;margin:0 0 8px;}
+  .cta a{color:#ffd9c2;text-decoration:none;}
+  .contact{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-top:16px;font-size:13px;}
+  .contact div{opacity:.95;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <div>
+    <div class="brand">PG360<small>PG &amp; Hostel Management</small></div>
+  </div>
+  <div>
+    <span class="pill">Product Overview &amp; Roadmap</span>
+    <h1>Run your PG like a <em>five-star</em> property.</h1>
+    <p class="sub">One platform for properties, residents, rent, records and reports —
+      built for India, with your data kept safely in India. Here's everything you get
+      today, and what's coming next.</p>
+  </div>
+  <div class="cover-foot">
+    <div><b>Prepared for our valued client</b><br/>Web &middot; Android &middot; Windows</div>
+    <div style="text-align:right"><b>pg360.software</b><br/>+91 63834 34721</div>
+  </div>
+</section>
+
+<!-- ADMIN: TODAY (1) -->
+<section class="page">
+  <p class="eyebrow">Admin Panel &middot; Available today</p>
+  <h2 class="sec">Everything you run your PG with</h2>
+  <div class="rule"></div>
+  <p class="lead">A complete daily operating system for PG &amp; hostel owners — from the
+    first room you set up to the monthly P&amp;L. Every feature below is live.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="ic">▦</span> Properties, Rooms &amp; Beds</h3>
+      <ul class="feat">
+        <li><b>Multiple properties</b> with a one-tap property switcher</li>
+        <li>Floors, rooms, bed-level allocation &amp; live occupancy</li>
+        <li>Room types &amp; <b>flexible pricing</b> (rate cards)</li>
+        <li><b>WiFi master</b> — manage networks, assign to rooms</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">☺</span> Tenants &amp; Records</h3>
+      <ul class="feat">
+        <li>Fast onboarding with <b>check-in photo</b> + ID capture</li>
+        <li>Automatic <b>registration number</b> (e.g. GVR-0001)</li>
+        <li>Full resident profile with stay timeline</li>
+        <li><b>Police-style printable record</b> for verification</li>
+        <li><b>Vacated Master</b> — searchable archive of past residents</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">₹</span> Rent &amp; Payments</h3>
+      <ul class="feat">
+        <li>Record payments — <b>cash, UPI or bank</b></li>
+        <li>Your <b>UPI QR</b> &amp; bank details on the bill</li>
+        <li>Tenants submit payment proof; you <b>verify</b> it</li>
+        <li>Pro-rata first month, joining fees, deposits</li>
+        <li><b>Checkout settlement</b> &amp; HRA rent receipts</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">▤</span> Rent Calendar &amp; Reminders</h3>
+      <ul class="feat">
+        <li>Per-tenant calendar — <b>days/months staying</b></li>
+        <li>Clear <b>due date</b> &amp; next collection date</li>
+        <li>Month-by-month <b>paid / overdue</b> view</li>
+        <li>Whole-PG <b>collections calendar</b> + dashboard reminders</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">◳</span> Money &amp; Reports</h3>
+      <ul class="feat">
+        <li>Expense tracking by category</li>
+        <li><b>Profit &amp; Loss</b> and collection reports</li>
+        <li>Occupancy &amp; revenue at a glance</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">⚇</span> People &amp; Services</h3>
+      <ul class="feat">
+        <li><b>Staff management</b></li>
+        <li>Complaints / maintenance tracking</li>
+        <li>Food menu with opt-out handling</li>
+        <li>Bookings &amp; enquiries</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot"><span>PG360 — Product Overview</span><span>pg360.software</span></div>
+</section>
+
+<!-- ADMIN: APPS + SECURITY (2) -->
+<section class="page">
+  <p class="eyebrow">Admin Panel &middot; Anywhere, secure</p>
+  <h2 class="sec">On every device, safe by design</h2>
+  <div class="rule"></div>
+
+  <div class="two">
+    <div class="card">
+      <h3><span class="ic">▢</span> One app, every screen</h3>
+      <ul class="feat">
+        <li><b>Web app</b> — nothing to install</li>
+        <li><b>Android app</b> (APK) for on-the-go management</li>
+        <li><b>Windows app</b> (EXE / MSI) for the front desk</li>
+        <li>Same login, same data, instantly in sync</li>
+        <li>Print / Save-as-PDF records on any device</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">⛨</span> Your data, protected</h3>
+      <ul class="feat">
+        <li><b>All data stored in India</b> (Mumbai region)</li>
+        <li>Encrypted in transit &amp; at rest</li>
+        <li>Each property fully <b>isolated</b> (no cross-access)</li>
+        <li><b>Aadhaar / ID kept private</b> — not public links</li>
+        <li>Role-based access &amp; clear terms of use</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="band">
+    <h3>Why owners choose PG360</h3>
+    <div class="grid2">
+      <div class="row"><span class="chk">✔</span><div><b>Never miss rent</b> — due dates &amp; reminders built in</div></div>
+      <div class="row"><span class="chk">✔</span><div><b>Audit-ready records</b> for police &amp; compliance</div></div>
+      <div class="row"><span class="chk">✔</span><div><b>Multi-property</b> from a single login</div></div>
+      <div class="row"><span class="chk">✔</span><div><b>Your branding</b> — a tailored edition per client</div></div>
+      <div class="row"><span class="chk">✔</span><div><b>Clear P&amp;L</b> — know your numbers monthly</div></div>
+      <div class="row"><span class="chk">✔</span><div><b>India-first</b> — pricing, pro-rata, HRA receipts</div></div>
+    </div>
+  </div>
+
+  <div style="height:18px"></div>
+  <div class="note"><b>Tailored for you.</b> PG360 supports custom, branded editions on your own
+    subdomain — your name, your menu, your workflow — without a separate app to maintain.</div>
+
+  <div class="foot"><span>PG360 — Product Overview</span><span>pg360.software</span></div>
+</section>
+
+<!-- ADMIN: ROADMAP (3) -->
+<section class="page">
+  <p class="eyebrow">Admin Panel &middot; What's next</p>
+  <h2 class="sec">The roadmap ahead</h2>
+  <div class="rule"></div>
+  <p class="lead">We're constantly adding value. These enhancements are planned for the
+    admin panel — your platform keeps getting better at no extra effort.</p>
+
+  <div class="road">
+    <div class="item"><h4>Automated WhatsApp &amp; SMS reminders <span class="tag soon">Coming soon</span></h4>
+      <p>Rent-due nudges sent to residents automatically on their due date — fewer follow-ups for you.</p></div>
+    <div class="item"><h4>Online "Pay Now" for residents <span class="tag soon">Coming soon</span></h4>
+      <p>Tenants pay via UPI link / QR and payments reconcile automatically against their bill.</p></div>
+    <div class="item"><h4>Recurring invoices &amp; auto-receipts <span class="tag plan">Planned</span></h4>
+      <p>Set monthly/yearly billing once; receipts and reminders go out on schedule.</p></div>
+    <div class="item"><h4>Advanced analytics &amp; forecasting <span class="tag plan">Planned</span></h4>
+      <p>Occupancy trends, revenue forecasting and per-property comparison dashboards.</p></div>
+    <div class="item"><h4>KYC document vault <span class="tag plan">Planned</span></h4>
+      <p>Multiple documents per resident with verification status — all stored privately in India.</p></div>
+    <div class="item"><h4>Reviews, visitors &amp; digital agreements <span class="tag plan">Planned</span></h4>
+      <p>Resident feedback, visitor register, and e-signed rental agreements.</p></div>
+  </div>
+
+  <div class="foot"><span>PG360 — Product Overview</span><span>pg360.software</span></div>
+</section>
+
+<!-- ATTENDANCE PANEL (4) -->
+<section class="page">
+  <p class="eyebrow">Attendance Panel &middot; New module · in development</p>
+  <h2 class="sec">Attendance, presence &amp; safety</h2>
+  <div class="rule"></div>
+  <p class="lead">A dedicated panel to track who's in and who's out — staff and residents —
+    bringing daily presence, payroll inputs and safety logs into PG360.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="ic">⏱</span> Staff attendance</h3>
+      <ul class="feat">
+        <li><b>Check-in / check-out</b> via QR or selfie</li>
+        <li>Shifts, late &amp; absent tracking</li>
+        <li>Leave requests &amp; approvals</li>
+        <li><b>Payroll-ready</b> monthly summaries</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">⊡</span> Resident in/out logs</h3>
+      <ul class="feat">
+        <li>Gate entry / exit register</li>
+        <li><b>Visitor log</b> with photo &amp; time</li>
+        <li>Night-stay / out-pass tracking</li>
+        <li>Safety record for parents &amp; police</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">◉</span> Smart capture</h3>
+      <ul class="feat">
+        <li>QR scan, selfie &amp; optional <b>geo-tag</b></li>
+        <li>Biometric / device integration (phase 2)</li>
+        <li>Works on the front-desk app &amp; mobile</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="ic">🔔</span> Reports &amp; alerts</h3>
+      <ul class="feat">
+        <li>Daily attendance dashboard</li>
+        <li>Absentee &amp; unusual-time alerts</li>
+        <li>Exportable monthly reports</li>
+        <li>Connects to existing staff &amp; tenant records</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div class="note"><b>Status:</b> The Attendance Panel is a proposed module currently in design.
+    Scope, capture method (QR / biometric) and rollout can be tailored to your property's needs.</div>
+
+  <div class="foot"><span>PG360 — Attendance Panel</span><span>pg360.software</span></div>
+</section>
+
+<!-- CTA (5) -->
+<section class="page" style="display:flex;flex-direction:column;justify-content:center;">
+  <div class="cta">
+    <h2>Let's get your PG running on PG360.</h2>
+    <p style="font-size:14px;opacity:.95;max-width:560px;margin:0;">
+      Everything in the admin panel is ready today, with the attendance panel and more on the way.
+      We'd love to set it up for your property and tailor it to how you work.</p>
+    <div class="contact">
+      <div>📞 <b>Phone / WhatsApp</b><br/>+91 63834 34721</div>
+      <div>🌐 <b>Website</b><br/><a href="https://pg360.software">pg360.software</a></div>
+      <div>✉ <b>Email</b><br/>contact@pg360.software</div>
+      <div>✉ <b>Email</b><br/>pg360software@gmail.com</div>
+    </div>
+  </div>
+  <p style="text-align:center;color:#8a7d72;font-size:11px;margin-top:24px;">
+    PG360 — PG &amp; Hostel Management Platform &middot; Data stored securely in India.</p>
+</section>
+
+</body>
+</html>
