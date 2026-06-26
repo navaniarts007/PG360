@@ -376,10 +376,11 @@ export async function addTenantRecordAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
   const cloud = /^https:\/\/res\.cloudinary\.com\//;
-  // KYC now lives in private storage (a "pgId/uuid.ext" path); allow that or a
-  // legacy Cloudinary URL.
+  // KYC is a private Cloudinary asset ("cld:<public_id>.<ext>"); also tolerate a
+  // legacy Cloudinary URL or an old Supabase path.
   const kycPath = /^[\w-]+\/[\w-]+\.(png|jpe?g|webp)$/i;
-  if (d.aadhaar_photo_url && !cloud.test(d.aadhaar_photo_url) && !kycPath.test(d.aadhaar_photo_url))
+  const kyc = d.aadhaar_photo_url;
+  if (kyc && !kyc.startsWith("cld:") && !cloud.test(kyc) && !kycPath.test(kyc))
     return { error: "Invalid ID photo." };
   if (d.avatar_url && !cloud.test(d.avatar_url)) return { error: "Invalid tenant photo." };
   const admin = createAdminClient();

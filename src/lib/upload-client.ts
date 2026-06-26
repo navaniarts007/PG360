@@ -1,16 +1,23 @@
-import { getKycUploadUrlAction } from "@/lib/actions/upload";
+import { getKycUploadSignatureAction } from "@/lib/actions/upload";
 
-/** Upload an Aadhaar/KYC file into the private bucket via a one-time signed URL.
- *  Returns the storage PATH to store on the record (not a public URL). */
+/** Upload an Aadhaar/KYC file to Cloudinary as a PRIVATE (authenticated) asset.
+ *  Returns a "cld:<public_id>.<format>" marker to store on the record; the file
+ *  is delivered only via signed URLs (see getKycSignedUrl). */
 export async function uploadKyc(file: File): Promise<string> {
-  const ext = file.name.split(".").pop() || "png";
-  const sig = await getKycUploadUrlAction(ext);
+  const sig = await getKycUploadSignatureAction();
   if (!sig.ok) throw new Error(sig.error);
-  const res = await fetch(sig.signedUrl, {
-    method: "PUT",
-    body: file,
-    headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" },
-  });
-  if (!res.ok) throw new Error("Upload failed");
-  return sig.path;
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("api_key", sig.apiKey);
+  fd.append("timestamp", String(sig.timestamp));
+  fd.append("signature", sig.signature);
+  fd.append("folder", sig.folder);
+  fd.append("type", "authenticated");
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
+    { method: "POST", body: fd },
+  );
+  const json = (await res.json()) as { public_id?: string; format?: string; error?: { message?: string } };
+  if (!json.public_id) throw new Error(json.error?.message || "Upload failed");
+  return `cld:${json.public_id}.${json.format ?? "jpg"}`;
 }

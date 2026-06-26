@@ -2,8 +2,23 @@ import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty } from "./auth";
+import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
 import { dueDateFor } from "./rent";
+
+let cldReady = false;
+function cld() {
+  if (!cldReady) {
+    cloudinary.config({
+      cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true,
+    });
+    cldReady = true;
+  }
+  return cloudinary;
+}
 import type {
   AppNotification,
   Bed,
@@ -95,12 +110,26 @@ export async function listAllInvoices(): Promise<
 }
 
 /** Turn a stored KYC value into a viewable URL. New uploads store a private
- *  storage path → return a short-lived signed URL. Legacy Cloudinary values
- *  (full http URLs) are returned as-is. */
+ *  Cloudinary asset as "cld:<public_id>.<format>" → return a signed authenticated
+ *  delivery URL (not openable without our secret). Legacy public Cloudinary URLs
+ *  are returned as-is; a leftover Supabase path is signed from storage. */
 export async function getKycSignedUrl(value: string | null): Promise<string | null> {
   if (!value) return null;
-  if (/^https?:\/\//i.test(value)) return value; // legacy Cloudinary
-  const admin = createAdminClient();
+  if (value.startsWith("cld:")) {
+    const rest = value.slice(4);
+    const dot = rest.lastIndexOf(".");
+    const publicId = dot > 0 ? rest.slice(0, dot) : rest;
+    const format = dot > 0 ? rest.slice(dot + 1) : "jpg";
+    return cld().url(publicId, {
+      type: "authenticated",
+      resource_type: "image",
+      format,
+      sign_url: true,
+      secure: true,
+    });
+  }
+  if (/^https?:\/\//i.test(value)) return value; // legacy public Cloudinary
+  const admin = createAdminClient(); // leftover private Supabase path
   const { data } = await admin.storage.from("kyc").createSignedUrl(value, 60 * 10);
   return data?.signedUrl ?? null;
 }

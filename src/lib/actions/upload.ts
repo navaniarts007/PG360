@@ -1,6 +1,6 @@
 "use server";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { humanizeDbError } from "../errors";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
@@ -41,23 +41,34 @@ export async function getUploadSignatureAction(
   return { ok: true, cloudName, apiKey, timestamp, signature, folder };
 }
 
-export type KycUploadResult =
-  | { ok: true; signedUrl: string; path: string }
+export type KycSignResult =
+  | {
+      ok: true;
+      cloudName: string;
+      apiKey: string;
+      timestamp: number;
+      signature: string;
+      folder: string;
+    }
   | { ok: false; error: string };
 
-/** Hands the browser a one-time signed URL to upload an Aadhaar/KYC document
- *  directly into the PRIVATE `kyc` bucket. The file is never publicly reachable;
- *  we store only the storage path and sign short-lived view URLs on display. */
-export async function getKycUploadUrlAction(ext: string): Promise<KycUploadResult> {
+/** Signature for uploading an Aadhaar/KYC document to Cloudinary as an
+ *  AUTHENTICATED (private) asset — it can't be delivered without a signed URL,
+ *  so the raw link can't be opened by just anyone. */
+export async function getKycUploadSignatureAction(): Promise<KycSignResult> {
   await requireRole(["admin", "staff"]);
-  const pid = await getActiveProperty();
-  if (!pid) return { ok: false, error: "No active property selected." };
-  const safeExt = /^(png|jpe?g|webp)$/i.test(ext) ? ext.toLowerCase() : "png";
-  const path = `${pid}/${randomUUID()}.${safeExt}`;
-  const admin = createAdminClient();
-  const { data, error } = await admin.storage.from("kyc").createSignedUploadUrl(path);
-  if (error || !data) return { ok: false, error: "Could not start the secure upload." };
-  return { ok: true, signedUrl: data.signedUrl, path: data.path };
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    return { ok: false, error: "Uploads aren't configured." };
+  }
+  const folder = "pg360/kyc";
+  const timestamp = Math.floor(Date.now() / 1000);
+  // params signed in sorted order: folder, timestamp, type
+  const toSign = `folder=${folder}&timestamp=${timestamp}&type=authenticated`;
+  const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
+  return { ok: true, cloudName, apiKey, timestamp, signature, folder };
 }
 
 /** Admin saves the PG's payment details (UPI + bank) and/or QR image URL.
