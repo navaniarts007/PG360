@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
 import { requireRole } from "@/lib/guards";
-import { getMyNotifications, getMyPg } from "@/lib/db";
+import { getMyNotifications, getMyPg, tenantNeedsAgreement } from "@/lib/db";
 import { getEdition } from "@/lib/get-client";
 
 export default async function TenantLayout({
@@ -13,6 +13,8 @@ export default async function TenantLayout({
   // Editions without a tenant portal (e.g. GVM) never serve /portal.
   const { portalEnabled } = await getEdition();
   if (!portalEnabled) redirect("/dashboard");
+  // First login: if the PG has a resident agreement, sign it before continuing.
+  if (await tenantNeedsAgreement()) redirect("/agreement");
 
   const [pg, notifications] = await Promise.all([getMyPg(), getMyNotifications()]);
   return (

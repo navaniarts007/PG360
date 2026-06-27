@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/guards";
 import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
+import { SignedAgreement } from "@/components/admin/signed-agreement";
 import type { TenantEventType } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Tenant Record" };
@@ -147,6 +148,11 @@ export default async function RecordPage({
               </ol>
             )}
           </section>
+
+          {/* resident agreement + signatures (only if configured) */}
+          <div className="mt-6">
+            <SignedAgreement pgId={tenant.pg_id} tenantId={tenant.id} tenantName={tenant.name} />
+          </div>
 
           <footer className="mt-10 flex items-end justify-between border-t border-line pt-5">
             <p className="max-w-xs text-xs text-ink-muted">

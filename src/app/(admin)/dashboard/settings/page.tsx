@@ -5,9 +5,10 @@ import { SettingsForm } from "@/components/admin/settings-form";
 import { MoneySettingsForm } from "@/components/admin/money-settings-form";
 import { WifiNetworksCard } from "@/components/admin/wifi-networks-card";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
+import { AgreementSectionsCard } from "@/components/admin/agreement-sections-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
-import { getPgAccount, getPgPolicy, listWifiNetworks } from "@/lib/db";
+import { getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -15,10 +16,11 @@ export default async function SettingsPage() {
   await requireRole(["admin"]);
   const pid = await getActiveProperty();
   if (!pid) notFound();
-  const [pg, policy, wifiNetworks] = await Promise.all([
+  const [pg, policy, wifiNetworks, sections] = await Promise.all([
     getPgAccount(pid),
     getPgPolicy(pid),
     listWifiNetworks(),
+    listAgreementSections(pid),
   ]);
   if (!pg) notFound();
 
@@ -63,6 +65,15 @@ export default async function SettingsPage() {
         </h2>
         <div className="max-w-2xl">
           <MoneySettingsForm pg={pg} policy={policy} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
+          Resident agreement
+        </h2>
+        <div className="max-w-2xl">
+          <AgreementSectionsCard sections={sections} ownerSignatureSaved={!!pg.owner_signature_url} />
         </div>
       </section>
     </div>

@@ -34,10 +34,21 @@ const gvrComforts: ClientConfig = {
   portalEnabled: false,
 };
 
+// Shanthi's Ladies Hostel — full edition with a tenant portal + a custom signed
+// resident agreement (built in Settings, signed by the tenant on first login).
+const shanthi: ClientConfig = {
+  slug: "shanthi",
+  brandName: "Shanthi's Ladies Hostel",
+  regPrefix: "SLH",
+  edition: "full",
+  portalEnabled: true,
+};
+
 /** Registered clients, keyed by subdomain slug. */
 export const CLIENTS: Record<string, ClientConfig> = {
   gvrconforts: gvrComforts,
   gvmconforts: gvrComforts, // tolerate the alternate spelling
+  shanthi: shanthi,
 };
 
 /** Hosts whose first label is NOT a client slug (the root product). */

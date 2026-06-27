@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
-import { getActiveProperty } from "./auth";
+import { getActiveProperty, getSession } from "./auth";
 import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
 import { dueDateFor } from "./rent";
@@ -20,6 +20,7 @@ function cld() {
   return cloudinary;
 }
 import type {
+  AgreementSection,
   AppNotification,
   Bed,
   CheckoutSettlement,
@@ -36,6 +37,7 @@ import type {
   RateCard,
   Room,
   Tenant,
+  TenantAgreement,
   TenantEvent,
   WifiNetwork,
 } from "./types";
@@ -811,6 +813,60 @@ export async function myRentReminder(): Promise<{
   if (balance <= 0) return null;
   const overdue = new Date().toISOString().slice(0, 10) > dueDate;
   return { balance, total, dueDate, overdue };
+}
+
+/* ----------------------------------------------------- agreements -------- */
+
+/** The PG's ordered policy sections (staff/admin view). */
+export async function listAgreementSections(pgId: string): Promise<AgreementSection[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("agreement_sections")
+    .select("*")
+    .eq("pg_id", pgId)
+    .order("idx", { ascending: true });
+  return (data ?? []) as AgreementSection[];
+}
+
+/** The signed-in tenant's PG policy sections (for the agreement screen). */
+export async function getMyAgreementSections(): Promise<AgreementSection[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("agreement_sections")
+    .select("*")
+    .order("idx", { ascending: true });
+  return (data ?? []) as AgreementSection[];
+}
+
+/** The signed-in tenant's agreement row, if they've signed. */
+export async function myAgreement(): Promise<TenantAgreement | null> {
+  const me = await getSession();
+  if (!me?.tenant_id) return null;
+  const s = await sb();
+  const { data } = await s
+    .from("tenant_agreements")
+    .select("*")
+    .eq("tenant_id", me.tenant_id)
+    .maybeSingle();
+  return (data as TenantAgreement) ?? null;
+}
+
+/** Does the signed-in tenant still owe a signed agreement? (sections exist and
+ *  they haven't signed yet) — used to gate first login. */
+export async function tenantNeedsAgreement(): Promise<boolean> {
+  const [sections, signed] = await Promise.all([getMyAgreementSections(), myAgreement()]);
+  return sections.length > 0 && !signed;
+}
+
+/** A tenant's signed agreement (staff/admin view, for profile + record). */
+export async function getTenantAgreement(tenantId: string): Promise<TenantAgreement | null> {
+  const s = await sb();
+  const { data } = await s
+    .from("tenant_agreements")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  return (data as TenantAgreement) ?? null;
 }
 
 export async function getMyIssues(): Promise<Issue[]> {

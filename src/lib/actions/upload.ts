@@ -71,6 +71,23 @@ export async function getKycUploadSignatureAction(): Promise<KycSignResult> {
   return { ok: true, cloudName, apiKey, timestamp, signature, folder };
 }
 
+/** Signature for uploading a SIGNATURE (resident or owner) to Cloudinary as a
+ *  private authenticated asset. Tenants may upload (their own signature). */
+export async function getSignatureUploadSignatureAction(): Promise<KycSignResult> {
+  await requireRole(["tenant", "admin", "staff"]);
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    return { ok: false, error: "Uploads aren't configured." };
+  }
+  const folder = "pg360/signatures";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const toSign = `folder=${folder}&timestamp=${timestamp}&type=authenticated`;
+  const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
+  return { ok: true, cloudName, apiKey, timestamp, signature, folder };
+}
+
 /** Admin saves the PG's payment details (UPI + bank) and/or QR image URL.
  *  Uses the service client (admins can't UPDATE pg_accounts under RLS) but
  *  scopes the write to the caller's own PG and only these columns. */

@@ -62,6 +62,24 @@ export interface PgAccount {
   edition: "full" | "gvm";
   portal_enabled: boolean;
   reg_prefix: string | null;
+  owner_signature_url: string | null;
+}
+
+export interface AgreementSection {
+  id: string;
+  pg_id: string;
+  idx: number;
+  title: string;
+  body: string;
+  created_at: string;
+}
+
+export interface TenantAgreement {
+  id: string;
+  pg_id: string;
+  tenant_id: string;
+  signature_url: string;
+  accepted_at: string;
 }
 
 /** Per-property money rules (notice / lock-in / deposit / electricity cap). */

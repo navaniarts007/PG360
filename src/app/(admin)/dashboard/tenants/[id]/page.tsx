@@ -19,6 +19,7 @@ import {
 import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement-dialog";
 import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
 import { RentCalendarCard } from "@/components/admin/rent-calendar-card";
+import { SignedAgreement } from "@/components/admin/signed-agreement";
 import { ElectricityDialog } from "@/components/admin/electricity-dialog";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
@@ -217,6 +218,10 @@ export default async function TenantDetail({
             ))}
           </div>
         </Card>
+
+        <div className="lg:col-span-3">
+          <SignedAgreement pgId={tenant.pg_id} tenantId={tenant.id} tenantName={tenant.name} />
+        </div>
       </div>
     </div>
   );
