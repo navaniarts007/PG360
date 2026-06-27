@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IssueStatusControl } from "@/components/admin/issue-status-control";
@@ -53,12 +54,32 @@ export default async function IssuesPage() {
       {issues.length === 0 ? (
         <EmptyState icon={MessagesSquare} title="No complaints" body="When tenants raise issues, they show up here." />
       ) : (
+        <Filterable
+          placeholder="Search complaints by tenant, room or text…"
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: [
+                { label: "All", value: "" },
+                { label: "Open", value: "open" },
+                { label: "In progress", value: "in_progress" },
+                { label: "Resolved", value: "resolved" },
+              ],
+            },
+          ]}
+        >
         <div className="space-y-3">
           {issues.map((issue) => {
             const cat = CATEGORY[issue.category] ?? CATEGORY.other!;
             const Icon = cat.icon;
             return (
-              <Card key={issue.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <Card
+                key={issue.id}
+                data-search={`${cat.label} ${issue.description} ${issue.tenant_name} ${issue.room_number ? `room ${issue.room_number}` : ""}`}
+                data-status={issue.status}
+                className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div className="flex gap-4">
                   <span className={`grid size-11 shrink-0 place-items-center rounded-xl ring-1 ring-inset ${cat.tone}`}>
                     <Icon className="size-5" />
@@ -88,6 +109,7 @@ export default async function IssuesPage() {
             );
           })}
         </div>
+        </Filterable>
       )}
     </div>
   );

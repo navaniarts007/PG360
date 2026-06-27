@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Archive, Eye, Phone } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireRole } from "@/lib/guards";
@@ -29,6 +30,7 @@ export default async function VacatedPage() {
           body="When a tenant checks out, their full profile is archived here."
         />
       ) : (
+        <Filterable placeholder="Search by name, phone, reg-no or room…">
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -43,7 +45,11 @@ export default async function VacatedPage() {
               </thead>
               <tbody>
                 {vacated.map((t) => (
-                  <tr key={t.id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
+                  <tr
+                    key={t.id}
+                    data-search={`${t.name} ${t.phone} ${t.reg_no ?? ""} ${t.room_number ? `room ${t.room_number}` : ""}`}
+                    className="border-b border-line last:border-0 hover:bg-paper-2/30"
+                  >
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-3">
                         <span className="grid size-9 place-items-center rounded-full bg-ink text-xs font-semibold text-paper">
@@ -80,6 +86,7 @@ export default async function VacatedPage() {
             </table>
           </div>
         </Card>
+        </Filterable>
       )}
     </div>
   );

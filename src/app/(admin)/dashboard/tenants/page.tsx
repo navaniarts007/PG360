@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Eye, Phone, Users } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TenantStatusPill } from "@/components/ui/status";
@@ -46,6 +47,20 @@ export default async function TenantsPage() {
           action={addTenant}
         />
       ) : (
+        <Filterable
+          placeholder="Search tenants by name, email, phone or room…"
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: [
+                { label: "All", value: "" },
+                { label: "Active", value: "active" },
+                { label: "Checked out", value: "checked_out" },
+              ],
+            },
+          ]}
+        >
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -61,7 +76,12 @@ export default async function TenantsPage() {
               </thead>
               <tbody>
                 {tenants.map((t) => (
-                  <tr key={t.id} className="group border-b border-line last:border-0 hover:bg-paper-2/30">
+                  <tr
+                    key={t.id}
+                    data-search={`${t.name} ${t.email ?? ""} ${t.phone} ${t.room ? `room ${t.room.room_number}` : ""}`}
+                    data-status={t.status}
+                    className="group border-b border-line last:border-0 hover:bg-paper-2/30"
+                  >
                     <td className="px-6 py-3.5">
                       <Link href={`/dashboard/tenants/${t.id}`} className="flex items-center gap-3">
                         {t.avatar_url ? (
@@ -112,6 +132,7 @@ export default async function TenantsPage() {
             </table>
           </div>
         </Card>
+        </Filterable>
       )}
     </div>
   );

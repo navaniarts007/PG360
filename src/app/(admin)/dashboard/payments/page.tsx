@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CheckCircle2, Clock, ExternalLink, IndianRupee } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
@@ -40,6 +41,21 @@ export default async function PaymentsPage() {
         <SummaryStat icon={CheckCircle2} accent="gold" label="To verify" value={String(pendingVerify)} sub="tenant-submitted payments" />
       </div>
 
+      <Filterable
+        placeholder="Search by tenant or room…"
+        filters={[
+          {
+            key: "pstatus",
+            label: "Status",
+            options: [
+              { label: "All", value: "" },
+              { label: "Paid", value: "paid" },
+              { label: "Pending", value: "pending" },
+              { label: "To verify", value: "awaiting" },
+            ],
+          },
+        ]}
+      >
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -55,8 +71,14 @@ export default async function PaymentsPage() {
             <tbody>
               {rows.map((r) => {
                 const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
+                const pstatus = awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
                 return (
-                  <tr key={r.tenant_id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
+                  <tr
+                    key={r.tenant_id}
+                    data-search={`${r.name} room ${r.room}`}
+                    data-pstatus={pstatus}
+                    className="border-b border-line last:border-0 hover:bg-paper-2/30"
+                  >
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <span className="grid size-8 place-items-center rounded-full bg-clay-50 text-[0.7rem] font-bold text-clay-600">
@@ -123,6 +145,7 @@ export default async function PaymentsPage() {
           </table>
         </div>
       </Card>
+      </Filterable>
     </div>
   );
 }

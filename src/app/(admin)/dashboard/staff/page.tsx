@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ShieldCheck, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,6 +29,20 @@ export default async function StaffPage() {
         action={<AddStaffDialog />}
       />
 
+      <Filterable
+        placeholder="Search team by name or phone…"
+        filters={[
+          {
+            key: "role",
+            label: "Role",
+            options: [
+              { label: "All", value: "" },
+              { label: "Owner", value: "admin" },
+              { label: "Staff", value: "staff" },
+            ],
+          },
+        ]}
+      >
       <Card>
         <div className="border-b border-line p-5 sm:p-6">
           <h3 className="text-lg text-ink">Members</h3>
@@ -51,6 +66,8 @@ export default async function StaffPage() {
               return (
                 <div
                   key={m.id}
+                  data-search={`${m.full_name} ${m.phone ?? ""}`}
+                  data-role={m.role}
                   className="flex items-center justify-between gap-3 px-5 py-4 sm:px-6"
                 >
                   <div className="flex items-center gap-3">
@@ -84,6 +101,7 @@ export default async function StaffPage() {
           </div>
         )}
       </Card>
+      </Filterable>
     </div>
   );
 }

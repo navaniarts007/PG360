@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CalendarCheck, Phone } from "lucide-react";
 import { BookingLink } from "@/components/admin/booking-link";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -51,9 +52,29 @@ export default async function BookingsPage() {
           body="When someone submits your booking link, it shows up here to approve or reject."
         />
       ) : (
+        <Filterable
+          placeholder="Search requests by name or phone…"
+          filters={[
+            {
+              key: "status",
+              label: "Status",
+              options: [
+                { label: "All", value: "" },
+                { label: "Pending", value: "pending" },
+                { label: "Approved", value: "approved" },
+                { label: "Rejected", value: "rejected" },
+              ],
+            },
+          ]}
+        >
         <div className="space-y-3">
           {bookings.map((b) => (
-            <Card key={b.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <Card
+              key={b.id}
+              data-search={`${b.tenant_name} ${b.phone}`}
+              data-status={b.status}
+              className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div className="flex items-center gap-4">
                 <span className="grid size-11 place-items-center rounded-xl bg-paper-2 text-ink-soft ring-1 ring-line">
                   <CalendarCheck className="size-5" />
@@ -83,6 +104,7 @@ export default async function BookingsPage() {
             </Card>
           ))}
         </div>
+        </Filterable>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Wallet } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -82,7 +83,8 @@ export default async function ExpensesPage() {
         </Card>
 
         {/* list */}
-        <Card className="lg:col-span-2">
+        <Filterable className="lg:col-span-2" placeholder="Search by category or note…">
+        <Card>
           <div className="border-b border-line p-5 sm:p-6">
             <h3 className="text-lg text-ink">All expenses · {monthLabel(month)}</h3>
           </div>
@@ -109,7 +111,11 @@ export default async function ExpensesPage() {
                 </thead>
                 <tbody>
                   {expenses.map((e) => (
-                    <tr key={e.id} className="border-b border-line last:border-0 hover:bg-paper-2/30">
+                    <tr
+                      key={e.id}
+                      data-search={`${e.category} ${e.description ?? ""}`}
+                      className="border-b border-line last:border-0 hover:bg-paper-2/30"
+                    >
                       <td className="px-6 py-3.5">
                         <Badge tone={CATEGORY_TONE[e.category] ?? "neutral"} className="capitalize">
                           {e.category}
@@ -131,6 +137,7 @@ export default async function ExpensesPage() {
             </div>
           )}
         </Card>
+        </Filterable>
       </div>
     </div>
   );
