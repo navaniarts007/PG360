@@ -775,6 +775,44 @@ export async function getMyPayments(): Promise<Payment[]> {
   return (data ?? []) as Payment[];
 }
 
+/** The signed-in tenant's outstanding rent reminder, or null if nothing's due.
+ *  Handles both monthly and day-wise stays. */
+export async function myRentReminder(): Promise<{
+  balance: number;
+  total: number;
+  dueDate: string;
+  overdue: boolean;
+} | null> {
+  const mine = await getMyTenant();
+  if (!mine) return null;
+  const t = mine.tenant;
+  const month = new Date().toISOString().slice(0, 7);
+  const [payments, pg] = await Promise.all([getMyPayments(), getMyPg()]);
+  const cur = payments.find((p) => p.month_for === month);
+
+  let total: number;
+  let dueDate: string;
+  if (t.stay_type === "daily") {
+    total = cur?.total_amount ?? Math.round((t.daily_rate ?? 0) * (t.stay_days ?? 0));
+    dueDate = t.checkin_date; // collected on arrival
+  } else {
+    const derived = computeBill({
+      pricePerMonth: t.rent_amount,
+      checkinISO: t.checkin_date,
+      month,
+      foodOptOut: t.food_opt_out,
+      foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
+    });
+    total = cur?.total_amount ?? derived.total;
+    dueDate = dueDateFor(month, t.rent_due_day);
+  }
+  const paid = cur?.amount_paid ?? 0;
+  const balance = Math.max(total - paid, 0);
+  if (balance <= 0) return null;
+  const overdue = new Date().toISOString().slice(0, 10) > dueDate;
+  return { balance, total, dueDate, overdue };
+}
+
 export async function getMyIssues(): Promise<Issue[]> {
   const s = await sb();
   const { data } = await s

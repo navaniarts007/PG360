@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WifiCard } from "@/components/marketing/wifi-card";
 import { AvatarUpload } from "@/components/tenant/avatar-upload";
+import { RentReminder } from "@/components/tenant/rent-reminder";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyPg, getMyTenant, getRoommateNames } from "@/lib/db";
 import { currentMonth, initials, inr } from "@/lib/utils";
@@ -50,6 +51,8 @@ export default async function MyRoom() {
           <p className="mt-1.5 text-ink-soft">Everything about your stay, in one place.</p>
         </div>
       </div>
+
+      <RentReminder />
 
       {!room ? (
         <EmptyState icon={BedDouble} title="No room assigned yet" body="Your PG owner will assign your room shortly." />

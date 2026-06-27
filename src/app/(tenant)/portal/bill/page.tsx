@@ -12,6 +12,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { PaymentStatusPill } from "@/components/ui/status";
 import { TenantRecordPaymentDialog } from "@/components/tenant/record-payment-dialog";
+import { RentReminder } from "@/components/tenant/rent-reminder";
 import { UpiPay } from "@/components/tenant/upi-pay";
 import { requireRole } from "@/lib/guards";
 import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
@@ -95,6 +96,8 @@ export default async function MyBill() {
           My bill
         </h1>
       </div>
+
+      <RentReminder />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
