@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BedDouble, ChevronRight, Eye, IndianRupee, Layers } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { Filterable } from "@/components/app/filterable";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FloorDialog } from "@/components/admin/floor-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
@@ -47,6 +48,19 @@ export default async function RoomsPage() {
           action={<FloorDialog />}
         />
       ) : (
+        <Filterable
+          placeholder="Search by floor name or room number…"
+          filters={[
+            {
+              key: "vacant",
+              label: "Vacancy",
+              options: [
+                { label: "All", value: "" },
+                { label: "Has vacancy", value: "yes" },
+              ],
+            },
+          ]}
+        >
         <div className="space-y-3">
           {floors.map(({ floor, rooms }) => {
             const beds = rooms.flatMap((r) => r.beds);
@@ -55,6 +69,8 @@ export default async function RoomsPage() {
             return (
               <div
                 key={floor.id}
+                data-search={`${floor.name} ${rooms.map((r) => r.room.room_number).join(" ")}`}
+                data-vacant={floorVacant > 0 ? "yes" : "no"}
                 className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 shadow-soft transition-all hover:shadow-lift sm:p-5"
               >
                 <Link href={`/dashboard/rooms/${floor.id}`} className="group flex flex-1 items-center gap-4">
@@ -92,6 +108,7 @@ export default async function RoomsPage() {
             );
           })}
         </div>
+        </Filterable>
       )}
     </div>
   );
