@@ -50,13 +50,16 @@ export default async function MyBill() {
     foodOptOut: tenant.food_opt_out,
     foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
   });
-  const baseRent = current?.base_rent ?? derived.baseRent;
-  const electricity = current?.electricity_charge ?? 0;
-  const food = current?.food_charge ?? 0;
-  const foodDeduction = current?.food_opt_out_deduction ?? derived.foodDeduction;
-  const other = current?.other_charges ?? 0;
-  const total = current?.total_amount ?? derived.total;
-  const isProRata = current?.is_pro_rata ?? derived.isProRata;
+  // Day-wise stays are one fixed total for the whole stay (no monthly pro-rata).
+  const isDaily = tenant.stay_type === "daily";
+  const dailyTotal = Math.round((tenant.daily_rate ?? 0) * (tenant.stay_days ?? 0));
+  const baseRent = isDaily ? current?.total_amount ?? dailyTotal : current?.base_rent ?? derived.baseRent;
+  const electricity = isDaily ? 0 : current?.electricity_charge ?? 0;
+  const food = isDaily ? 0 : current?.food_charge ?? 0;
+  const foodDeduction = isDaily ? 0 : current?.food_opt_out_deduction ?? derived.foodDeduction;
+  const other = isDaily ? 0 : current?.other_charges ?? 0;
+  const total = isDaily ? current?.total_amount ?? dailyTotal : current?.total_amount ?? derived.total;
+  const isProRata = isDaily ? false : current?.is_pro_rata ?? derived.isProRata;
   const proRataDays = current?.pro_rata_days ?? derived.proRataDays;
   const paid = current?.amount_paid ?? 0;
   const balance = Math.max(total - paid, 0);
@@ -64,25 +67,29 @@ export default async function MyBill() {
   const status = current?.status ?? (total > 0 ? "due" : "due");
   const hasPayInfo = !!(pg?.upi_id || pg?.bank_details || pg?.payment_qr_url);
 
-  // deadline = rent due day of this month
-  const dueDate = `${month}-${String(tenant.rent_due_day).padStart(2, "0")}`;
+  // deadline = arrival for day-wise, else the rent due day of this month
+  const dueDate = isDaily
+    ? tenant.checkin_date
+    : `${month}-${String(tenant.rent_due_day).padStart(2, "0")}`;
   const today = new Date().toISOString().slice(0, 10);
   const overdue = balance > 0 && today > dueDate;
 
   const noBed = !room && !current;
   const pendingVerify = !!current && !current.verified && paid > 0;
 
-  const lines: { icon: typeof Home; label: string; value: number }[] = [
-    {
-      icon: Home,
-      label: isProRata ? `Base rent (pro-rata · ${proRataDays} days)` : "Base rent",
-      value: baseRent,
-    },
-    { icon: Zap, label: "Electricity", value: electricity },
-    { icon: Utensils, label: "Food", value: food },
-    { icon: Plus, label: "Other charges", value: other },
-  ].filter((l) => l.value > 0 || l.label.startsWith("Base rent"));
-  if (foodDeduction > 0) {
+  const lines: { icon: typeof Home; label: string; value: number }[] = isDaily
+    ? [{ icon: Home, label: `Stay (${tenant.stay_days ?? 0} days)`, value: baseRent }]
+    : [
+        {
+          icon: Home,
+          label: isProRata ? `Base rent (pro-rata · ${proRataDays} days)` : "Base rent",
+          value: baseRent,
+        },
+        { icon: Zap, label: "Electricity", value: electricity },
+        { icon: Utensils, label: "Food", value: food },
+        { icon: Plus, label: "Other charges", value: other },
+      ].filter((l) => l.value > 0 || l.label.startsWith("Base rent"));
+  if (!isDaily && foodDeduction > 0) {
     lines.push({ icon: Utensils, label: "Food opt-out credit", value: -foodDeduction });
   }
 
