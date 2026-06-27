@@ -202,6 +202,10 @@ export interface Tenant {
   lock_in_end_date: string | null;
   status: TenantStatus;
   created_at: string;
+  /** "monthly" (rent per month) or "daily" (fixed stay billed once). */
+  stay_type: "monthly" | "daily";
+  daily_rate: number | null;
+  stay_days: number | null;
 }
 
 export type TenantEventType =

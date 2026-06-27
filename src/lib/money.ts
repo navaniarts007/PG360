@@ -40,6 +40,14 @@ export function proRataFirstMonth(
   return { isProRata: true, days, amount };
 }
 
+/** Add `days` to a YYYY-MM-DD date, returning YYYY-MM-DD. Used to derive a
+ *  day-wise stay's expected checkout from check-in + number of days. */
+export function addDaysISO(dateISO: string, days: number): string {
+  const d = new Date(dateISO + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export interface BillInput {
   pricePerMonth: number;
   checkinISO: string;

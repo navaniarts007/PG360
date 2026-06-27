@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/admin";
 import { getUploadSignatureAction } from "@/lib/actions/upload";
 import { uploadKyc } from "@/lib/upload-client";
+import { inr } from "@/lib/utils";
 import type { BedOption } from "@/lib/db";
 import type { Tenant } from "@/lib/types";
 
@@ -68,6 +69,9 @@ function TenantForm({
   const [selfie, setSelfie] = useState<string | null>(tenant?.avatar_url ?? null); // check-in photo
   const [photo, setPhoto] = useState<string | null>(tenant?.aadhaar_photo_url ?? null); // ID doc (storage path or legacy URL)
   const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of a freshly picked ID
+  const [stayType, setStayType] = useState<"monthly" | "daily">(tenant?.stay_type ?? "monthly");
+  const [dRate, setDRate] = useState(tenant?.daily_rate ?? 0);
+  const [dDays, setDDays] = useState(tenant?.stay_days ?? 0);
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
@@ -189,6 +193,31 @@ function TenantForm({
         <FieldRow label="Rent due day" htmlFor="rent_due_day">
           <Input id="rent_due_day" name="rent_due_day" type="number" min={1} max={28} defaultValue={tenant?.rent_due_day ?? 5} />
         </FieldRow>
+        <FieldRow label="Stay type" htmlFor="stay_type" className="col-span-2">
+          <Select
+            id="stay_type"
+            name="stay_type"
+            value={stayType}
+            onChange={(e) => setStayType(e.target.value as "monthly" | "daily")}
+          >
+            <option value="monthly">Monthly (rent per month)</option>
+            <option value="daily">Day-wise (fixed number of days)</option>
+          </Select>
+        </FieldRow>
+        {stayType === "daily" && (
+          <>
+            <FieldRow label="Daily rate (₹)" htmlFor="daily_rate">
+              <Input id="daily_rate" name="daily_rate" type="number" min={0} value={dRate || ""} onChange={(e) => setDRate(+e.target.value)} required />
+            </FieldRow>
+            <FieldRow label="Number of days" htmlFor="stay_days">
+              <Input id="stay_days" name="stay_days" type="number" min={1} value={dDays || ""} onChange={(e) => setDDays(+e.target.value)} required />
+            </FieldRow>
+            <div className="col-span-2 flex items-center justify-between rounded-lg bg-ink px-4 py-2.5 text-paper">
+              <span className="text-xs text-paper/70">Total for the stay ({dDays || 0} days)</span>
+              <span className="font-display text-lg font-semibold tnum">{inr(dRate * dDays)}</span>
+            </div>
+          </>
+        )}
         {!tenant && (
           <>
             <FieldRow label="Check-in date" htmlFor="checkin_date">

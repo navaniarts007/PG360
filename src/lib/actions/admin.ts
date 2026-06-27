@@ -235,6 +235,9 @@ const tenantSchema = z.object({
   joining_fee: z.coerce.number().int().min(0).optional(),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
+  stay_type: z.enum(["monthly", "daily"]).default("monthly"),
+  daily_rate: z.coerce.number().min(0).optional(),
+  stay_days: z.coerce.number().int().min(1).optional(),
 });
 
 export async function addTenantAction(
@@ -259,6 +262,17 @@ export async function addTenantAction(
     }
     roomId = bed.room_id;
     rent = bed.price_per_month;
+  }
+
+  // Day-wise stay: one total for the whole stay (daily rate * days) overrides the
+  // bed's monthly price.
+  let dailyRate: number | null = null;
+  let stayDays: number | null = null;
+  if (d.stay_type === "daily") {
+    if (!d.daily_rate || !d.stay_days) return { error: "Enter the daily rate and number of days." };
+    dailyRate = d.daily_rate;
+    stayDays = d.stay_days;
+    rent = Math.round(dailyRate * stayDays);
   }
 
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
@@ -304,6 +318,9 @@ export async function addTenantAction(
       security_deposit: d.security_deposit,
       checkin_date: d.checkin_date,
       rent_due_day: d.rent_due_day,
+      stay_type: d.stay_type,
+      daily_rate: dailyRate,
+      stay_days: stayDays,
     })
     .select()
     .single();
@@ -361,6 +378,9 @@ const recordSchema = z.object({
   bed_id: z.string().optional(),
   security_deposit: z.coerce.number().min(0).optional(),
   checkin_date: z.string().min(1, "Check-in date is required."),
+  stay_type: z.enum(["monthly", "daily"]).default("monthly"),
+  daily_rate: z.coerce.number().min(0).optional(),
+  stay_days: z.coerce.number().int().min(1).optional(),
 });
 
 /** Register a resident as a RECORD only — no tenant login is created. Captures
@@ -397,6 +417,15 @@ export async function addTenantRecordAction(
     rent = bed.price_per_month;
   }
 
+  let dailyRate: number | null = null;
+  let stayDays: number | null = null;
+  if (d.stay_type === "daily") {
+    if (!d.daily_rate || !d.stay_days) return { error: "Enter the daily rate and number of days." };
+    dailyRate = d.daily_rate;
+    stayDays = d.stay_days;
+    rent = Math.round(dailyRate * stayDays);
+  }
+
   let regNo: string | null = null;
   const { regPrefix } = await getEdition();
   if (regPrefix) {
@@ -419,6 +448,9 @@ export async function addTenantRecordAction(
       rent_amount: rent,
       security_deposit: d.security_deposit ?? 0,
       checkin_date: d.checkin_date,
+      stay_type: d.stay_type,
+      daily_rate: dailyRate,
+      stay_days: stayDays,
     })
     .select()
     .single();
@@ -465,6 +497,9 @@ const tenantUpdateSchema = z.object({
   rent_due_day: z.coerce.number().int().min(1).max(28),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
+  stay_type: z.enum(["monthly", "daily"]).default("monthly"),
+  daily_rate: z.coerce.number().min(0).optional(),
+  stay_days: z.coerce.number().int().min(1).optional(),
 });
 
 export async function updateTenantAction(
@@ -497,6 +532,16 @@ export async function updateTenantAction(
     rent = bed.price_per_month;
   }
 
+  // Day-wise: total stay amount overrides the bed's monthly price.
+  let dailyRate: number | null = null;
+  let stayDays: number | null = null;
+  if (d.stay_type === "daily") {
+    if (!d.daily_rate || !d.stay_days) return { error: "Enter the daily rate and number of days." };
+    dailyRate = d.daily_rate;
+    stayDays = d.stay_days;
+    rent = Math.round(dailyRate * stayDays);
+  }
+
   const { error } = await s
     .from("tenants")
     .update({
@@ -511,6 +556,9 @@ export async function updateTenantAction(
       rent_amount: rent,
       security_deposit: d.security_deposit,
       rent_due_day: d.rent_due_day,
+      stay_type: d.stay_type,
+      daily_rate: dailyRate,
+      stay_days: stayDays,
     })
     .eq("id", id);
   if (error) return { error: humanizeDbError(error) };

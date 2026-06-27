@@ -525,12 +525,12 @@ export async function adminKpis(month: string) {
   const pid = await getActiveProperty();
   const [{ data: rooms }, { data: tenants }, { data: payments }, { data: pg }] = await Promise.all([
     s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
-    s.from("tenants").select("id, rent_amount, checkin_date, food_opt_out").eq("pg_id", pid).eq("status", "active"),
+    s.from("tenants").select("id, rent_amount, checkin_date, food_opt_out, stay_type").eq("pg_id", pid).eq("status", "active"),
     s.from("payments").select("tenant_id, total_amount, amount_paid").eq("pg_id", pid).eq("month_for", month),
     s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
   ]);
   const r = (rooms ?? []) as { total_beds: number; occupied_beds: number }[];
-  const t = (tenants ?? []) as { id: string; rent_amount: number; checkin_date: string; food_opt_out: boolean }[];
+  const t = (tenants ?? []) as { id: string; rent_amount: number; checkin_date: string; food_opt_out: boolean; stay_type: "monthly" | "daily" }[];
   const p = (payments ?? []) as { tenant_id: string; total_amount: number; amount_paid: number }[];
   const foodDeduction = (pg as { food_opt_out_deduction: number } | null)?.food_opt_out_deduction ?? 0;
   const payByTenant = new Map(p.map((x) => [x.tenant_id, x]));
@@ -538,19 +538,24 @@ export async function adminKpis(month: string) {
   const occupiedBeds = r.reduce((sum, x) => sum + x.occupied_beds, 0);
   const collected = p.reduce((sum, x) => sum + x.amount_paid, 0);
   // billed counts EVERY active tenant — derived (pro-rata + food) when not yet invoiced
-  const billed = t.reduce(
-    (sum, x) =>
+  const billed = t.reduce((sum, x) => {
+    const invoiced = payByTenant.get(x.id)?.total_amount;
+    if (invoiced != null) return sum + invoiced;
+    // day-wise: the whole-stay total counts once, in the check-in month
+    if (x.stay_type === "daily") {
+      return sum + (x.checkin_date.slice(0, 7) === month ? x.rent_amount : 0);
+    }
+    return (
       sum +
-      (payByTenant.get(x.id)?.total_amount ??
-        computeBill({
-          pricePerMonth: x.rent_amount,
-          checkinISO: x.checkin_date,
-          month,
-          foodOptOut: x.food_opt_out,
-          foodOptOutDeduction: foodDeduction,
-        }).total),
-    0,
-  );
+      computeBill({
+        pricePerMonth: x.rent_amount,
+        checkinISO: x.checkin_date,
+        month,
+        foodOptOut: x.food_opt_out,
+        foodOptOutDeduction: foodDeduction,
+      }).total
+    );
+  }, 0);
   return {
     totalTenants: t.length,
     roomCount: r.length,
@@ -588,7 +593,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
   const [{ data: tenants }, { data: pays }, { data: pg }] = await Promise.all([
     s
       .from("tenants")
-      .select("id, name, rent_amount, checkin_date, rent_due_day, food_opt_out, room:rooms(room_number)")
+      .select("id, name, rent_amount, checkin_date, rent_due_day, food_opt_out, stay_type, daily_rate, stay_days, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
     s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
@@ -603,14 +608,42 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
     checkin_date: string;
     rent_due_day: number;
     food_opt_out: boolean;
+    stay_type: "monthly" | "daily";
+    daily_rate: number | null;
+    stay_days: number | null;
     room: { room_number: string } | null;
   };
   const order = { due: 0, partial: 1, paid: 2 } as const;
   return ((tenants ?? []) as unknown as T[])
-    .map((t) => {
+    .map((t): BillRow | null => {
       const p = payByTenant.get(t.id);
-      // not yet invoiced → derive the Bangalore way (pro-rata first month, food
-      // included by default with an opt-out deduction).
+
+      // Day-wise stay: one total for the whole stay, billed once in the
+      // check-in month (and collected on arrival). Skip every other month.
+      if (t.stay_type === "daily") {
+        if (t.checkin_date.slice(0, 7) !== month) return null;
+        const total = p?.total_amount ?? t.rent_amount;
+        const paid = p?.amount_paid ?? 0;
+        return {
+          tenant_id: t.id,
+          name: t.name,
+          room: t.room?.room_number ?? "—",
+          paymentId: p?.id ?? null,
+          total,
+          paid,
+          balance: Math.max(total - paid, 0),
+          status: (p?.status ?? "due") as BillRow["status"],
+          verified: p?.verified ?? false,
+          payment_mode: p?.payment_mode ?? null,
+          screenshot_url: p?.payment_screenshot_url ?? null,
+          rent_due_day: t.rent_due_day,
+          checkin_date: t.checkin_date,
+          due_date: t.checkin_date, // collect on arrival
+        };
+      }
+
+      // Monthly: derive the Bangalore way (pro-rata first month, food included
+      // by default with an opt-out deduction).
       const derived = computeBill({
         pricePerMonth: t.rent_amount,
         checkinISO: t.checkin_date,
@@ -637,6 +670,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         due_date: dueDateFor(month, t.rent_due_day),
       };
     })
+    .filter((r): r is BillRow => r !== null)
     .sort((a, b) => order[a.status] - order[b.status] || b.balance - a.balance);
 }
 

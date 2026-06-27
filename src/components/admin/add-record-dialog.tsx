@@ -9,6 +9,7 @@ import { FieldRow, Input, Select } from "@/components/ui/field";
 import { addTenantRecordAction, type ActionState } from "@/lib/actions/admin";
 import { getUploadSignatureAction } from "@/lib/actions/upload";
 import { uploadKyc } from "@/lib/upload-client";
+import { inr } from "@/lib/utils";
 import type { BedOption } from "@/lib/db";
 
 export function AddRecordDialog({ beds }: { beds: BedOption[] }) {
@@ -37,6 +38,9 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
   const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of the ID
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [stayType, setStayType] = useState<"monthly" | "daily">("monthly");
+  const [dRate, setDRate] = useState(0);
+  const [dDays, setDDays] = useState(0);
   const selfieRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -152,9 +156,34 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
         <FieldRow label="Check-in date" htmlFor="checkin_date">
           <Input id="checkin_date" name="checkin_date" type="date" required />
         </FieldRow>
-        <FieldRow label="Security deposit (₹)" htmlFor="security_deposit" className="col-span-2">
+        <FieldRow label="Security deposit (₹)" htmlFor="security_deposit">
           <Input id="security_deposit" name="security_deposit" type="number" min={0} placeholder="0" />
         </FieldRow>
+        <FieldRow label="Stay type" htmlFor="stay_type" className="col-span-2">
+          <Select
+            id="stay_type"
+            name="stay_type"
+            value={stayType}
+            onChange={(e) => setStayType(e.target.value as "monthly" | "daily")}
+          >
+            <option value="monthly">Monthly</option>
+            <option value="daily">Day-wise (fixed number of days)</option>
+          </Select>
+        </FieldRow>
+        {stayType === "daily" && (
+          <>
+            <FieldRow label="Daily rate (₹)" htmlFor="daily_rate">
+              <Input id="daily_rate" name="daily_rate" type="number" min={0} value={dRate || ""} onChange={(e) => setDRate(+e.target.value)} required />
+            </FieldRow>
+            <FieldRow label="Number of days" htmlFor="stay_days">
+              <Input id="stay_days" name="stay_days" type="number" min={1} value={dDays || ""} onChange={(e) => setDDays(+e.target.value)} required />
+            </FieldRow>
+            <div className="col-span-2 flex items-center justify-between rounded-lg bg-ink px-4 py-2.5 text-paper">
+              <span className="text-xs text-paper/70">Total for the stay ({dDays || 0} days)</span>
+              <span className="font-display text-lg font-semibold tnum">{inr(dRate * dDays)}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Aadhaar / ID photo */}

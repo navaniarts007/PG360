@@ -7,7 +7,8 @@ import {
   tenantSchedule,
   type DueStatus,
 } from "@/lib/rent";
-import { formatDate } from "@/lib/utils";
+import { addDaysISO } from "@/lib/money";
+import { formatDate, inr } from "@/lib/utils";
 import type { Payment } from "@/lib/types";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -32,11 +33,58 @@ export function RentCalendarCard({
   checkinDate,
   rentDueDay,
   payments,
+  stayType = "monthly",
+  dailyRate,
+  stayDays,
 }: {
   checkinDate: string;
   rentDueDay: number;
   payments: Payment[];
+  stayType?: "monthly" | "daily";
+  dailyRate?: number | null;
+  stayDays?: number | null;
 }) {
+  // Day-wise stay: one fixed window, billed once — show a stay summary instead
+  // of a monthly cycle.
+  if (stayType === "daily") {
+    const days = stayDays ?? 0;
+    const rate = dailyRate ?? 0;
+    const total = Math.round(rate * days);
+    const end = addDaysISO(checkinDate, days);
+    const paid = payments
+      .filter((p) => p.status === "paid")
+      .reduce((s, p) => s + p.amount_paid, 0);
+    const settled = paid >= total && total > 0;
+    return (
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="size-4.5 text-clay-500" />
+          <h3 className="text-lg text-ink">Stay &amp; billing</h3>
+        </div>
+        <span className="mt-2 inline-flex rounded-full bg-clay-50 px-2.5 py-0.5 text-xs font-semibold text-clay-700 ring-1 ring-clay-100">
+          Day-wise · {days} day{days === 1 ? "" : "s"}
+        </span>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <Info label="Check-in" value={formatDate(checkinDate)} />
+          <Info label="Expected check-out" value={formatDate(end)} />
+          <Info label="Daily rate" value={inr(rate)} />
+          <Info label="Total for stay" value={inr(total)} />
+        </div>
+        <div
+          className={`mt-4 flex items-center justify-between rounded-xl px-4 py-3 text-sm ${
+            settled ? "bg-teal-50 text-teal-700" : "bg-rose-50 text-rose-700"
+          }`}
+        >
+          <span className="font-semibold">{settled ? "Paid in full" : "Payment pending"}</span>
+          <span className="tnum">{inr(paid)} / {inr(total)}</span>
+        </div>
+        <p className="mt-3 text-xs text-ink-muted">
+          Billed once for the whole stay — collect on arrival. No monthly due dates.
+        </p>
+      </Card>
+    );
+  }
+
   const paidStatus = new Map<string, "paid" | "partial">();
   for (const p of payments) {
     if (p.status === "paid" || p.status === "partial") paidStatus.set(p.month_for, p.status);
