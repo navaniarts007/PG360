@@ -20,6 +20,7 @@ import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement
 import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
 import { RentCalendarCard } from "@/components/admin/rent-calendar-card";
 import { SignedAgreement } from "@/components/admin/signed-agreement";
+import { DocumentsManager } from "@/components/admin/documents-manager";
 import { ElectricityDialog } from "@/components/admin/electricity-dialog";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
@@ -31,6 +32,7 @@ import {
   getKycSignedUrl,
   getPayTenants,
   getTenantDetail,
+  listTenantDocumentsSigned,
   listTenantEvents,
 } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
@@ -62,13 +64,14 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrl] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrl, documents] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
     getActivePolicy(),
     listTenantEvents(id),
     getKycSignedUrl(tenant.aadhaar_photo_url),
+    listTenantDocumentsSigned(id),
   ]);
 
   return (
@@ -218,6 +221,10 @@ export default async function TenantDetail({
             ))}
           </div>
         </Card>
+
+        <div className="lg:col-span-3">
+          <DocumentsManager tenantId={tenant.id} docs={documents} />
+        </div>
 
         <div className="lg:col-span-3">
           <SignedAgreement pgId={tenant.pg_id} tenantId={tenant.id} tenantName={tenant.name} />

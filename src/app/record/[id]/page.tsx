@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/guards";
-import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl } from "@/lib/db";
+import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl, listTenantDocumentsSigned } from "@/lib/db";
+import { DOC_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
 import { SignedAgreement } from "@/components/admin/signed-agreement";
@@ -29,10 +30,11 @@ export default async function RecordPage({
   const detail = await getTenantDetail(id);
   if (!detail) notFound();
   const { tenant, room } = detail;
-  const [pg, events, aadhaarUrl] = await Promise.all([
+  const [pg, events, aadhaarUrl, documents] = await Promise.all([
     getPgAccount(tenant.pg_id),
     listTenantEvents(id),
     getKycSignedUrl(tenant.aadhaar_photo_url),
+    listTenantDocumentsSigned(id),
   ]);
 
   const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -148,6 +150,32 @@ export default async function RecordPage({
               </ol>
             )}
           </section>
+
+          {/* additional ID documents (DL / passport / voter / other) */}
+          {documents.length > 0 && (
+            <section className="mt-6 break-inside-avoid">
+              <h2 className="font-display text-lg text-ink">ID documents</h2>
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {documents.map((d) => (
+                  <div key={d.id} className="overflow-hidden rounded-xl border border-line">
+                    {d.url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={d.url}
+                        alt={DOC_LABELS[d.doc_type]}
+                        loading="eager"
+                        className="h-32 w-full bg-white object-contain"
+                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+                      />
+                    )}
+                    <p className="px-2.5 py-1.5 text-xs font-semibold text-ink">
+                      {d.label || DOC_LABELS[d.doc_type]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* resident agreement + signatures (only if configured) */}
           <div className="mt-6">

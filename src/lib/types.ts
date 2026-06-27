@@ -82,6 +82,26 @@ export interface TenantAgreement {
   accepted_at: string;
 }
 
+export type DocType = "aadhaar" | "dl" | "passport" | "voter" | "other";
+
+export const DOC_LABELS: Record<DocType, string> = {
+  aadhaar: "Aadhaar",
+  dl: "Driving License",
+  passport: "Passport",
+  voter: "Voter ID",
+  other: "Other",
+};
+
+export interface TenantDocument {
+  id: string;
+  pg_id: string;
+  tenant_id: string;
+  doc_type: DocType;
+  file_url: string;
+  label: string | null;
+  created_at: string;
+}
+
 /** Per-property money rules (notice / lock-in / deposit / electricity cap). */
 export interface PgPolicy {
   id: string;

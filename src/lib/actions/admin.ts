@@ -720,6 +720,49 @@ export async function deleteTenantAction(formData: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+/* ---- tenant ID documents (Aadhaar / DL / passport / voter / other) ------- */
+
+const docSchema = z.object({
+  tenant_id: z.string().uuid(),
+  doc_type: z.enum(["aadhaar", "dl", "passport", "voter", "other"]),
+  file_url: z.string().regex(/^cld:/, "Upload a document first."),
+  label: z.string().optional(),
+});
+
+export async function addTenantDocumentAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const parsed = docSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const d = parsed.data;
+  const admin = createAdminClient();
+  const { error } = await admin.from("tenant_documents").insert({
+    pg_id: pid,
+    tenant_id: d.tenant_id,
+    doc_type: d.doc_type,
+    file_url: d.file_url,
+    label: d.label?.trim() || null,
+  });
+  if (error) return { error: humanizeDbError(error, "Could not save the document.") };
+  revalidatePath(`/dashboard/tenants/${d.tenant_id}`);
+  return { ok: true };
+}
+
+export async function deleteTenantDocumentAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  const id = String(formData.get("id"));
+  const tenantId = String(formData.get("tenant_id") || "");
+  if (!pid || !id) return;
+  const admin = createAdminClient();
+  await admin.from("tenant_documents").delete().eq("id", id).eq("pg_id", pid);
+  if (tenantId) revalidatePath(`/dashboard/tenants/${tenantId}`);
+}
+
 /* -------------------------------- payments ------------------------------- */
 
 const paymentSchema = z.object({

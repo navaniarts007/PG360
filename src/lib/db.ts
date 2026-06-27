@@ -38,6 +38,7 @@ import type {
   Room,
   Tenant,
   TenantAgreement,
+  TenantDocument,
   TenantEvent,
   WifiNetwork,
 } from "./types";
@@ -856,6 +857,27 @@ export async function myAgreement(): Promise<TenantAgreement | null> {
 export async function tenantNeedsAgreement(): Promise<boolean> {
   const [sections, signed] = await Promise.all([getMyAgreementSections(), myAgreement()]);
   return sections.length > 0 && !signed;
+}
+
+/** A tenant's ID documents (raw rows). */
+export async function listTenantDocuments(tenantId: string): Promise<TenantDocument[]> {
+  const s = await sb();
+  const { data } = await s
+    .from("tenant_documents")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+  return (data ?? []) as TenantDocument[];
+}
+
+/** A tenant's documents with short-lived signed view URLs (for display). */
+export async function listTenantDocumentsSigned(
+  tenantId: string,
+): Promise<Array<TenantDocument & { url: string | null }>> {
+  const docs = await listTenantDocuments(tenantId);
+  return Promise.all(
+    docs.map(async (d) => ({ ...d, url: await getKycSignedUrl(d.file_url) })),
+  );
 }
 
 /** A tenant's signed agreement (staff/admin view, for profile + record). */

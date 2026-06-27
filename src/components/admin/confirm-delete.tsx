@@ -11,11 +11,14 @@ export function ConfirmDelete({
   id,
   title = "Delete",
   iconOnly = true,
+  extra,
 }: {
   action: (formData: FormData) => Promise<void>;
   id: string;
   title?: string;
   iconOnly?: boolean;
+  /** Extra form fields to submit alongside the id (e.g. tenant_id). */
+  extra?: Record<string, string>;
 }) {
   const [pending, start] = useTransition();
   const [confirm, setConfirm] = useState(false);
@@ -24,6 +27,7 @@ export function ConfirmDelete({
     start(() => {
       const fd = new FormData();
       fd.set("id", id);
+      for (const [k, v] of Object.entries(extra ?? {})) fd.set(k, v);
       void action(fd);
     });
 
