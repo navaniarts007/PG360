@@ -678,7 +678,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
 }
 
 export async function listStaff(): Promise<
-  { id: string; full_name: string; phone: string | null; role: string }[]
+  { id: string; full_name: string; phone: string | null; role: string; permissions: import("./types").StaffPermissions | null }[]
 > {
   // RLS only lets a user see their own membership + profile rows, so reading the
   // team needs the service client. Safe: the staff page is admin-only and we
@@ -695,11 +695,15 @@ export async function listStaff(): Promise<
   if (ids.length === 0) return [];
   const { data: profiles } = await s
     .from("profiles")
-    .select("id, full_name, phone, role")
+    .select("id, full_name, phone, role, permissions")
     .in("id", ids);
-  return ((profiles ?? []) as { id: string; full_name: string; phone: string | null; role: string }[]).filter(
-    (p) => p.role === "staff" || p.role === "admin",
-  );
+  return ((profiles ?? []) as {
+    id: string;
+    full_name: string;
+    phone: string | null;
+    role: string;
+    permissions: import("./types").StaffPermissions | null;
+  }[]).filter((p) => p.role === "staff" || p.role === "admin");
 }
 
 type PaymentRow = Payment & {

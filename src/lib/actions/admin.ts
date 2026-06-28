@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
+import { canDelete, canEdit } from "../perms";
 import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
@@ -122,7 +123,8 @@ export async function updateRoomAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canEdit(me)) return { error: "You don't have permission to edit." };
   const id = String(formData.get("id"));
   const parsed = roomUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
@@ -205,7 +207,8 @@ export async function updateRoomAction(
 }
 
 export async function deleteRoomAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const id = String(formData.get("id"));
   const s = await createClient();
   const { count } = await s
@@ -510,7 +513,8 @@ export async function updateTenantAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canEdit(me)) return { error: "You don't have permission to edit." };
   const id = String(formData.get("id"));
   const parsed = tenantUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
@@ -706,7 +710,8 @@ export async function saveSettlementAction(
 }
 
 export async function deleteTenantAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const id = String(formData.get("id"));
   const s = await createClient();
   const { data: tenant } = await s
@@ -759,7 +764,8 @@ export async function addTenantDocumentAction(
 }
 
 export async function deleteTenantDocumentAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const pid = await getActiveProperty();
   const id = String(formData.get("id"));
   const tenantId = String(formData.get("tenant_id") || "");
@@ -1038,7 +1044,8 @@ export async function updateExpenseAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canEdit(me)) return { error: "You don't have permission to edit." };
   const id = String(formData.get("id"));
   const parsed = expenseUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
@@ -1059,7 +1066,8 @@ export async function updateExpenseAction(
 }
 
 export async function deleteExpenseAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const id = String(formData.get("id"));
   const s = await createClient();
   await s.from("expenses").delete().eq("id", id);
@@ -1076,7 +1084,8 @@ export async function updateIssueAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canEdit(me)) return { error: "You don't have permission to edit." };
   const id = String(formData.get("id"));
   const parsed = issueEditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
@@ -1091,7 +1100,8 @@ export async function updateIssueAction(
 }
 
 export async function deleteIssueAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const id = String(formData.get("id"));
   const s = await createClient();
   await s.from("issues").delete().eq("id", id);

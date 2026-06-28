@@ -7,8 +7,18 @@ import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
+import { STAFF_MODULES } from "../types";
 
 export type ActionState = { ok?: boolean; error?: string };
+
+/** Build the permissions JSON from the staff form's checkboxes. */
+function permsFromForm(formData: FormData) {
+  return {
+    modules: STAFF_MODULES.filter((m) => formData.get(`mod_${m}`) === "on"),
+    edit: formData.get("perm_edit") === "on",
+    delete: formData.get("perm_delete") === "on",
+  };
+}
 
 const staffSchema = z.object({
   name: z.string().min(2, "Name is required."),
@@ -51,6 +61,7 @@ export async function createStaffAction(
     pg_id: pid,
     full_name: d.name,
     phone: d.phone,
+    permissions: permsFromForm(formData),
   });
   if (pErr) {
     await admin.auth.admin.deleteUser(created.user.id);
@@ -67,6 +78,35 @@ export async function createStaffAction(
     return { error: humanizeDbError(mErr) };
   }
 
+  revalidatePath("/dashboard/staff");
+  return { ok: true };
+}
+
+/** Update an existing staff member's privileges (owner only). */
+export async function updateStaffPermissionsAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const id = String(formData.get("id"));
+  if (!id) return { error: "Missing staff member." };
+  const admin = createAdminClient();
+  // scope: only a staff profile that belongs to this property
+  const { data: member } = await admin
+    .from("property_members")
+    .select("user_id")
+    .eq("property_id", pid)
+    .eq("user_id", id)
+    .maybeSingle();
+  if (!member) return { error: "That staff member isn't on this property." };
+  const { error } = await admin
+    .from("profiles")
+    .update({ permissions: permsFromForm(formData) })
+    .eq("id", id)
+    .eq("role", "staff");
+  if (error) return { error: humanizeDbError(error) };
   revalidatePath("/dashboard/staff");
   return { ok: true };
 }

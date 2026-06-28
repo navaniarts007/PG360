@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
+import { canDelete, canEdit } from "../perms";
 import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 
@@ -34,7 +35,8 @@ export async function updateFloorAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canEdit(me)) return { error: "You don't have permission to edit." };
   const id = String(formData.get("id"));
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
@@ -46,7 +48,8 @@ export async function updateFloorAction(
 }
 
 export async function deleteFloorAction(formData: FormData): Promise<void> {
-  await requireRole(["admin", "staff"]);
+  const me = await requireRole(["admin", "staff"]);
+  if (!canDelete(me)) return;
   const id = String(formData.get("id"));
   const s = await createClient();
   const { count } = await s

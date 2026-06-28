@@ -40,6 +40,8 @@ import type {
   PropertyRef,
   PropertySettings,
   Role,
+  StaffModule,
+  StaffPermissions,
 } from "@/lib/types";
 
 interface NavItem {
@@ -48,6 +50,10 @@ interface NavItem {
   icon: LucideIcon;
   exact?: boolean;
   module?: keyof PropertySettings;
+  /** staff privilege area this item needs (gated when a staff has limited perms). */
+  perm?: StaffModule;
+  /** only the owner (admin) sees this item. */
+  ownerOnly?: boolean;
 }
 
 const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
@@ -75,19 +81,19 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/dashboard/properties", label: "Properties", icon: Building2 },
-    { href: "/dashboard/rooms", label: "Rooms & beds", icon: BedDouble },
-    { href: "/dashboard/pricing", label: "Pricing", icon: Tag },
-    { href: "/dashboard/tenants", label: "Tenants", icon: Users },
-    { href: "/dashboard/vacated", label: "Vacated", icon: Archive },
-    { href: "/dashboard/staff", label: "Staff", icon: UserCog },
-    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, module: "bookings" },
-    { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-    { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/dashboard/rooms", label: "Rooms & beds", icon: BedDouble, perm: "rooms" },
+    { href: "/dashboard/pricing", label: "Pricing", icon: Tag, perm: "rooms" },
+    { href: "/dashboard/tenants", label: "Tenants", icon: Users, perm: "tenants" },
+    { href: "/dashboard/vacated", label: "Vacated", icon: Archive, perm: "tenants" },
+    { href: "/dashboard/staff", label: "Staff", icon: UserCog, ownerOnly: true },
+    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, module: "bookings", perm: "bookings" },
+    { href: "/dashboard/payments", label: "Payments", icon: CreditCard, perm: "payments" },
+    { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays, perm: "payments" },
     { href: "/dashboard/food", label: "Food menu", icon: UtensilsCrossed, module: "food" },
-    { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
-    { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
-    { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare, module: "complaints" },
-    { href: "/dashboard/settings", label: "Settings", icon: Settings },
+    { href: "/dashboard/expenses", label: "Expenses", icon: Wallet, perm: "expenses" },
+    { href: "/dashboard/reports", label: "Reports", icon: BarChart3, perm: "reports" },
+    { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare, module: "complaints", perm: "complaints" },
+    { href: "/dashboard/settings", label: "Settings", icon: Settings, ownerOnly: true },
   ],
   tenant: [
     { href: "/portal", label: "My Room", icon: Wifi, exact: true },
@@ -116,6 +122,7 @@ export function AppShell({
   edition = "full",
   brandName,
   impersonating,
+  permissions,
   children,
 }: {
   role: Role;
@@ -129,6 +136,7 @@ export function AppShell({
   edition?: Edition;
   brandName?: string;
   impersonating?: { pgId: string; pgName: string } | null;
+  permissions?: StaffPermissions | null;
   children: React.ReactNode;
 }) {
   // GVM-style editions get a stripped owner-only nav; everyone else by role.
@@ -136,9 +144,16 @@ export function AppShell({
     edition === "gvm" && (role === "admin" || role === "staff")
       ? "gvm"
       : navKey(role);
-  const nav = NAVS[key].filter(
-    (item) => !item.module || settings[item.module] !== false,
-  );
+  const allowedModule = (m: StaffModule) =>
+    role !== "staff" || permissions == null || permissions.modules.includes(m);
+  const nav = NAVS[key].filter((item) => {
+    if (item.module && settings[item.module] === false) return false;
+    if (role === "staff") {
+      if (item.ownerOnly) return false;
+      if (item.perm && !allowedModule(item.perm)) return false;
+    }
+    return true;
+  });
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 

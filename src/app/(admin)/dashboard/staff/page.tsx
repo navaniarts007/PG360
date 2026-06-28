@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ShieldCheck, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Filterable } from "@/components/app/filterable";
+import { StaffPermissionsDialog } from "@/components/admin/staff-permissions-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -88,11 +89,14 @@ export default async function StaffPage() {
                       <Badge tone="teal">Staff</Badge>
                     )}
                     {!isOwner && (
-                      <ConfirmDelete
-                        action={deleteStaffAction}
-                        id={m.id}
-                        title="Remove staff"
-                      />
+                      <>
+                        <StaffPermissionsDialog id={m.id} name={m.full_name} permissions={m.permissions} />
+                        <ConfirmDelete
+                          action={deleteStaffAction}
+                          id={m.id}
+                          title="Remove staff"
+                        />
+                      </>
                     )}
                   </div>
                 </div>

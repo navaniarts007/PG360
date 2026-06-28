@@ -30,6 +30,7 @@ export default async function AdminLayout({
       edition={client.edition}
       brandName={client.brandName}
       impersonating={user.impersonating ?? null}
+      permissions={user.permissions ?? null}
     >
       {children}
     </AppShell>

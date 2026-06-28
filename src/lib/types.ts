@@ -9,6 +9,35 @@ export type PgCategory = "budget" | "standard" | "premium";
 export type PgStatus = "active" | "suspended";
 export type SubscriptionPlan = "starter" | "pro" | "lifetime";
 
+/** Areas a staff member can be granted access to. */
+export const STAFF_MODULES = [
+  "tenants",
+  "payments",
+  "rooms",
+  "expenses",
+  "complaints",
+  "bookings",
+  "reports",
+] as const;
+export type StaffModule = (typeof STAFF_MODULES)[number];
+
+export const STAFF_MODULE_LABELS: Record<StaffModule, string> = {
+  tenants: "Tenants",
+  payments: "Payments",
+  rooms: "Rooms & pricing",
+  expenses: "Expenses",
+  complaints: "Complaints",
+  bookings: "Bookings",
+  reports: "Reports",
+};
+
+/** A staff member's privileges. null = full access (owners / legacy staff). */
+export interface StaffPermissions {
+  modules: StaffModule[];
+  edit: boolean;
+  delete: boolean;
+}
+
 export interface Profile {
   id: string;
   role: Role;
@@ -392,6 +421,8 @@ export interface SessionUser {
   impersonating?: { pgId: string; pgName: string } | null;
   /** When the user accepted the current terms (null = not yet, gate them). */
   termsAcceptedAt?: string | null;
+  /** Staff privileges; null = full access (owners + legacy staff). */
+  permissions?: StaffPermissions | null;
 }
 
 export interface PlatformInvoice {

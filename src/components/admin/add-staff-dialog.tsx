@@ -5,6 +5,7 @@ import { AlertCircle, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input } from "@/components/ui/field";
+import { PermissionFields } from "@/components/admin/permission-fields";
 import { createStaffAction, type ActionState } from "@/lib/actions/staff";
 
 export function AddStaffDialog() {
@@ -64,6 +65,9 @@ function StaffForm({ onDone }: { onDone: () => void }) {
           />
         </FieldRow>
       </div>
+
+      <PermissionFields />
+
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel
