@@ -72,6 +72,11 @@ function TenantForm({
   const [stayType, setStayType] = useState<"monthly" | "daily">(tenant?.stay_type ?? "monthly");
   const [dRate, setDRate] = useState(tenant?.daily_rate ?? 0);
   const [dDays, setDDays] = useState(tenant?.stay_days ?? 0);
+  const [bedId, setBedId] = useState(tenant?.bed_id ?? "none");
+  // monthly rent — auto-fills from the bed but stays editable (per-tenant discounts)
+  const [rent, setRent] = useState(
+    tenant?.rent_amount ?? beds.find((b) => b.id === tenant?.bed_id)?.price ?? 0,
+  );
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
@@ -172,7 +177,17 @@ function TenantForm({
           <Input id="name" name="name" defaultValue={tenant?.name ?? ""} placeholder="Arjun Nair" required />
         </FieldRow>
         <FieldRow label="Bed" htmlFor="bed_id" hint="rent auto-fills" className="col-span-2">
-          <Select id="bed_id" name="bed_id" defaultValue={tenant?.bed_id ?? "none"}>
+          <Select
+            id="bed_id"
+            name="bed_id"
+            value={bedId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setBedId(id);
+              const b = beds.find((x) => x.id === id);
+              if (b) setRent(b.price); // auto-fill, still editable below
+            }}
+          >
             <option value="none">Unassigned</option>
             {options.map((b) => (
               <option key={b.id} value={b.id}>
@@ -181,6 +196,19 @@ function TenantForm({
             ))}
           </Select>
         </FieldRow>
+        {stayType === "monthly" && (
+          <FieldRow label="Monthly rent (₹)" htmlFor="rent_amount" hint="editable — e.g. a discount" className="col-span-2">
+            <Input
+              id="rent_amount"
+              name="rent_amount"
+              type="number"
+              min={0}
+              value={rent || ""}
+              onChange={(e) => setRent(+e.target.value)}
+              placeholder="7000"
+            />
+          </FieldRow>
+        )}
         <FieldRow label="Phone" htmlFor="phone">
           <Input id="phone" name="phone" defaultValue={tenant?.phone ?? ""} placeholder="+9198…" required />
         </FieldRow>

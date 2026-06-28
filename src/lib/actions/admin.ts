@@ -235,6 +235,7 @@ const tenantSchema = z.object({
   joining_fee: z.coerce.number().int().min(0).optional(),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
+  rent_amount: z.coerce.number().min(0).optional(),
   stay_type: z.enum(["monthly", "daily"]).default("monthly"),
   daily_rate: z.coerce.number().min(0).optional(),
   stay_days: z.coerce.number().int().min(1).optional(),
@@ -273,6 +274,8 @@ export async function addTenantAction(
     dailyRate = d.daily_rate;
     stayDays = d.stay_days;
     rent = Math.round(dailyRate * stayDays);
+  } else if (d.rent_amount != null) {
+    rent = d.rent_amount; // editable monthly rent (per-tenant discount) overrides the bed price
   }
 
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
@@ -497,6 +500,7 @@ const tenantUpdateSchema = z.object({
   rent_due_day: z.coerce.number().int().min(1).max(28),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
+  rent_amount: z.coerce.number().min(0).optional(),
   stay_type: z.enum(["monthly", "daily"]).default("monthly"),
   daily_rate: z.coerce.number().min(0).optional(),
   stay_days: z.coerce.number().int().min(1).optional(),
@@ -540,6 +544,8 @@ export async function updateTenantAction(
     dailyRate = d.daily_rate;
     stayDays = d.stay_days;
     rent = Math.round(dailyRate * stayDays);
+  } else if (d.rent_amount != null) {
+    rent = d.rent_amount; // editable monthly rent overrides the bed price
   }
 
   const { error } = await s
