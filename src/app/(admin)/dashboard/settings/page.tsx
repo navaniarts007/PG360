@@ -8,7 +8,7 @@ import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { AgreementSectionsCard } from "@/components/admin/agreement-sections-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
-import { getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
+import { getKycSignedUrl, getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -23,6 +23,7 @@ export default async function SettingsPage() {
     listAgreementSections(pid),
   ]);
   if (!pg) notFound();
+  const ownerSignatureUrl = await getKycSignedUrl(pg.owner_signature_url);
 
   return (
     <div className="space-y-7">
@@ -73,7 +74,7 @@ export default async function SettingsPage() {
           Resident agreement
         </h2>
         <div className="max-w-2xl">
-          <AgreementSectionsCard sections={sections} ownerSignatureSaved={!!pg.owner_signature_url} />
+          <AgreementSectionsCard sections={sections} ownerSignatureUrl={ownerSignatureUrl} />
         </div>
       </section>
     </div>
