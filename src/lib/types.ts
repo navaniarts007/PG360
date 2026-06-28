@@ -94,6 +94,17 @@ export interface PgAccount {
   owner_signature_url: string | null;
 }
 
+export interface ActivityEntry {
+  id: string;
+  pg_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  action: string;
+  detail: string | null;
+  created_at: string;
+}
+
 export interface AgreementSection {
   id: string;
   pg_id: string;

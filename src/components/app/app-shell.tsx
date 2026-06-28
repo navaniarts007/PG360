@@ -12,6 +12,7 @@ import {
   CalendarDays,
   CreditCard,
   Eye,
+  History,
   LayoutDashboard,
   type LucideIcon,
   Menu,
@@ -77,6 +78,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
     { href: "/platform", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/platform/accounts", label: "PG Accounts", icon: Building2 },
     { href: "/platform/invoices", label: "Invoices", icon: Receipt },
+    { href: "/platform/activity", label: "Activity", icon: History },
   ],
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -93,6 +95,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
     { href: "/dashboard/expenses", label: "Expenses", icon: Wallet, perm: "expenses" },
     { href: "/dashboard/reports", label: "Reports", icon: BarChart3, perm: "reports" },
     { href: "/dashboard/issues", label: "Complaints", icon: MessagesSquare, module: "complaints", perm: "complaints" },
+    { href: "/dashboard/activity", label: "Activity", icon: History, ownerOnly: true },
     { href: "/dashboard/settings", label: "Settings", icon: Settings, ownerOnly: true },
   ],
   tenant: [

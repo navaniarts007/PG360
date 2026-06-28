@@ -20,6 +20,7 @@ function cld() {
   return cloudinary;
 }
 import type {
+  ActivityEntry,
   AgreementSection,
   AppNotification,
   Bed,
@@ -135,6 +136,34 @@ export async function getKycSignedUrl(value: string | null): Promise<string | nu
   const admin = createAdminClient(); // leftover private Supabase path
   const { data } = await admin.storage.from("kyc").createSignedUrl(value, 60 * 10);
   return data?.signedUrl ?? null;
+}
+
+/** Activity log for the active property (admin/staff view). */
+export async function listActivity(limit = 200): Promise<ActivityEntry[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  if (!pid) return [];
+  const { data } = await s
+    .from("activity_log")
+    .select("*")
+    .eq("pg_id", pid)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as ActivityEntry[];
+}
+
+/** Platform-wide activity log (super-admin), with the PG name resolved. */
+export async function listAllActivity(
+  limit = 300,
+): Promise<Array<ActivityEntry & { pg_name: string | null }>> {
+  const s = await sb();
+  const { data } = await s
+    .from("activity_log")
+    .select("*, pg:pg_accounts(pg_name)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  type Row = ActivityEntry & { pg: { pg_name: string } | null };
+  return ((data ?? []) as unknown as Row[]).map((r) => ({ ...r, pg_name: r.pg?.pg_name ?? null }));
 }
 
 /** The login email for an auth user (super-admin account view). */

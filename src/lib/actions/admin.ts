@@ -5,6 +5,7 @@ import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { canDelete, canEdit } from "../perms";
+import { logActivity } from "../activity";
 import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
@@ -105,6 +106,7 @@ export async function addRoomAction(
   const { error: bedErr } = await s.from("beds").insert(beds);
   if (bedErr) return { error: humanizeDbError(bedErr) };
 
+  await logActivity("room.added", `Added room ${d.room_number} (${d.total_beds} beds)`);
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -357,6 +359,7 @@ export async function addTenantAction(
     detail: roomId ? "Checked in" : "Added (no bed yet)",
     roomId,
   });
+  await logActivity("tenant.added", `Added tenant ${d.name}`);
 
   // One-time joining/admission fee (non-refundable), if entered.
   if (d.joining_fee && d.joining_fee > 0) {
@@ -472,6 +475,7 @@ export async function addTenantRecordAction(
     detail: roomId ? "Checked in" : "Registered",
     roomId,
   });
+  await logActivity("tenant.added", `Registered tenant ${d.name}`);
 
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
@@ -716,7 +720,7 @@ export async function deleteTenantAction(formData: FormData): Promise<void> {
   const s = await createClient();
   const { data: tenant } = await s
     .from("tenants")
-    .select("user_id")
+    .select("user_id, name")
     .eq("id", id)
     .maybeSingle();
   if (!tenant) return;
@@ -726,6 +730,7 @@ export async function deleteTenantAction(formData: FormData): Promise<void> {
     const admin = createAdminClient();
     await admin.auth.admin.deleteUser(tenant.user_id);
   }
+  await logActivity("tenant.deleted", `Deleted tenant ${tenant.name ?? ""}`.trim());
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
@@ -828,6 +833,7 @@ export async function recordPaymentAction(
   if (error) return { error: humanizeDbError(error) };
 
   await notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill");
+  await logActivity("payment.recorded", `Recorded ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`);
   if (d.amount_paid > 0) {
     await logTenantEvent({
       pgId: pid,
@@ -953,6 +959,7 @@ export async function addExpenseAction(
     added_by: me.id,
   });
   if (error) return { error: humanizeDbError(error) };
+  await logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}`);
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
@@ -976,6 +983,7 @@ export async function verifyPaymentAction(formData: FormData): Promise<void> {
       `Your payment for ${p.month_for} was confirmed ✓`,
       "/portal/bill",
     );
+    await logActivity("payment.verified", `Verified payment for ${p.month_for}`);
   }
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");

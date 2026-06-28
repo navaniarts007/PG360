@@ -6,6 +6,7 @@ import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { clearImpersonation, setImpersonation } from "../auth";
+import { logActivity } from "../activity";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
 
@@ -93,6 +94,7 @@ export async function createPgAction(
     .from("property_members")
     .insert({ property_id: pg.id, user_id: created.user.id, role: "admin" });
 
+  await logActivity("account.created", `Created PG "${d.pg_name}" (${d.owner_name})`, { pgId: pg.id });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
   return { ok: true };
@@ -138,6 +140,7 @@ export async function updateAccountAction(
     .eq("id", d.id);
   if (error) return { error: humanizeDbError(error, "Could not update the account.") };
 
+  await logActivity("account.updated", `Updated account settings`, { pgId: d.id });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
   revalidatePath(`/platform/accounts/${d.id}`);
@@ -156,7 +159,7 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
   // collect auth logins to clean up before the cascade removes their rows
   const { data: pg } = await admin
     .from("pg_accounts")
-    .select("owner_id")
+    .select("owner_id, pg_name")
     .eq("id", id)
     .maybeSingle();
   const { data: tenantRows } = await admin
@@ -176,6 +179,7 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
     await admin.auth.admin.deleteUser(uid).catch(() => {});
   }
 
+  await logActivity("account.deleted", `Deleted PG "${pg?.pg_name ?? ""}" and all its data`, { pgId: null });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
 }
@@ -185,6 +189,7 @@ export async function startImpersonationAction(formData: FormData): Promise<void
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));
   if (!id) return;
+  await logActivity("impersonation.start", "Opened a PG dashboard (view as owner)", { pgId: id });
   await setImpersonation(id);
   redirect("/dashboard");
 }
@@ -209,6 +214,7 @@ export async function resetOwnerPasswordAction(
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(ownerId, { password });
   if (error) return { error: humanizeDbError(error, "Could not reset the password.") };
+  await logActivity("account.password_reset", "Reset an owner's login password", { pgId: null });
   return { ok: true };
 }
 
@@ -248,6 +254,7 @@ export async function createInvoiceAction(
     created_by: me.id,
   });
   if (error) return { error: humanizeDbError(error, "Could not create the invoice.") };
+  await logActivity("invoice.created", `Created an invoice (₹${d.amount.toLocaleString("en-IN")})`, { pgId: d.pg_id });
   revalidatePath(`/platform/accounts/${d.pg_id}`);
   return { ok: true };
 }

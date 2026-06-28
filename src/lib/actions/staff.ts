@@ -7,6 +7,7 @@ import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { createClient } from "../supabase/server";
 import { createAdminClient } from "../supabase/admin";
+import { logActivity } from "../activity";
 import { STAFF_MODULES } from "../types";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -78,6 +79,7 @@ export async function createStaffAction(
     return { error: humanizeDbError(mErr) };
   }
 
+  await logActivity("staff.added", `Added staff ${d.name}`);
   revalidatePath("/dashboard/staff");
   return { ok: true };
 }
@@ -107,6 +109,7 @@ export async function updateStaffPermissionsAction(
     .eq("id", id)
     .eq("role", "staff");
   if (error) return { error: humanizeDbError(error) };
+  await logActivity("staff.permissions", "Updated a staff member's privileges");
   revalidatePath("/dashboard/staff");
   return { ok: true };
 }
@@ -138,5 +141,6 @@ export async function deleteStaffAction(formData: FormData): Promise<void> {
     await admin.from("profiles").delete().eq("id", userId);
     await admin.auth.admin.deleteUser(userId);
   }
+  await logActivity("staff.removed", "Removed a staff member");
   revalidatePath("/dashboard/staff");
 }
