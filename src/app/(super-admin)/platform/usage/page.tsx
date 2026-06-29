@@ -34,9 +34,12 @@ export default async function UsagePage() {
     egress.egressBytes != null
       ? Math.min(100, Math.round((egress.egressBytes / (egress.quotaGb * 1024 ** 3)) * 100))
       : null;
-  const billingHref = SUPA_PROJECT
-    ? `https://supabase.com/dashboard/project/${SUPA_PROJECT}/settings/billing`
-    : "https://supabase.com/dashboard";
+  // Billing/usage is ORG-level in Supabase now (project /settings/billing 404s).
+  const billingHref = process.env.SUPABASE_ORG
+    ? `https://supabase.com/dashboard/org/${process.env.SUPABASE_ORG}/usage`
+    : SUPA_PROJECT
+      ? `https://supabase.com/dashboard/project/${SUPA_PROJECT}`
+      : "https://supabase.com/dashboard";
 
   return (
     <div className="space-y-7">
