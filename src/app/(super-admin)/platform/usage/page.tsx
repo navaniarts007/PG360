@@ -8,6 +8,12 @@ import { supabaseUsage, supabaseEgress, cloudinaryUsage, vercelInfo } from "@/li
 export const metadata: Metadata = { title: "Infrastructure usage" };
 
 const SUPA_PROJECT = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)\./)?.[1] ?? "";
+const SUPA_PLAN = process.env.SUPABASE_PLAN === "pro" ? "Pro" : "Free";
+// Supabase plan ceilings (what to watch before upgrading).
+const SUPA_LIMITS =
+  SUPA_PLAN === "Pro"
+    ? { db: 8 * 1024 ** 3, storage: 100 * 1024 ** 3 }
+    : { db: 500 * 1024 ** 2, storage: 1 * 1024 ** 3 };
 
 function gb(bytes: number) {
   if (!bytes) return "0 MB";
@@ -45,12 +51,14 @@ export default async function UsagePage() {
         <Card className="p-5 sm:p-6">
           <Head icon={Database} tone="teal" title="Supabase" href={SUPA_PROJECT ? `https://supabase.com/dashboard/project/${SUPA_PROJECT}` : "https://supabase.com/dashboard"} />
           {supa ? (
-            <dl className="mt-4 space-y-3">
-              <Stat icon={Database} label="Database size" value={gb(supa.db_bytes)} />
-              <Stat icon={HardDrive} label="Storage (KYC etc.)" value={`${gb(supa.storage_bytes)} · ${n(supa.storage_objects)} files`} />
-              <Stat icon={Activity} label="Auth users" value={n(supa.auth_users)} />
-              <Stat icon={Activity} label="Records" value={`${n(supa.tenant_count)} tenants · ${n(supa.payment_count)} payments`} />
-            </dl>
+            <div className="mt-4 space-y-3.5">
+              <Bar label="Database" used={supa.db_bytes} limit={SUPA_LIMITS.db} />
+              <Bar label="Storage" used={supa.storage_bytes} limit={SUPA_LIMITS.storage} extra={`${n(supa.storage_objects)} files`} />
+              <dl className="space-y-3 border-t border-line pt-3">
+                <Stat icon={Activity} label="Auth users" value={n(supa.auth_users)} />
+                <Stat icon={Activity} label="Records" value={`${n(supa.tenant_count)} tenants · ${n(supa.payment_count)} payments`} />
+              </dl>
+            </div>
           ) : (
             <Unavailable note="Run migration 0025, then reload." />
           )}
@@ -79,7 +87,7 @@ export default async function UsagePage() {
             )}
           </div>
 
-          <p className="mt-4 text-xs text-ink-muted">Region: Mumbai (ap-south-1) · India</p>
+          <p className="mt-4 text-xs text-ink-muted">{SUPA_PLAN} plan · Mumbai (ap-south-1) · India</p>
         </Card>
 
         {/* CLOUDINARY */}
@@ -151,6 +159,25 @@ function Head({ icon: Icon, tone, title, href }: { icon: React.ElementType; tone
       <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-clay-600 hover:text-clay-700">
         Dashboard <ExternalLink className="size-3.5" />
       </a>
+    </div>
+  );
+}
+
+function Bar({ label, used, limit, extra }: { label: string; used: number; limit: number; extra?: string }) {
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const tone = pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-gold-500" : "bg-teal-500";
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-ink-muted">{label}</span>
+        <span className="font-semibold text-ink tnum">
+          {gb(used)} <span className="text-xs font-normal text-ink-muted">/ {gb(limit)} · {pct}%</span>
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-line">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+      {extra && <p className="mt-0.5 text-xs text-ink-muted">{extra}</p>}
     </div>
   );
 }
