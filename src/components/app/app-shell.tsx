@@ -12,6 +12,7 @@ import {
   CalendarDays,
   CreditCard,
   Eye,
+  Gauge,
   History,
   LayoutDashboard,
   type LucideIcon,
@@ -79,6 +80,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
     { href: "/platform/accounts", label: "PG Accounts", icon: Building2 },
     { href: "/platform/invoices", label: "Invoices", icon: Receipt },
     { href: "/platform/activity", label: "Activity", icon: History },
+    { href: "/platform/usage", label: "Usage", icon: Gauge },
   ],
   admin: [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
