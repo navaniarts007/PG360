@@ -108,7 +108,7 @@ function EditForm({ account, onDone }: { account: PgAccount; onDone: () => void 
           Demo / trial account (excluded from revenue; expires after the trial)
         </label>
         <FieldRow label="Reset trial / extend by (days)" htmlFor="trial_days" hint="leave blank to keep the current expiry">
-          <Input id="trial_days" name="trial_days" type="number" min={1} max={365} placeholder="e.g. 14" />
+          <Input id="trial_days" name="trial_days" type="number" min={1} max={365} placeholder="e.g. 3" />
         </FieldRow>
       </div>
 

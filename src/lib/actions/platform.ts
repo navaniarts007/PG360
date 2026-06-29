@@ -55,7 +55,7 @@ export async function createPgAction(
 
   // 2) the PG account — demo = a time-limited trial (expires after trial_days)
   const isDemo = formData.get("is_demo") === "on";
-  const trialDays = Math.min(365, Math.max(1, Number(formData.get("trial_days")) || 14));
+  const trialDays = Math.min(365, Math.max(1, Number(formData.get("trial_days")) || 3));
   const expiry = new Date();
   if (isDemo) expiry.setDate(expiry.getDate() + trialDays);
   else expiry.setFullYear(expiry.getFullYear() + 1);
