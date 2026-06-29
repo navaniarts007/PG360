@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Database, Cloud, Triangle, ExternalLink, HardDrive, Image as ImageIcon, Activity } from "lucide-react";
+import { Database, Cloud, Triangle, ExternalLink, HardDrive, Image as ImageIcon, Activity, Gauge } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { requireRole } from "@/lib/guards";
-import { supabaseUsage, cloudinaryUsage, vercelInfo } from "@/lib/usage";
+import { supabaseUsage, supabaseEgress, cloudinaryUsage, vercelInfo } from "@/lib/usage";
 
 export const metadata: Metadata = { title: "Infrastructure usage" };
 
@@ -18,7 +18,19 @@ const n = (x: number) => x.toLocaleString("en-IN");
 
 export default async function UsagePage() {
   await requireRole(["super_admin"]);
-  const [supa, cld, vercel] = await Promise.all([supabaseUsage(), cloudinaryUsage(), vercelInfo()]);
+  const [supa, egress, cld, vercel] = await Promise.all([
+    supabaseUsage(),
+    supabaseEgress(),
+    cloudinaryUsage(),
+    vercelInfo(),
+  ]);
+  const egressPct =
+    egress.egressBytes != null
+      ? Math.min(100, Math.round((egress.egressBytes / (egress.quotaGb * 1024 ** 3)) * 100))
+      : null;
+  const billingHref = SUPA_PROJECT
+    ? `https://supabase.com/dashboard/project/${SUPA_PROJECT}/settings/billing`
+    : "https://supabase.com/dashboard";
 
   return (
     <div className="space-y-7">
@@ -42,6 +54,31 @@ export default async function UsagePage() {
           ) : (
             <Unavailable note="Run migration 0025, then reload." />
           )}
+
+          {/* bandwidth / egress */}
+          <div className="mt-4 rounded-xl border border-line bg-paper-2/40 p-3.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2 text-ink-muted"><Gauge className="size-4" /> Egress this cycle</span>
+              <a href={billingHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-clay-600 hover:text-clay-700">
+                Billing <ExternalLink className="size-3" />
+              </a>
+            </div>
+            {egress.egressBytes != null ? (
+              <>
+                <p className="mt-1 font-semibold text-ink tnum">{gb(egress.egressBytes)} <span className="text-xs font-normal text-ink-muted">of {egress.quotaGb} GB</span></p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line">
+                  <div className={`h-full rounded-full ${(egressPct ?? 0) > 80 ? "bg-rose-500" : "bg-teal-500"}`} style={{ width: `${egressPct ?? 0}%` }} />
+                </div>
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-ink-muted">
+                {egress.configured
+                  ? `Not exposed by the API on this plan — open Billing for the exact figure (quota ${egress.quotaGb} GB).`
+                  : `Add SUPABASE_ACCESS_TOKEN to show egress here. Quota ${egress.quotaGb} GB/mo — see Billing.`}
+              </p>
+            )}
+          </div>
+
           <p className="mt-4 text-xs text-ink-muted">Region: Mumbai (ap-south-1) · India</p>
         </Card>
 

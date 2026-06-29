@@ -24,6 +24,44 @@ export async function supabaseUsage(): Promise<SupabaseUsage | null> {
   }
 }
 
+export interface SupabaseEgress {
+  configured: boolean; // a management token is present
+  egressBytes: number | null; // null = couldn't read it automatically
+  quotaGb: number; // plan egress allowance for context
+}
+
+/** Bandwidth / egress via the Supabase Management API (opt-in: needs
+ *  SUPABASE_ACCESS_TOKEN). Best-effort — egress isn't on every plan's API, so
+ *  we degrade gracefully and the UI deep-links to the dashboard. */
+export async function supabaseEgress(): Promise<SupabaseEgress> {
+  const quotaGb = process.env.SUPABASE_PLAN === "pro" ? 250 : 5;
+  const token = process.env.SUPABASE_ACCESS_TOKEN;
+  const ref =
+    process.env.SUPABASE_PROJECT_REF ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)\./)?.[1];
+  if (!token || !ref) return { configured: false, egressBytes: null, quotaGb };
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/usage`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return { configured: true, egressBytes: null, quotaGb };
+    const j = (await res.json()) as Record<string, unknown> & {
+      total_egress_bytes?: number;
+      db_egress?: number;
+      egress?: { usage?: number };
+    };
+    const egress =
+      (typeof j.total_egress_bytes === "number" && j.total_egress_bytes) ||
+      (typeof j.db_egress === "number" && j.db_egress) ||
+      (typeof j.egress?.usage === "number" && j.egress.usage) ||
+      null;
+    return { configured: true, egressBytes: egress, quotaGb };
+  } catch {
+    return { configured: true, egressBytes: null, quotaGb };
+  }
+}
+
 export interface CloudinaryUsage {
   plan: string;
   storageBytes: number;
