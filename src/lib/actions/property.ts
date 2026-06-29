@@ -129,8 +129,16 @@ export async function createPropertyAction(
   const d = parsed.data;
   const admin = createAdminClient();
 
-  const expiry = new Date();
-  expiry.setFullYear(expiry.getFullYear() + 1);
+  // Billing is per-owner: a new property inherits this owner's plan/trial/expiry
+  // from an existing property (so a trial owner's new property is also a trial).
+  const { data: existing } = await admin
+    .from("pg_accounts")
+    .select("is_demo, subscription_plan, subscription_expiry")
+    .eq("owner_id", me.id)
+    .limit(1)
+    .maybeSingle();
+  const fallbackExpiry = new Date();
+  fallbackExpiry.setFullYear(fallbackExpiry.getFullYear() + 1);
   const { data: pg, error } = await admin
     .from("pg_accounts")
     .insert({
@@ -140,8 +148,9 @@ export async function createPropertyAction(
       location: d.location,
       pg_type: d.pg_type,
       category: d.category,
-      subscription_plan: "pro",
-      subscription_expiry: expiry.toISOString().slice(0, 10),
+      subscription_plan: existing?.subscription_plan ?? "pro",
+      subscription_expiry: existing?.subscription_expiry ?? fallbackExpiry.toISOString().slice(0, 10),
+      is_demo: existing?.is_demo ?? false,
       created_by: me.id,
       owner_id: me.id,
     })

@@ -154,6 +154,22 @@ export async function updateAccountAction(
     .eq("id", d.id);
   if (error) return { error: humanizeDbError(error, "Could not update the account.") };
 
+  // Billing is per-OWNER, not per-property: one login can run several properties,
+  // so the trial/plan/expiry must apply to all of that owner's properties at once.
+  const { data: acct } = await admin
+    .from("pg_accounts")
+    .select("owner_id")
+    .eq("id", d.id)
+    .maybeSingle();
+  if (acct?.owner_id) {
+    const billing: Record<string, unknown> = {
+      is_demo: isDemo,
+      subscription_plan: d.subscription_plan,
+    };
+    if (patch.subscription_expiry) billing.subscription_expiry = patch.subscription_expiry;
+    await admin.from("pg_accounts").update(billing).eq("owner_id", acct.owner_id);
+  }
+
   await logActivity("account.updated", `Updated account settings`, { pgId: d.id });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");

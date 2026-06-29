@@ -33,6 +33,13 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
     }
   };
 
+  // how many properties each owner runs (one login can have several)
+  const ownerCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of pgs) if (p.owner_id) m.set(p.owner_id, (m.get(p.owner_id) ?? 0) + 1);
+    return m;
+  }, [pgs]);
+
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
     const filtered = pgs.filter((pg) => {
@@ -128,8 +135,13 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
                             {pg.is_demo && <Badge tone="gold">Trial</Badge>}
                             {pg.edition === "gvm" && <Badge tone="clay">Stripped</Badge>}
                           </p>
-                          <p className="flex items-center gap-1 text-xs text-ink-muted">
+                          <p className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
                             <Phone className="size-3" /> {pg.owner_name} · {pg.mobile}
+                            {pg.owner_id && (ownerCount.get(pg.owner_id) ?? 0) > 1 && (
+                              <span className="ml-1 rounded-full bg-clay-50 px-1.5 py-0.5 font-semibold text-clay-600">
+                                {ownerCount.get(pg.owner_id)} properties · 1 owner
+                              </span>
+                            )}
                           </p>
                         </div>
                       </Link>
