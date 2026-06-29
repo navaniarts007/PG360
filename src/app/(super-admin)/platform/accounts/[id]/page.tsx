@@ -122,7 +122,17 @@ export default async function AccountDetail({
             <Row icon={Mail} label="Login email" value={ownerEmail ?? "—"} />
             <Row icon={Phone} label="Mobile" value={account.mobile} />
             <Row icon={MapPin} label="Location" value={account.location} />
-            <Row icon={FileText} label="Plan" value={`${PLAN_LABEL[account.subscription_plan] ?? account.subscription_plan} · expires ${formatDate(account.subscription_expiry)}`} />
+            <Row
+              icon={FileText}
+              label="Plan"
+              value={`${PLAN_LABEL[account.subscription_plan] ?? account.subscription_plan} · ${
+                account.is_demo
+                  ? `trial ends ${formatDate(account.subscription_expiry)}`
+                  : account.subscription_plan === "lifetime"
+                    ? "no expiry"
+                    : `renews ${formatDate(account.subscription_expiry)}`
+              }`}
+            />
           </dl>
         </Card>
 

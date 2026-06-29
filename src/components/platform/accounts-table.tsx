@@ -21,6 +21,12 @@ import type { PgAccount } from "@/lib/types";
 
 const typeLabel = { boys: "Boys", girls: "Girls", coliving: "Co-living" } as const;
 
+/** Lifetime never expires; demo shows the trial end; others the renewal date. */
+function expiryLabel(pg: PgAccount): string {
+  if (!pg.is_demo && pg.subscription_plan === "lifetime") return "Never";
+  return formatDate(pg.subscription_expiry);
+}
+
 type StatusFilter = "all" | "active" | "suspended";
 type EditionFilter = "all" | "full" | "gvm";
 type BillingFilter = "all" | "paying" | "demo";
@@ -204,7 +210,7 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
                         <td className="px-6 py-4">
                           <Badge tone={owner.is_demo ? "gold" : "clay"}>{owner.is_demo ? "demo" : owner.subscription_plan}</Badge>
                         </td>
-                        <td className="px-6 py-4 text-ink-muted tnum">{formatDate(owner.subscription_expiry)}</td>
+                        <td className="px-6 py-4 text-ink-muted tnum">{expiryLabel(owner)}</td>
                         <td className="px-6 py-4 text-xs text-ink-soft">{active}/{group.length} active</td>
                         <td className="px-6 py-4 text-right text-xs font-semibold text-clay-600">
                           {expanded ? "Hide" : "Expand"}
@@ -250,7 +256,7 @@ function PropCells({ pg }: { pg: PgAccount }) {
       <td className="px-6 py-4">
         <Badge tone={pg.is_demo ? "gold" : "clay"}>{pg.is_demo ? "demo" : pg.subscription_plan}</Badge>
       </td>
-      <td className="px-6 py-4 text-ink-muted tnum">{formatDate(pg.subscription_expiry)}</td>
+      <td className="px-6 py-4 text-ink-muted tnum">{expiryLabel(pg)}</td>
       <td className="px-6 py-4">
         <PgStatusPill status={pg.status} />
       </td>
