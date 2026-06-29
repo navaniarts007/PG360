@@ -53,7 +53,7 @@ function StaffForm({ onDone }: { onDone: () => void }) {
         <FieldRow
           label="Login password"
           htmlFor="login_password"
-          hint="6+ characters"
+          hint="8+ characters"
           className="col-span-2"
         >
           <Input

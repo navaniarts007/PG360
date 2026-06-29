@@ -323,7 +323,7 @@ function TenantForm({
               <Input id="email" name="email" type="email" placeholder="arjun@tenant.in" required />
             </FieldRow>
             <FieldRow label="Password" htmlFor="login_password">
-              <Input id="login_password" name="login_password" type="text" placeholder="min 6 chars" required />
+              <Input id="login_password" name="login_password" type="text" placeholder="min 8 chars" required />
             </FieldRow>
           </div>
         </div>

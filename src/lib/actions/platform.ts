@@ -21,7 +21,7 @@ const pgSchema = z.object({
   category: z.enum(["budget", "standard", "premium"]),
   subscription_plan: z.enum(["starter", "pro", "lifetime"]),
   owner_email: z.string().email("Enter a valid owner email."),
-  owner_password: z.string().min(6, "Password must be at least 6 characters."),
+  owner_password: z.string().min(8, "Password must be at least 8 characters."),
   edition: z.enum(["full", "gvm"]).default("full"),
   reg_prefix: z.string().max(12).optional(),
 });
@@ -209,7 +209,7 @@ export async function resetOwnerPasswordAction(
   const ownerId = String(formData.get("owner_id"));
   const password = String(formData.get("new_password") ?? "");
   if (!ownerId) return { error: "This account has no owner login linked." };
-  if (password.length < 6) return { error: "Password must be at least 6 characters." };
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(ownerId, { password });

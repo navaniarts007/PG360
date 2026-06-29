@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>PG360 — Security & Privacy</title>
+<style>
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:A4;margin:0}html,body{margin:0;padding:0}
+body{font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#2a2018;font-size:13px;line-height:1.55}
+h1,h2,h3,.serif{font-family:Georgia,serif}
+.page{padding:46px 54px;page-break-after:always;position:relative;min-height:1040px}
+.page:last-child{page-break-after:auto}
+.cover{height:1122px;color:#fff;background:linear-gradient(150deg,#0f766e 0%,#155e57 55%,#1f2937 100%);padding:80px 64px;display:flex;flex-direction:column;justify-content:space-between}
+.brand{font-family:Georgia;font-size:32px;font-weight:700}.brand small{display:block;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;opacity:.8;margin-top:6px}
+.cover h1{font-size:50px;line-height:1.05;margin:0 0 16px}.cover h1 em{font-style:italic;color:#a7f3d0}
+.cover .sub{font-size:16px;max-width:560px;opacity:.92}
+.pill{display:inline-block;border:1px solid rgba(255,255,255,.4);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:24px}
+.eyebrow{color:#0f766e;font-weight:700;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 6px}
+h2.sec{font-size:28px;margin:0 0 6px}.rule{height:3px;width:54px;background:#0f766e;border-radius:2px;margin:0 0 22px}
+.lead{color:#5c5048;font-size:14px;max-width:620px;margin:0 0 24px}
+.item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #e7ddd1;break-inside:avoid}
+.ic{width:38px;height:38px;flex:0 0 auto;border-radius:10px;background:#ecfdf5;color:#0f766e;display:flex;align-items:center;justify-content:center;font-size:18px}
+.item h3{margin:0 0 3px;font-size:15.5px}.item p{margin:0;color:#5c5048;font-size:12.6px}
+.foot{position:absolute;bottom:26px;left:54px;right:54px;display:flex;justify-content:space-between;color:#8a7d72;font-size:10.5px;border-top:1px solid #e7ddd1;padding-top:10px}
+.note{background:#ecfdf5;border:1px solid #c7eee4;border-radius:12px;padding:14px 16px;font-size:12.6px;color:#155e57;margin-top:8px}
+.cta{background:linear-gradient(140deg,#0f766e,#155e57);color:#fff;border-radius:16px;padding:30px 34px}
+.cta h2{color:#fff;font-size:24px;margin:0 0 8px}.contact{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-top:14px;font-size:13px}
+</style></head><body>
+
+<section class="cover">
+  <div class="brand">PG360<small>PG &amp; Hostel Management</small></div>
+  <div>
+    <span class="pill">Security &amp; Data Privacy</span>
+    <h1>Your residents' data, <em>kept safe</em> — in India.</h1>
+    <p class="sub">How PG360 protects every tenant record, ID document and payment — with bank-grade encryption, strict isolation, and privacy by design.</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:12.5px;opacity:.9">
+    <div><b>Prepared for our valued client</b><br/>pg360.software</div>
+    <div style="text-align:right"><b>Data residency: India</b><br/>Mumbai (AWS ap-south-1)</div>
+  </div>
+</section>
+
+<section class="page">
+  <p class="eyebrow">How we protect your data</p>
+  <h2 class="sec">Security, in plain terms</h2><div class="rule"></div>
+  <p class="lead">Every safeguard below is in place today. No system is ever "unhackable" — so we build in depth: multiple independent layers, so a single failure never exposes your data.</p>
+
+  <div class="item"><div class="ic">🇮🇳</div><div><h3>Your data stays in India</h3><p>All records, ID documents and photos are stored and processed in the Mumbai region (AWS ap-south-1). Your data never leaves the country.</p></div></div>
+  <div class="item"><div class="ic">🔒</div><div><h3>Encrypted everywhere</h3><p>Encrypted in transit (HTTPS/TLS on every request) and at rest (AES-256). Data is unreadable if storage media is ever accessed directly.</p></div></div>
+  <div class="item"><div class="ic">🧱</div><div><h3>Strict per-PG isolation</h3><p>Database-level Row-Level Security means one PG owner physically cannot read another PG's data. Residents can see only their own bill — never anyone else's.</p></div></div>
+  <div class="item"><div class="ic">🪪</div><div><h3>Private ID documents</h3><p>Aadhaar / ID images and signatures are stored privately, never on public links. They open only through secure, short-lived (expiring) links — a leaked URL stops working within minutes.</p></div></div>
+  <div class="item"><div class="ic">👤</div><div><h3>Access control &amp; audit trail</h3><p>You decide exactly what each staff member can view, edit or delete. Every action (who added/edited/deleted what) is recorded in an activity log.</p></div></div>
+  <div class="item"><div class="ic">🔑</div><div><h3>Secure logins</h3><p>Passwords are hashed with bank-grade algorithms and never stored in readable form — not even we can see them. Minimum 8 characters; two-factor authentication supported.</p></div></div>
+
+  <div class="foot"><span>PG360 — Security &amp; Privacy</span><span>pg360.software</span></div>
+</section>
+
+<section class="page">
+  <p class="eyebrow">Infrastructure &amp; privacy</p>
+  <h2 class="sec">Built on trusted foundations</h2><div class="rule"></div>
+
+  <div class="item"><div class="ic">☁️</div><div><h3>Enterprise-grade hosting</h3><p>Runs on Supabase (Postgres) — <b>SOC 2 Type II</b> certified — over Amazon Web Services, plus Vercel's global edge network with built-in protection against common denial-of-service (DDoS) attacks.</p></div></div>
+  <div class="item"><div class="ic">🛡️</div><div><h3>No SQL injection / common web attacks</h3><p>The app never builds database queries from raw text — all data access is fully parameterized, closing off SQL-injection. Security headers (HSTS, anti-clickjacking, MIME-sniffing protection) are enforced on every page.</p></div></div>
+  <div class="item"><div class="ic">🧾</div><div><h3>You own your data</h3><p>Your records belong to you. You can export or request deletion at any time. We never sell your data or share it with third parties for marketing.</p></div></div>
+  <div class="item"><div class="ic">💾</div><div><h3>Backups &amp; recovery</h3><p>Hosted on managed, replicated infrastructure with automated backups on production plans, so your data is protected against loss.</p></div></div>
+
+  <div class="note"><b>A note on honesty:</b> security is layered and ongoing. We protect your data with the measures above and keep hardening continuously (firewall/WAF, rate-limiting and regular reviews). If you ever have a specific security requirement, we're happy to discuss it directly.</div>
+
+  <div style="height:22px"></div>
+  <div class="cta">
+    <h2>Questions about security or privacy?</h2>
+    <p style="font-size:14px;opacity:.95;margin:0">Talk to us directly — we're glad to walk you (or your residents' families) through exactly how their information is protected.</p>
+    <div class="contact">
+      <div>📞 <b>Phone / WhatsApp</b><br/>+91 63834 34721</div>
+      <div>✉ <b>Email</b><br/>contact@pg360.software</div>
+    </div>
+  </div>
+  <p style="text-align:center;color:#8a7d72;font-size:11px;margin-top:20px">PG360 — Data stored securely in India · pg360.software</p>
+</section>
+</body></html>

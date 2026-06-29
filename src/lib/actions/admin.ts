@@ -236,7 +236,7 @@ const tenantSchema = z.object({
   security_deposit: z.coerce.number().min(0),
   checkin_date: z.string().min(1, "Check-in date is required."),
   rent_due_day: z.coerce.number().int().min(1).max(28),
-  login_password: z.string().min(6, "Password must be 6+ characters."),
+  login_password: z.string().min(8, "Password must be 8+ characters."),
   joining_fee: z.coerce.number().int().min(0).optional(),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),

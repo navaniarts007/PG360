@@ -95,7 +95,7 @@ function CreatePgForm({ onDone }: { onDone: () => void }) {
             <Input id="owner_email" name="owner_email" type="email" placeholder="ravi@pg.in" required />
           </FieldRow>
           <FieldRow label="Password" htmlFor="owner_password">
-            <Input id="owner_password" name="owner_password" type="text" placeholder="min 6 chars" required />
+            <Input id="owner_password" name="owner_password" type="text" placeholder="min 8 chars" required />
           </FieldRow>
         </div>
       </div>

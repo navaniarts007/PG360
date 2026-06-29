@@ -25,7 +25,7 @@ const staffSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
   email: z.string().email("Enter a valid email."),
-  login_password: z.string().min(6, "Password must be 6+ characters."),
+  login_password: z.string().min(8, "Password must be 8+ characters."),
 });
 
 /** Owner adds a staff member to the active property. Creates an auth login,
