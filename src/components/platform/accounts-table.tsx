@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Building2, MapPin, Phone, Search, Settings2 } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, MapPin, Phone, Search, Settings2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PgStatusPill } from "@/components/ui/status";
@@ -14,17 +14,32 @@ const typeLabel = { boys: "Boys", girls: "Girls", coliving: "Co-living" } as con
 
 type StatusFilter = "all" | "active" | "suspended";
 type EditionFilter = "all" | "full" | "gvm";
+type BillingFilter = "all" | "paying" | "demo";
+type SortKey = "pg_name" | "location" | "pg_type" | "subscription_plan" | "subscription_expiry" | "status";
 
 export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [edition, setEdition] = useState<EditionFilter>("all");
+  const [billing, setBilling] = useState<BillingFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return pgs.filter((pg) => {
+    const filtered = pgs.filter((pg) => {
       if (status !== "all" && pg.status !== status) return false;
       if (edition !== "all" && pg.edition !== edition) return false;
+      if (billing === "demo" && !pg.is_demo) return false;
+      if (billing === "paying" && pg.is_demo) return false;
       if (!term) return true;
       return (
         pg.pg_name.toLowerCase().includes(term) ||
@@ -33,7 +48,29 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
         pg.mobile.toLowerCase().includes(term)
       );
     });
-  }, [pgs, q, status, edition]);
+    if (!sortKey) return filtered;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) =>
+      String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""), undefined, { numeric: true }) * dir,
+    );
+  }, [pgs, q, status, edition, billing, sortKey, sortDir]);
+
+  const Th = ({ label, k, align = "left" }: { label: string; k?: SortKey; align?: "left" | "right" }) => (
+    <th className={`px-6 py-3.5 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
+      {k ? (
+        <button onClick={() => toggleSort(k)} className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-clay-600">
+          {label}
+          {sortKey === k ? (
+            sortDir === "asc" ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronsUpDownFaint />
+          )}
+        </button>
+      ) : (
+        label
+      )}
+    </th>
+  );
 
   return (
     <div className="space-y-4">
@@ -48,6 +85,7 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
           />
         </div>
         <Pills value={status} onChange={setStatus} options={["all", "active", "suspended"]} />
+        <Pills value={billing} onChange={setBilling} options={["all", "paying", "demo"]} labels={{ demo: "trial" }} />
         <Pills value={edition} onChange={setEdition} options={["all", "full", "gvm"]} labels={{ gvm: "stripped" }} />
       </div>
 
@@ -59,14 +97,14 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line bg-paper-2/40 text-left text-xs uppercase tracking-wide text-ink-muted">
-                <th className="px-6 py-3.5 font-semibold">PG &amp; owner</th>
-                <th className="px-6 py-3.5 font-semibold">Location</th>
-                <th className="px-6 py-3.5 font-semibold">Type</th>
-                <th className="px-6 py-3.5 font-semibold">Plan</th>
-                <th className="px-6 py-3.5 font-semibold">Expires</th>
-                <th className="px-6 py-3.5 font-semibold">Status</th>
-                <th className="px-6 py-3.5 text-right font-semibold">Action</th>
+              <tr className="border-b border-line bg-paper-2/40 text-xs text-ink-muted">
+                <Th label="PG & owner" k="pg_name" />
+                <Th label="Location" k="location" />
+                <Th label="Type" k="pg_type" />
+                <Th label="Plan" k="subscription_plan" />
+                <Th label="Expires" k="subscription_expiry" />
+                <Th label="Status" k="status" />
+                <Th label="Action" align="right" />
               </tr>
             </thead>
             <tbody>
@@ -87,6 +125,7 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
                         <div>
                           <p className="flex items-center gap-2 font-semibold text-ink group-hover:text-clay-700">
                             {pg.pg_name}
+                            {pg.is_demo && <Badge tone="gold">Trial</Badge>}
                             {pg.edition === "gvm" && <Badge tone="clay">Stripped</Badge>}
                           </p>
                           <p className="flex items-center gap-1 text-xs text-ink-muted">
@@ -104,7 +143,7 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
                       <Badge tone="neutral">{typeLabel[pg.pg_type]}</Badge>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge tone="clay">{pg.subscription_plan}</Badge>
+                      <Badge tone={pg.is_demo ? "gold" : "clay"}>{pg.is_demo ? "demo" : pg.subscription_plan}</Badge>
                     </td>
                     <td className="px-6 py-4 text-ink-muted tnum">{formatDate(pg.subscription_expiry)}</td>
                     <td className="px-6 py-4">
@@ -130,6 +169,10 @@ export function AccountsTable({ pgs }: { pgs: PgAccount[] }) {
       </Card>
     </div>
   );
+}
+
+function ChevronsUpDownFaint() {
+  return <ChevronDown className="size-3.5 opacity-25" />;
 }
 
 function Pills<T extends string>({
