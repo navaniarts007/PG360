@@ -84,6 +84,13 @@ function CreatePgForm({ onDone }: { onDone: () => void }) {
         <FieldRow label="Reg-no prefix" htmlFor="reg_prefix">
           <Input id="reg_prefix" name="reg_prefix" placeholder="optional, e.g. GVR" />
         </FieldRow>
+        <FieldRow label="Trial length (days)" htmlFor="trial_days" hint="only if demo">
+          <Input id="trial_days" name="trial_days" type="number" min={1} max={365} placeholder="14" />
+        </FieldRow>
+        <label className="col-span-2 flex items-center gap-2.5 rounded-xl border border-line bg-paper-2/40 px-3.5 py-2.5 text-sm text-ink">
+          <input type="checkbox" name="is_demo" className="size-4 rounded border-line text-clay-600 focus:ring-clay-500" />
+          Demo / trial account — excluded from revenue, expires after the trial
+        </label>
       </div>
 
       <div className="rounded-xl border border-line bg-paper-2/50 p-4">

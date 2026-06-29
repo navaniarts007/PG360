@@ -237,23 +237,27 @@ export async function getPgPolicy(pgId: string): Promise<PgPolicy> {
 
 export async function platformStats() {
   const s = await sb();
-  const [{ data: pgs }, { count: tenantCount }] = await Promise.all([
-    s.from("pg_accounts").select("status, subscription_plan"),
+  const [{ data: pgs }, { count: tenantCount }, { data: paid }] = await Promise.all([
+    s.from("pg_accounts").select("status, is_demo"),
     s.from("tenants").select("id", { count: "exact", head: true }).eq("status", "active"),
+    s.from("platform_invoices").select("amount, tax_percent").eq("status", "paid"),
   ]);
-  const rows = (pgs ?? []) as { status: string; subscription_plan: string }[];
+  const rows = (pgs ?? []) as { status: string; is_demo: boolean }[];
   const active = rows.filter((p) => p.status === "active");
-  const mrr = active.reduce(
-    (sum, p) =>
-      sum +
-      (p.subscription_plan === "pro" ? 8000 : p.subscription_plan === "lifetime" ? 0 : 5000),
+  const demoPgs = rows.filter((p) => p.is_demo).length;
+  const payingPgs = active.filter((p) => !p.is_demo).length;
+  // real revenue = money actually invoiced & marked paid (not a plan estimate)
+  const revenue = ((paid ?? []) as { amount: number; tax_percent: number }[]).reduce(
+    (sum, iv) => sum + iv.amount + Math.round((iv.amount * iv.tax_percent) / 100),
     0,
   );
   return {
     totalPgs: rows.length,
     activePgs: active.length,
+    demoPgs,
+    payingPgs,
     totalTenants: tenantCount ?? 0,
-    mrr,
+    revenue,
   };
 }
 

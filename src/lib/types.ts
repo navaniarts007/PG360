@@ -92,6 +92,7 @@ export interface PgAccount {
   portal_enabled: boolean;
   reg_prefix: string | null;
   owner_signature_url: string | null;
+  is_demo: boolean;
 }
 
 export interface ActivityEntry {

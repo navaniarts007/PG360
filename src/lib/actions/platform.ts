@@ -53,9 +53,12 @@ export async function createPgAction(
     };
   }
 
-  // 2) the PG account
+  // 2) the PG account — demo = a time-limited trial (expires after trial_days)
+  const isDemo = formData.get("is_demo") === "on";
+  const trialDays = Math.min(365, Math.max(1, Number(formData.get("trial_days")) || 14));
   const expiry = new Date();
-  expiry.setFullYear(expiry.getFullYear() + 1);
+  if (isDemo) expiry.setDate(expiry.getDate() + trialDays);
+  else expiry.setFullYear(expiry.getFullYear() + 1);
   const { data: pg, error: pgErr } = await admin
     .from("pg_accounts")
     .insert({
@@ -67,6 +70,7 @@ export async function createPgAction(
       category: d.category,
       subscription_plan: d.subscription_plan,
       subscription_expiry: expiry.toISOString().slice(0, 10),
+      is_demo: isDemo,
       created_by: me.id,
       owner_id: created.user.id,
       edition: d.edition,
@@ -123,20 +127,30 @@ export async function updateAccountAction(
   }
   const d = parsed.data;
   const portalEnabled = formData.get("portal_enabled") === "on";
+  const isDemo = formData.get("is_demo") === "on";
   const prefix = d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null;
+  // optionally (re)set the trial/expiry window when days are provided
+  const patch: Record<string, unknown> = {
+    owner_name: d.owner_name,
+    mobile: d.mobile,
+    location: d.location,
+    subscription_plan: d.subscription_plan,
+    edition: d.edition,
+    portal_enabled: portalEnabled,
+    reg_prefix: prefix,
+    is_demo: isDemo,
+  };
+  const trialDays = Number(formData.get("trial_days")) || 0;
+  if (trialDays > 0) {
+    const exp = new Date();
+    exp.setDate(exp.getDate() + Math.min(365, trialDays));
+    patch.subscription_expiry = exp.toISOString().slice(0, 10);
+  }
 
   const admin = createAdminClient();
   const { error } = await admin
     .from("pg_accounts")
-    .update({
-      owner_name: d.owner_name,
-      mobile: d.mobile,
-      location: d.location,
-      subscription_plan: d.subscription_plan,
-      edition: d.edition,
-      portal_enabled: portalEnabled,
-      reg_prefix: prefix,
-    })
+    .update(patch)
     .eq("id", d.id);
   if (error) return { error: humanizeDbError(error, "Could not update the account.") };
 

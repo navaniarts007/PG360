@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -128,6 +128,7 @@ export function AppShell({
   brandName,
   impersonating,
   permissions,
+  demoExpiry,
   children,
 }: {
   role: Role;
@@ -142,6 +143,7 @@ export function AppShell({
   brandName?: string;
   impersonating?: { pgId: string; pgName: string } | null;
   permissions?: StaffPermissions | null;
+  demoExpiry?: string | null;
   children: React.ReactNode;
 }) {
   // GVM-style editions get a stripped owner-only nav; everyone else by role.
@@ -268,6 +270,9 @@ export function AppShell({
       )}
 
       <div className="flex min-h-screen flex-col">
+        {/* demo / trial countdown banner */}
+        {demoExpiry && <DemoBanner expiry={demoExpiry} />}
+
         {/* impersonation banner — super-admin viewing a PG as its owner */}
         {impersonating && (
           <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-ink px-4 py-2 text-paper sm:px-6">
@@ -344,6 +349,46 @@ export function AppShell({
           </button>
         )}
       </nav>
+    </div>
+  );
+}
+
+/** Live trial countdown shown to demo-account owners, above everything. */
+function DemoBanner({ expiry }: { expiry: string }) {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const target = new Date(`${expiry}T23:59:59`).getTime();
+  const diff = now === null ? 1 : target - now;
+  const ended = diff <= 0;
+  const d = Math.max(0, Math.floor(diff / 86_400_000));
+  const h = Math.max(0, Math.floor((diff % 86_400_000) / 3_600_000));
+  const m = Math.max(0, Math.floor((diff % 3_600_000) / 60_000));
+  const s = Math.max(0, Math.floor((diff % 60_000) / 1000));
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <div
+      className={`sticky top-0 z-40 flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-sm font-medium ${
+        ended ? "bg-rose-600 text-white" : "bg-gold-500 text-ink"
+      }`}
+    >
+      {now === null ? (
+        <span>🎁 Demo account · trial active</span>
+      ) : ended ? (
+        <span>⚠ Your demo / trial has ended — contact us to keep your account active.</span>
+      ) : (
+        <span>
+          🎁 Demo account · trial ends in{" "}
+          <strong className="tnum">
+            {d}d {pad(h)}:{pad(m)}:{pad(s)}
+          </strong>
+        </span>
+      )}
     </div>
   );
 }

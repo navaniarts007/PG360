@@ -42,10 +42,10 @@ export default async function PlatformOverview() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="PG accounts" value={String(stats.totalPgs)} icon={Building2} accent="clay" hint={`${stats.activePgs} active`} />
-        <StatCard label="Active subscriptions" value={String(stats.activePgs)} icon={TrendingUp} accent="teal" hint="paying owners" />
+        <StatCard label="PG accounts" value={String(stats.totalPgs)} icon={Building2} accent="clay" hint={`${stats.demoPgs} on trial`} />
+        <StatCard label="Paying PGs" value={String(stats.payingPgs)} icon={TrendingUp} accent="teal" hint="real subscriptions" />
         <StatCard label="Tenants on platform" value={String(stats.totalTenants)} icon={Users} accent="gold" hint="across all PGs" />
-        <StatCard label="Annual recurring" value={inrCompact(stats.mrr)} icon={IndianRupee} accent="ink" hint="from active plans" />
+        <StatCard label="Revenue (paid)" value={inrCompact(stats.revenue)} icon={IndianRupee} accent="ink" hint="from paid invoices" />
       </div>
 
       <Card>
@@ -157,11 +157,11 @@ export default async function PlatformOverview() {
 
       <div className="rounded-2xl border border-line bg-gradient-to-br from-clay-50 to-paper-2/40 p-6">
         <p className="font-display text-lg font-semibold text-ink">
-          {inr(stats.mrr)} <span className="font-sans text-sm font-normal text-ink-muted">in active annual subscriptions</span>
+          {inr(stats.revenue)} <span className="font-sans text-sm font-normal text-ink-muted">collected from paid invoices</span>
         </p>
         <p className="mt-1 text-sm text-ink-soft">
-          {stats.activePgs} of {stats.totalPgs} PGs are active. Suspended accounts keep
-          their data but lose access until reactivated.
+          {stats.payingPgs} paying · {stats.demoPgs} on trial · of {stats.totalPgs} PGs.
+          Demo accounts don&apos;t count toward revenue and expire after their trial.
         </p>
       </div>
     </div>

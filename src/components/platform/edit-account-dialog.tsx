@@ -97,6 +97,21 @@ function EditForm({ account, onDone }: { account: PgAccount; onDone: () => void 
         </FieldRow>
       </div>
 
+      <div className="rounded-xl border border-line bg-paper-2/50 p-4 space-y-3">
+        <label className="flex items-center gap-2.5 text-sm text-ink">
+          <input
+            type="checkbox"
+            name="is_demo"
+            defaultChecked={account.is_demo}
+            className="size-4 rounded border-line text-clay-600 focus:ring-clay-500"
+          />
+          Demo / trial account (excluded from revenue; expires after the trial)
+        </label>
+        <FieldRow label="Reset trial / extend by (days)" htmlFor="trial_days" hint="leave blank to keep the current expiry">
+          <Input id="trial_days" name="trial_days" type="number" min={1} max={365} placeholder="e.g. 14" />
+        </FieldRow>
+      </div>
+
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel

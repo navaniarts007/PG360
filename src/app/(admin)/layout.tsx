@@ -17,8 +17,17 @@ export default async function AdminLayout({
     getMyNotifications(),
     getEdition(),
   ]);
+
+  // Demo / trial accounts: lock once the trial date has passed (owners only;
+  // a super-admin impersonating can still get in to extend/convert it).
+  const demoExpired =
+    !!pg?.is_demo &&
+    pg.subscription_expiry < new Date().toISOString().slice(0, 10);
+  if (demoExpired && !user.impersonating) redirect("/demo-expired");
+
   return (
     <AppShell
+      demoExpiry={pg?.is_demo ? pg.subscription_expiry : null}
       role={user.role}
       user={{ full_name: user.full_name, email: user.email }}
       context={pg?.pg_name ?? "Your PG"}
