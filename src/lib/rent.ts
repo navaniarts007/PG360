@@ -33,6 +33,13 @@ export function monthsFromTo(start: string, end: string): string[] {
   return out;
 }
 
+/** Ordinal day, e.g. 1 -> "1st", 2 -> "2nd", 22 -> "22nd". */
+export function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
 export function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return new Date(y!, (m ?? 1) - 1, 1).toLocaleDateString("en-IN", {
@@ -78,12 +85,16 @@ export function tenantSchedule(
   today = new Date(),
 ): { timeline: MonthDue[]; nextDueDate: string | null; pendingMonths: number } {
   const todayISO = today.toISOString().slice(0, 10);
-  const startMonth = checkinISO.slice(0, 7);
+  const checkinDate = checkinISO.slice(0, 10);
+  const startMonth = checkinDate.slice(0, 7);
   const curMonth = todayISO.slice(0, 7);
   const months = monthsFromTo(startMonth, curMonth);
 
   const timeline: MonthDue[] = months.map((month) => {
-    const dueDate = dueDateFor(month, rentDueDay);
+    let dueDate = dueDateFor(month, rentDueDay);
+    // the first (check-in) month can't be due before the tenant arrived — the
+    // pro-rata first rent is collected on arrival.
+    if (month === startMonth && dueDate < checkinDate) dueDate = checkinDate;
     const recorded = paidStatus.get(month);
     let status: DueStatus;
     if (recorded === "paid") status = "paid";

@@ -36,6 +36,7 @@ import {
   listTenantEvents,
 } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
+import { ordinal } from "@/lib/rent";
 
 const EVENT_LABEL: Record<string, string> = {
   joined: "Joined",
@@ -138,7 +139,7 @@ export default async function TenantDetail({
             <Row icon={Phone} label="Phone" value={tenant.phone} />
             <Row icon={IdCard} label="Aadhaar" value={tenant.aadhaar_number ?? "—"} />
             <Row icon={CalendarDays} label="Check-in" value={formatDate(tenant.checkin_date)} />
-            <Row icon={CalendarDays} label="Rent due day" value={`Every ${tenant.rent_due_day}th`} />
+            <Row icon={CalendarDays} label="Rent due day" value={`${ordinal(tenant.rent_due_day)} of each month`} />
             {room && <Row icon={Wifi} label="WiFi" value={room.wifi_password} mono />}
           </dl>
         </Card>
