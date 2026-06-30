@@ -78,12 +78,19 @@ function PaymentForm({
   const [tenantId, setTenantId] = useState(first);
   const selected = tenants.find((t) => t.id === tenantId);
 
-  const [rent, setRent] = useState(selected?.rent_amount ?? 0);
+  const monthly = selected?.rent_amount ?? 0;
+  const [rent, setRent] = useState(monthly);
+  const [days, setDays] = useState(30);
   const [power, setPower] = useState(0);
   const [food, setFood] = useState(0);
   const [other, setOther] = useState(0);
+  const [deposit, setDeposit] = useState(0);
+  const [joining, setJoining] = useState(0);
   const [paid, setPaid] = useState(0);
   const router = useRouter();
+
+  // per-day rate on a fixed 30-day basis (₹7,000/month → ₹233/day → 13 days = ₹3,033)
+  const dailyRate = monthly > 0 ? monthly / 30 : 0;
 
   useEffect(() => {
     if (state.ok) {
@@ -92,14 +99,21 @@ function PaymentForm({
     }
   }, [state.ok, onDone, router]);
 
-  // keep rent in sync when tenant changes
+  // keep rent in sync when tenant changes (reset to a full month)
   useEffect(() => {
     setRent(selected?.rent_amount ?? 0);
+    setDays(30);
   }, [selected?.rent_amount]);
 
+  // pro-rata: enter the number of days stayed → base rent = ₹/day × days
+  const applyDays = (d: number) => {
+    setDays(d);
+    setRent(Math.round(dailyRate * d));
+  };
+
   const total = useMemo(
-    () => rent + power + food + other,
-    [rent, power, food, other],
+    () => rent + power + food + other + deposit + joining,
+    [rent, power, food, other, deposit, joining],
   );
   const balance = Math.max(total - paid, 0);
   const status = paid >= total && total > 0 ? "paid" : paid > 0 ? "partial" : "due";
@@ -142,6 +156,35 @@ function PaymentForm({
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Rent calculator
         </p>
+
+        {/* day-wise / pro-rata helper — for partial months or short stays */}
+        <div className="mb-3 rounded-lg border border-dashed border-line bg-surface px-3 py-2.5">
+          <div className="flex items-end justify-between gap-3">
+            <FieldRow label="Days stayed (pro-rata)" htmlFor="prorata_days">
+              <Input
+                id="prorata_days"
+                type="number"
+                min={1}
+                max={31}
+                value={days}
+                onChange={(e) => applyDays(Math.max(1, Math.min(31, +e.target.value || 0)))}
+              />
+            </FieldRow>
+            <div className="pb-2.5 text-right text-xs text-ink-muted">
+              <p>
+                <span className="font-semibold text-ink tnum">{inr(Math.round(dailyRate))}</span>/day
+              </p>
+              <p className="tnum">
+                {days} × {inr(Math.round(dailyRate))} = <span className="font-semibold text-ink">{inr(rent)}</span>
+              </p>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
+            30 days = one full month ({inr(monthly)}). Enter the actual days for a
+            mid-month join or short stay — base rent updates automatically.
+          </p>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <FieldRow label="Base rent" htmlFor="base_rent">
             <Input id="base_rent" name="base_rent" type="number" min={0} value={rent} onChange={(e) => setRent(+e.target.value)} />
@@ -154,6 +197,12 @@ function PaymentForm({
           </FieldRow>
           <FieldRow label="Other" htmlFor="other_charges">
             <Input id="other_charges" name="other_charges" type="number" min={0} value={other} onChange={(e) => setOther(+e.target.value)} />
+          </FieldRow>
+          <FieldRow label="Security deposit" htmlFor="security_deposit">
+            <Input id="security_deposit" name="security_deposit" type="number" min={0} value={deposit} onChange={(e) => setDeposit(+e.target.value)} />
+          </FieldRow>
+          <FieldRow label="Joining / admission fee" htmlFor="joining_fee">
+            <Input id="joining_fee" name="joining_fee" type="number" min={0} value={joining} onChange={(e) => setJoining(+e.target.value)} />
           </FieldRow>
         </div>
 

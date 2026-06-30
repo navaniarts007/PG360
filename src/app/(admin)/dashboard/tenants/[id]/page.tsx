@@ -75,6 +75,9 @@ export default async function TenantDetail({
     listTenantDocumentsSigned(id),
   ]);
 
+  const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
+  const onboardingTotal = tenant.rent_amount + tenant.security_deposit + joiningTotal;
+
   return (
     <div className="space-y-7">
       <Link href="/dashboard/tenants" className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
@@ -150,6 +153,8 @@ export default async function TenantDetail({
           <div className="mt-4 space-y-3">
             <MoneyRow label="Monthly rent" value={inr(tenant.rent_amount)} />
             <MoneyRow label="Security deposit" value={inr(tenant.security_deposit)} />
+            <MoneyRow label="Joining / admission fee" value={inr(joiningTotal)} />
+            <MoneyRow label="Total onboarding" value={inr(onboardingTotal)} strong />
             <MoneyRow label="Outstanding" value={inr(outstanding)} tone={outstanding > 0 ? "rose" : "teal"} />
             <div className="mt-2 rounded-xl bg-ink p-4 text-paper">
               <p className="flex items-center gap-1.5 text-xs text-paper/60">
@@ -260,14 +265,22 @@ function MoneyRow({
   label,
   value,
   tone,
+  strong,
 }: {
   label: string;
   value: string;
   tone?: "rose" | "teal";
+  strong?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-line pb-3 text-sm last:border-0">
-      <span className="text-ink-muted">{label}</span>
+    <div
+      className={
+        strong
+          ? "flex items-center justify-between border-b border-line pb-3 text-sm last:border-0 -mx-1 rounded-lg bg-paper-2/60 px-2 py-1"
+          : "flex items-center justify-between border-b border-line pb-3 text-sm last:border-0"
+      }
+    >
+      <span className={strong ? "font-semibold text-ink" : "text-ink-muted"}>{label}</span>
       <span
         className={
           tone === "rose"

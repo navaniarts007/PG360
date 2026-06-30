@@ -319,6 +319,8 @@ export interface Payment {
   electricity_charge: number;
   food_charge: number;
   other_charges: number;
+  security_deposit: number;
+  joining_fee: number;
   total_amount: number;
   amount_paid: number;
   payment_mode: PaymentMode | null;

@@ -6,6 +6,7 @@ import {
   Home,
   Plus,
   Receipt,
+  ShieldCheck,
   Utensils,
   Zap,
 } from "lucide-react";
@@ -58,6 +59,8 @@ export default async function MyBill() {
   const food = isDaily ? 0 : current?.food_charge ?? 0;
   const foodDeduction = isDaily ? 0 : current?.food_opt_out_deduction ?? derived.foodDeduction;
   const other = isDaily ? 0 : current?.other_charges ?? 0;
+  const deposit = current?.security_deposit ?? 0;
+  const joining = current?.joining_fee ?? 0;
   const total = isDaily ? current?.total_amount ?? dailyTotal : current?.total_amount ?? derived.total;
   const isProRata = isDaily ? false : current?.is_pro_rata ?? derived.isProRata;
   const proRataDays = current?.pro_rata_days ?? derived.proRataDays;
@@ -88,6 +91,8 @@ export default async function MyBill() {
         { icon: Zap, label: "Electricity", value: electricity },
         { icon: Utensils, label: "Food", value: food },
         { icon: Plus, label: "Other charges", value: other },
+        { icon: ShieldCheck, label: "Security deposit", value: deposit },
+        { icon: Plus, label: "Joining / admission fee", value: joining },
       ].filter((l) => l.value > 0 || l.label.startsWith("Base rent"));
   if (!isDaily && foodDeduction > 0) {
     lines.push({ icon: Utensils, label: "Food opt-out credit", value: -foodDeduction });
