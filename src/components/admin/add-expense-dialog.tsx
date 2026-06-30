@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { AlertCircle, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -12,7 +12,7 @@ import {
 } from "@/lib/actions/admin";
 import type { Expense } from "@/lib/types";
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   "rent",
   "salaries",
   "utilities",
@@ -21,14 +21,20 @@ const CATEGORIES = [
   "supplies",
   "marketing",
   "other",
-] as const;
+];
+
+const NEW = "__new__";
+const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
 export function AddExpenseDialog({
   defaultDate,
   expense,
+  categories = [],
 }: {
   defaultDate: string;
   expense?: Expense;
+  /** custom categories defined for this property (merged with the defaults) */
+  categories?: string[];
 }) {
   const editing = !!expense;
   return (
@@ -56,7 +62,12 @@ export function AddExpenseDialog({
       }
     >
       {(close) => (
-        <ExpenseForm defaultDate={defaultDate} expense={expense} onDone={close} />
+        <ExpenseForm
+          defaultDate={defaultDate}
+          expense={expense}
+          categories={categories}
+          onDone={close}
+        />
       )}
     </Modal>
   );
@@ -65,10 +76,12 @@ export function AddExpenseDialog({
 function ExpenseForm({
   defaultDate,
   expense,
+  categories,
   onDone,
 }: {
   defaultDate: string;
   expense?: Expense;
+  categories: string[];
   onDone: () => void;
 }) {
   const editing = !!expense;
@@ -80,28 +93,51 @@ function ExpenseForm({
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
+  // merged, de-duplicated option list (defaults + this property's custom ones)
+  const options = [...new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.toLowerCase())])];
+  const initial: string = expense?.category ?? "utilities";
+  // an edited expense may have a category no longer in the list — keep it
+  if (initial && !options.includes(initial.toLowerCase())) options.push(initial.toLowerCase());
+  const [cat, setCat] = useState<string>(initial);
+  const [newCat, setNewCat] = useState("");
+
   return (
     <form action={action} className="space-y-4">
       {editing && <input type="hidden" name="id" value={expense!.id} />}
+      {/* the value actually submitted: typed name when adding a new category */}
+      <input type="hidden" name="category" value={cat === NEW ? newCat : cat} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <FieldRow label="Category" htmlFor="category">
+        <FieldRow label="Category" htmlFor="category_pick">
           <Select
-            id="category"
-            name="category"
-            defaultValue={expense?.category ?? "utilities"}
+            id="category_pick"
+            value={cat}
+            onChange={(e) => setCat(e.target.value)}
           >
-            {CATEGORIES.map((c) => (
+            {options.map((c) => (
               <option key={c} value={c} className="capitalize">
-                {c[0]!.toUpperCase() + c.slice(1)}
+                {cap(c)}
               </option>
             ))}
+            <option value={NEW}>+ New category…</option>
           </Select>
         </FieldRow>
+        {cat === NEW && (
+          <FieldRow label="New category name" htmlFor="category_new" className="col-span-2">
+            <Input
+              id="category_new"
+              value={newCat}
+              onChange={(e) => setNewCat(e.target.value)}
+              placeholder="e.g. Internet, Repairs, Staff food"
+              autoFocus
+              required
+            />
+          </FieldRow>
+        )}
         <FieldRow label="Amount (₹)" htmlFor="amount">
           <Input
             id="amount"

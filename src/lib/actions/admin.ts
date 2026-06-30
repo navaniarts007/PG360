@@ -938,17 +938,21 @@ export async function recordElectricityAction(
 
 /* -------------------------------- expenses ------------------------------- */
 
+/** Built-in categories every property starts with (lowercase, kept in sync
+ *  with DEFAULT_CATEGORIES in the add-expense dialog). */
+const DEFAULT_EXPENSE_CATEGORIES = [
+  "rent",
+  "salaries",
+  "utilities",
+  "groceries",
+  "maintenance",
+  "supplies",
+  "marketing",
+  "other",
+];
+
 const expenseSchema = z.object({
-  category: z.enum([
-    "rent",
-    "salaries",
-    "utilities",
-    "groceries",
-    "maintenance",
-    "supplies",
-    "marketing",
-    "other",
-  ]),
+  category: z.string().trim().min(1, "Pick a category.").max(40),
   amount: z.coerce.number().min(0, "Enter an amount."),
   date: z.string().min(1, "Date is required."),
   description: z.string().optional(),
@@ -973,10 +977,51 @@ export async function addExpenseAction(
     added_by: me.id,
   });
   if (error) return { error: humanizeDbError(error) };
+  // remember any newly-typed category in the master (ignore duplicates/defaults)
+  if (!DEFAULT_EXPENSE_CATEGORIES.includes(parsed.data.category.toLowerCase())) {
+    await s
+      .from("expense_categories")
+      .upsert({ pg_id: pid, name: parsed.data.category }, { onConflict: "pg_id,name" });
+  }
   await logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}`);
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
+}
+
+/** Add a custom expense category to this property's master list. */
+export async function addExpenseCategoryAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Enter a category name." };
+  if (name.length > 40) return { error: "Keep the category name short." };
+  const s = await createClient();
+  const { error } = await s
+    .from("expense_categories")
+    .insert({ pg_id: pid, name });
+  if (error) {
+    if (error.code === "23505") return { error: "That category already exists." };
+    return { error: humanizeDbError(error) };
+  }
+  await logActivity("expense.category_added", `Added expense category "${name}"`);
+  revalidatePath("/dashboard/expenses");
+  return { ok: true };
+}
+
+/** Remove a custom expense category by name (existing expenses keep their label). */
+export async function deleteExpenseCategoryAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return;
+  const name = String(formData.get("name"));
+  const s = await createClient();
+  await s.from("expense_categories").delete().eq("name", name).eq("pg_id", pid);
+  revalidatePath("/dashboard/expenses");
 }
 
 /** Owner confirms a tenant-submitted payment. */

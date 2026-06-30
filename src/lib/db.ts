@@ -1033,6 +1033,18 @@ export async function listExpenses(month: string): Promise<Expense[]> {
   return (data ?? []) as Expense[];
 }
 
+/** Custom expense categories defined for the active property. */
+export async function listExpenseCategories(): Promise<string[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("expense_categories")
+    .select("name")
+    .eq("pg_id", pid)
+    .order("name");
+  return (data ?? []).map((c) => c.name as string);
+}
+
 export async function expenseSummary(month: string) {
   const expenses = await listExpenses(month);
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);

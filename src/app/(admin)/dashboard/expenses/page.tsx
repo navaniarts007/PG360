@@ -6,10 +6,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AddExpenseDialog } from "@/components/admin/add-expense-dialog";
+import { ExpenseCategoriesDialog } from "@/components/admin/expense-categories-dialog";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteExpenseAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
-import { expenseSummary, listExpenses } from "@/lib/db";
+import { expenseSummary, listExpenseCategories, listExpenses } from "@/lib/db";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Expenses" };
@@ -36,9 +37,10 @@ const CATEGORY_TONE: Record<string, "clay" | "teal" | "gold" | "rose" | "neutral
 export default async function ExpensesPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [expenses, summary] = await Promise.all([
+  const [expenses, summary, categories] = await Promise.all([
     listExpenses(month),
     expenseSummary(month),
+    listExpenseCategories(),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const maxCat = summary.byCategory[0]?.amount ?? 1;
@@ -49,7 +51,12 @@ export default async function ExpensesPage() {
         eyebrow={monthLabel(month)}
         title="Expenses"
         subtitle="Log what your PG spends — it flows straight into your P&L."
-        action={<AddExpenseDialog defaultDate={today} />}
+        action={
+          <div className="flex items-center gap-2">
+            <ExpenseCategoriesDialog categories={categories} />
+            <AddExpenseDialog defaultDate={today} categories={categories} />
+          </div>
+        }
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -94,7 +101,7 @@ export default async function ExpensesPage() {
                 icon={Wallet}
                 title="No expenses yet"
                 body="Log your first expense to start tracking profit."
-                action={<AddExpenseDialog defaultDate={today} />}
+                action={<AddExpenseDialog defaultDate={today} categories={categories} />}
               />
             </div>
           ) : (
@@ -126,7 +133,7 @@ export default async function ExpensesPage() {
                       <td className="px-6 py-3.5 text-right font-semibold text-ink tnum">{inr(e.amount)}</td>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center justify-end gap-1">
-                          <AddExpenseDialog defaultDate={today} expense={e} />
+                          <AddExpenseDialog defaultDate={today} expense={e} categories={categories} />
                           <ConfirmDelete action={deleteExpenseAction} id={e.id} title="Delete expense" />
                         </div>
                       </td>

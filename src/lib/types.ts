@@ -356,6 +356,8 @@ export interface Issue {
   resolved_at: string | null;
 }
 
+/** Built-in categories; custom property-defined categories are also allowed,
+ *  so the stored value is widened to string. */
 export type ExpenseCategory =
   | "rent"
   | "salaries"
@@ -364,7 +366,8 @@ export type ExpenseCategory =
   | "maintenance"
   | "supplies"
   | "marketing"
-  | "other";
+  | "other"
+  | (string & {});
 
 export interface Expense {
   id: string;
