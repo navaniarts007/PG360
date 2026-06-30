@@ -81,6 +81,7 @@ function TenantForm({
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const idCameraRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -300,15 +301,38 @@ function TenantForm({
               if (f) void upload(f, "id");
             }}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy === "id"}
-            className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
-          >
-            {busy === "id" ? <Loader2 className="size-4 animate-spin" /> : <ImageUp className="size-4" />}
-            {photo ? "Replace photo" : "Upload photo"}
-          </button>
+          {/* camera capture — opens the rear camera on phones */}
+          <input
+            ref={idCameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f, "id");
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => idCameraRef.current?.click()}
+              disabled={busy === "id"}
+              className="inline-flex items-center gap-2 rounded-lg bg-clay-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-clay-700 disabled:opacity-60"
+            >
+              {busy === "id" ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+              Take photo
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy === "id"}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
+            >
+              <ImageUp className="size-4" />
+              {photo ? "Replace" : "Upload"}
+            </button>
+          </div>
         </div>
         {uploadErr && <p className="mt-1.5 text-xs text-rose-600">{uploadErr}</p>}
       </div>

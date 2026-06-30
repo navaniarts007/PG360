@@ -15,7 +15,7 @@ export function PageHeader({
 }) {
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
-      <div>
+      <div className="min-w-0">
         {eyebrow && (
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-clay-500">
             {eyebrow}
@@ -26,7 +26,7 @@ export function PageHeader({
         </h1>
         {subtitle && <p className="mt-1.5 max-w-2xl text-ink-soft">{subtitle}</p>}
       </div>
-      {action && <div className="flex items-center gap-2">{action}</div>}
+      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
     </div>
   );
 }

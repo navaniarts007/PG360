@@ -107,7 +107,7 @@ export default async function TenantDetail({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Link
             href={`/record/${tenant.id}`}
             target="_blank"
@@ -229,7 +229,7 @@ export default async function TenantDetail({
         </Card>
 
         <div className="lg:col-span-3">
-          <DocumentsManager tenantId={tenant.id} docs={documents} />
+          <DocumentsManager tenantId={tenant.id} docs={documents} aadhaarUrl={aadhaarUrl} />
         </div>
 
         <div className="lg:col-span-3">

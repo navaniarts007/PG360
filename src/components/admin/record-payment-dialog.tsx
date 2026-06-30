@@ -81,6 +81,11 @@ function PaymentForm({
   const monthly = selected?.rent_amount ?? 0;
   const [rent, setRent] = useState(monthly);
   const [days, setDays] = useState(30);
+  // billing period: a whole calendar month, or a custom day range
+  const [periodMode, setPeriodMode] = useState<"month" | "days">("month");
+  const [monthInput, setMonthInput] = useState(month);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [power, setPower] = useState(0);
   const [food, setFood] = useState(0);
   const [other, setOther] = useState(0);
@@ -111,6 +116,31 @@ function PaymentForm({
     setRent(Math.round(dailyRate * d));
   };
 
+  // in date-range mode, derive the number of days (inclusive) from the dates
+  const rangeDays =
+    fromDate && toDate && toDate >= fromDate
+      ? Math.round(
+          (new Date(toDate + "T00:00:00").getTime() -
+            new Date(fromDate + "T00:00:00").getTime()) /
+            86_400_000,
+        ) + 1
+      : 0;
+
+  useEffect(() => {
+    if (periodMode === "days" && rangeDays > 0) {
+      setDays(rangeDays);
+      setRent(Math.round(dailyRate * rangeDays));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodMode, rangeDays, dailyRate]);
+
+  // the month the bill is filed under (YYYY-MM) — derived from the from-date
+  const monthForValue = periodMode === "days" && fromDate ? fromDate.slice(0, 7) : monthInput;
+  const periodLabel =
+    periodMode === "days" && fromDate && toDate
+      ? `${fromDate} → ${toDate} · ${rangeDays} day${rangeDays === 1 ? "" : "s"}`
+      : null;
+
   const total = useMemo(
     () => rent + power + food + other + deposit + joining,
     [rent, power, food, other, deposit, joining],
@@ -132,6 +162,9 @@ function PaymentForm({
         </div>
       )}
 
+      {/* the period the bill is filed under (YYYY-MM) */}
+      <input type="hidden" name="month_for" value={monthForValue} />
+
       <div className="grid grid-cols-2 gap-3">
         <FieldRow label="Tenant" htmlFor="tenant_id">
           <Select
@@ -147,9 +180,39 @@ function PaymentForm({
             ))}
           </Select>
         </FieldRow>
-        <FieldRow label="For month" htmlFor="month_for">
-          <Input id="month_for" name="month_for" type="month" defaultValue={month} />
+        <FieldRow label="Bill period" htmlFor="period_mode">
+          <Select
+            id="period_mode"
+            value={periodMode}
+            onChange={(e) => setPeriodMode(e.target.value as "month" | "days")}
+          >
+            <option value="month">Whole month</option>
+            <option value="days">Day range</option>
+          </Select>
         </FieldRow>
+
+        {periodMode === "month" ? (
+          <FieldRow label="For month" htmlFor="month_pick" className="col-span-2">
+            <Input
+              id="month_pick"
+              type="month"
+              value={monthInput}
+              onChange={(e) => setMonthInput(e.target.value)}
+            />
+          </FieldRow>
+        ) : (
+          <>
+            <FieldRow label="From date" htmlFor="from_date">
+              <Input id="from_date" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </FieldRow>
+            <FieldRow label="To date" htmlFor="to_date">
+              <Input id="to_date" type="date" min={fromDate || undefined} value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </FieldRow>
+            {periodLabel && (
+              <p className="col-span-2 -mt-1 text-xs font-medium text-clay-700">{periodLabel}</p>
+            )}
+          </>
+        )}
       </div>
 
       <div className="rounded-xl border border-line bg-paper-2/50 p-4">
@@ -160,14 +223,15 @@ function PaymentForm({
         {/* day-wise / pro-rata helper — for partial months or short stays */}
         <div className="mb-3 rounded-lg border border-dashed border-line bg-surface px-3 py-2.5">
           <div className="flex items-end justify-between gap-3">
-            <FieldRow label="Days stayed (pro-rata)" htmlFor="prorata_days">
+            <FieldRow label="Days billed (pro-rata)" htmlFor="prorata_days">
               <Input
                 id="prorata_days"
                 type="number"
                 min={1}
-                max={31}
+                max={366}
                 value={days}
-                onChange={(e) => applyDays(Math.max(1, Math.min(31, +e.target.value || 0)))}
+                disabled={periodMode === "days"}
+                onChange={(e) => applyDays(Math.max(1, +e.target.value || 0))}
               />
             </FieldRow>
             <div className="pb-2.5 text-right text-xs text-ink-muted">
@@ -180,8 +244,9 @@ function PaymentForm({
             </div>
           </div>
           <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
-            30 days = one full month ({inr(monthly)}). Enter the actual days for a
-            mid-month join or short stay — base rent updates automatically.
+            {periodMode === "days"
+              ? "Days come from the date range above — base rent updates automatically."
+              : `30 days = one full month (${inr(monthly)}). Enter the actual days for a mid-month join or short stay — base rent updates automatically.`}
           </p>
         </div>
 

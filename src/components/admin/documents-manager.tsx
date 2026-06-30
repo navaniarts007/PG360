@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, FileText, ImageUp, Loader2, Plus } from "lucide-react";
+import { AlertCircle, Camera, FileText, ImageUp, Loader2, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -14,20 +14,40 @@ import { DOC_LABELS, type DocType, type TenantDocument } from "@/lib/types";
 
 type SignedDoc = TenantDocument & { url: string | null };
 
-export function DocumentsManager({ tenantId, docs }: { tenantId: string; docs: SignedDoc[] }) {
+export function DocumentsManager({
+  tenantId,
+  docs,
+  aadhaarUrl,
+}: {
+  tenantId: string;
+  docs: SignedDoc[];
+  /** signed URL of the Aadhaar captured during onboarding (tenants.aadhaar_photo_url) */
+  aadhaarUrl?: string | null;
+}) {
+  const isEmpty = docs.length === 0 && !aadhaarUrl;
   return (
     <Card className="p-5 sm:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-lg text-ink">
           <FileText className="size-4.5 text-clay-500" /> ID documents
         </h3>
         <AddDocumentDialog tenantId={tenantId} />
       </div>
 
-      {docs.length === 0 ? (
+      {isEmpty ? (
         <p className="mt-3 text-sm text-ink-muted">No documents added yet.</p>
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {/* Aadhaar captured at onboarding — shown here so it need not be re-uploaded */}
+          {aadhaarUrl && (
+            <div className="overflow-hidden rounded-xl border border-clay-200 ring-1 ring-clay-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={aadhaarUrl} alt="Aadhaar" className="h-28 w-full bg-paper-2 object-contain" />
+              <div className="flex items-center justify-between gap-1 px-2.5 py-2">
+                <span className="truncate text-xs font-semibold text-ink">Aadhaar (on file)</span>
+              </div>
+            </div>
+          )}
           {docs.map((d) => (
             <div key={d.id} className="overflow-hidden rounded-xl border border-line">
               {d.url ? (
@@ -73,6 +93,7 @@ function DocForm({ tenantId, onDone }: { tenantId: string; onDone: () => void })
   const [busy, setBusy] = useState(false);
   const [upErr, setUpErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -138,15 +159,37 @@ function DocForm({ tenantId, onDone }: { tenantId: string; onDone: () => void })
               if (f) void upload(f);
             }}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <ImageUp className="size-4" />}
-            {fileUrl ? "Replace" : "Upload document"}
-          </button>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f);
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-lg bg-clay-600 px-3 py-2 text-sm font-semibold text-white hover:bg-clay-700 disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+              Take photo
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
+            >
+              <ImageUp className="size-4" />
+              {fileUrl ? "Replace" : "Upload"}
+            </button>
+          </div>
         </div>
         {upErr && <p className="mt-1.5 text-xs text-rose-600">{upErr}</p>}
       </div>
