@@ -230,13 +230,14 @@ export async function deleteRoomAction(formData: FormData): Promise<void> {
 const tenantSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
-  email: z.string().email("Enter a valid email."),
+  // login is optional — provide both email + password to give the tenant a portal login.
+  email: z.string().email("Enter a valid email.").optional().or(z.literal("")),
   aadhaar_number: z.string().optional(),
   bed_id: z.string().optional(),
   security_deposit: z.coerce.number().min(0),
   checkin_date: z.string().min(1, "Check-in date is required."),
   rent_due_day: z.coerce.number().int().min(1).max(28),
-  login_password: z.string().min(8, "Password must be 8+ characters."),
+  login_password: z.string().min(8, "Password must be 8+ characters.").optional().or(z.literal("")),
   joining_fee: z.coerce.number().int().min(0).optional(),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
@@ -283,21 +284,28 @@ export async function addTenantAction(
     rent = d.rent_amount; // editable monthly rent (per-tenant discount) overrides the bed price
   }
 
-  const { data: created, error: userErr } = await admin.auth.admin.createUser({
-    email: d.email,
-    password: d.login_password,
-    email_confirm: true,
-    user_metadata: { full_name: d.name },
-  });
-  if (userErr || !created.user) {
-    const m = userErr?.message ?? "";
-    const code = (userErr as { code?: string } | null)?.code ?? "";
-    const exists = code === "email_exists" || /already|registered|exists|duplicate/i.test(m);
-    return {
-      error: exists
-        ? "That email already has a login. Use a different email for this tenant."
-        : m || "Could not create the tenant login.",
-    };
+  // Login is optional: only create an auth account when BOTH email + password
+  // are given. Otherwise the tenant is a record with no portal login.
+  let userId: string | null = null;
+  const wantsLogin = !!(d.email && d.login_password);
+  if (wantsLogin) {
+    const { data: created, error: userErr } = await admin.auth.admin.createUser({
+      email: d.email,
+      password: d.login_password,
+      email_confirm: true,
+      user_metadata: { full_name: d.name },
+    });
+    if (userErr || !created.user) {
+      const m = userErr?.message ?? "";
+      const code = (userErr as { code?: string } | null)?.code ?? "";
+      const exists = code === "email_exists" || /already|registered|exists|duplicate/i.test(m);
+      return {
+        error: exists
+          ? "That email already has a login. Use a different email for this tenant."
+          : m || "Could not create the tenant login.",
+      };
+    }
+    userId = created.user.id;
   }
 
   // sequential registration number for editions that use one (e.g. GVM-0001)
@@ -314,10 +322,10 @@ export async function addTenantAction(
       pg_id: pid,
       room_id: roomId,
       bed_id: bedId,
-      user_id: created.user.id,
+      user_id: userId,
       name: d.name,
       phone: d.phone,
-      email: d.email,
+      email: d.email || null,
       reg_no: regNo,
       aadhaar_number: d.aadhaar_number || null,
       avatar_url: d.avatar_url || null,
@@ -333,17 +341,19 @@ export async function addTenantAction(
     .select()
     .single();
   if (tErr || !tenant) {
-    await admin.auth.admin.deleteUser(created.user.id);
+    if (userId) await admin.auth.admin.deleteUser(userId);
     return { error: humanizeDbError(tErr, "Could not create the tenant.") };
   }
 
-  await admin.from("profiles").upsert({
-    id: created.user.id,
-    role: "tenant",
-    pg_id: pid,
-    full_name: d.name,
-    phone: d.phone,
-  });
+  if (userId) {
+    await admin.from("profiles").upsert({
+      id: userId,
+      role: "tenant",
+      pg_id: pid,
+      full_name: d.name,
+      phone: d.phone,
+    });
+  }
 
   if (bedId) {
     await admin
@@ -500,7 +510,7 @@ export async function toggleJoiningFeePaidAction(formData: FormData): Promise<vo
 const tenantUpdateSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
-  email: z.string().email("Enter a valid email."),
+  email: z.string().email("Enter a valid email.").optional().or(z.literal("")),
   aadhaar_number: z.string().optional(),
   bed_id: z.string().optional(),
   security_deposit: z.coerce.number().min(0),
@@ -561,7 +571,7 @@ export async function updateTenantAction(
     .update({
       name: d.name,
       phone: d.phone,
-      email: d.email,
+      email: d.email || null,
       aadhaar_number: d.aadhaar_number || null,
       ...(d.avatar_url ? { avatar_url: d.avatar_url } : {}),
       ...(d.aadhaar_photo_url ? { aadhaar_photo_url: d.aadhaar_photo_url } : {}),

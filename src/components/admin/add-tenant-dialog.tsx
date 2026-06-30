@@ -31,7 +31,7 @@ export function AddTenantDialog({
       description={
         isEdit
           ? "Rent follows the assigned bed."
-          : "Pick a bed — rent auto-fills, and the resident gets a login."
+          : "Pick a bed — rent auto-fills. Login email/password are optional."
       }
       trigger={(open) =>
         isEdit ? (
@@ -315,21 +315,24 @@ function TenantForm({
 
       {!tenant ? (
         <div className="rounded-xl border border-line bg-paper-2/50 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-            Tenant login
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Tenant login <span className="font-normal normal-case text-ink-muted">— optional</span>
+          </p>
+          <p className="mb-3 text-xs text-ink-muted">
+            Add both to give the resident a portal login. Leave blank to just keep a record.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Login email" htmlFor="email">
-              <Input id="email" name="email" type="email" placeholder="arjun@tenant.in" required />
+              <Input id="email" name="email" type="email" placeholder="optional" />
             </FieldRow>
             <FieldRow label="Password" htmlFor="login_password">
-              <Input id="login_password" name="login_password" type="text" placeholder="min 8 chars" required />
+              <Input id="login_password" name="login_password" type="text" placeholder="optional, 8+ chars" />
             </FieldRow>
           </div>
         </div>
       ) : (
         <FieldRow label="Login email" htmlFor="email">
-          <Input id="email" name="email" type="email" defaultValue={tenant.email} required />
+          <Input id="email" name="email" type="email" defaultValue={tenant.email} />
         </FieldRow>
       )}
 
