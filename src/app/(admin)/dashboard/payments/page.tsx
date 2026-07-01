@@ -8,6 +8,7 @@ import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
 import { adminKpis, getMonthBill, getPayTenants } from "@/lib/db";
+import { currentMonthRent } from "@/lib/rent";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -87,7 +88,27 @@ export default async function PaymentsPage() {
                         <span className="font-semibold text-ink">{r.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-3.5 text-ink-soft tnum">{inr(r.total)}</td>
+                    <td className="px-6 py-3.5 tnum">
+                      {(() => {
+                        const cr = currentMonthRent(r);
+                        // if we recorded a bill this month, that's the source of truth;
+                        // otherwise show the pro-rata first-month amount when applicable
+                        const showProRata = cr.proRata && !r.paymentId;
+                        return (
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-ink-soft">{inr(showProRata ? cr.amount : r.total)}</span>
+                            {showProRata && (
+                              <span
+                                className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
+                                title={`Pro-rata 1st month — full rent ${inr(r.rent_amount)} from next month`}
+                              >
+                                1st mo
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-3.5 tnum">
                       {r.paid > 0 ? (
                         <span className="font-semibold text-ink">{inr(r.paid)}</span>

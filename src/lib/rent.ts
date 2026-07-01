@@ -130,6 +130,27 @@ export function firstProRataPeriod(
   return { fromISO: from, toISO: to, days, isProRata, dailyRate, amount, status };
 }
 
+/** What to actually collect from a monthly tenant right now: the pro-rata first
+ *  period amount while they're still in it (a mid-month join), else full rent.
+ *  Shared by the tenants list and the payments page so both show the same
+ *  figure. Day-wise tenants always show their stored amount. */
+export function currentMonthRent(
+  t: {
+    rent_amount: number;
+    checkin_date: string;
+    rent_due_day: number;
+    stay_type?: "monthly" | "daily" | null;
+  },
+  today = new Date(),
+): { amount: number; proRata: boolean } {
+  if (t.stay_type === "daily") return { amount: t.rent_amount, proRata: false };
+  const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
+  const todayISO = today.toISOString().slice(0, 10);
+  // still inside the first partial period (up to & including the first due date)
+  if (fp.isProRata && todayISO <= fp.toISO) return { amount: fp.amount, proRata: true };
+  return { amount: t.rent_amount, proRata: false };
+}
+
 /** Per-month paid/due timeline for one tenant. The check-in month's partial
  *  rent is handled separately (see firstProRataPeriod); this covers the regular
  *  monthly cycle from the first full due date onward, plus the next date the

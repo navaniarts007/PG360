@@ -616,6 +616,8 @@ export interface BillRow {
   verified: boolean;
   payment_mode: string | null;
   screenshot_url: string | null;
+  rent_amount: number;
+  stay_type: "monthly" | "daily";
   rent_due_day: number;
   checkin_date: string;
   due_date: string;
@@ -672,6 +674,8 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
           verified: p?.verified ?? false,
           payment_mode: p?.payment_mode ?? null,
           screenshot_url: p?.payment_screenshot_url ?? null,
+          rent_amount: t.rent_amount,
+          stay_type: t.stay_type,
           rent_due_day: t.rent_due_day,
           checkin_date: t.checkin_date,
           due_date: t.checkin_date, // collect on arrival
@@ -701,6 +705,8 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         verified: p?.verified ?? false,
         payment_mode: p?.payment_mode ?? null,
         screenshot_url: p?.payment_screenshot_url ?? null,
+        rent_amount: t.rent_amount,
+        stay_type: t.stay_type,
         rent_due_day: t.rent_due_day,
         checkin_date: t.checkin_date,
         due_date: dueDateFor(month, t.rent_due_day),

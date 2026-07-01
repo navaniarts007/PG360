@@ -13,28 +13,10 @@ import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
 import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
-import { firstProRataPeriod } from "@/lib/rent";
+import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenants" };
-
-const EMPTY_PAID = new Map<string, "paid" | "partial">();
-
-/** What to actually collect from this tenant right now: the pro-rata first
- *  period amount while they're still in it (mid-month join), else full rent. */
-function currentRent(t: {
-  rent_amount: number;
-  checkin_date: string;
-  rent_due_day: number;
-  stay_type?: "monthly" | "daily" | null;
-}): { amount: number; proRata: boolean } {
-  if (t.stay_type === "daily") return { amount: t.rent_amount, proRata: false };
-  const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, EMPTY_PAID);
-  const todayISO = new Date().toISOString().slice(0, 10);
-  // still inside the first partial period (up to & including the first due date)
-  if (fp.isProRata && todayISO <= fp.toISO) return { amount: fp.amount, proRata: true };
-  return { amount: t.rent_amount, proRata: false };
-}
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
@@ -131,7 +113,7 @@ export default async function TenantsPage() {
                     </td>
                     <td className="px-6 py-3.5 tnum">
                       {(() => {
-                        const cr = currentRent(t);
+                        const cr = currentMonthRent(t);
                         return (
                           <div className="flex items-center gap-1.5">
                             <span className="font-semibold text-ink">{inr(cr.amount)}</span>
