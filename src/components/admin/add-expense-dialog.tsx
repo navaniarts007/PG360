@@ -24,7 +24,13 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const NEW = "__new__";
+const NONE = "__none__";
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+
+export interface ExpenseCat {
+  name: string;
+  parent: string; // "" = top-level, else parent category name
+}
 
 export function AddExpenseDialog({
   defaultDate,
@@ -33,8 +39,8 @@ export function AddExpenseDialog({
 }: {
   defaultDate: string;
   expense?: Expense;
-  /** custom categories defined for this property (merged with the defaults) */
-  categories?: string[];
+  /** custom categories + sub-categories defined for this property */
+  categories?: ExpenseCat[];
 }) {
   const editing = !!expense;
   return (
@@ -81,7 +87,7 @@ function ExpenseForm({
 }: {
   defaultDate: string;
   expense?: Expense;
-  categories: string[];
+  categories: ExpenseCat[];
   onDone: () => void;
 }) {
   const editing = !!expense;
@@ -93,19 +99,34 @@ function ExpenseForm({
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
-  // merged, de-duplicated option list (defaults + this property's custom ones)
-  const options = [...new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.toLowerCase())])];
+  // top-level options (defaults + this property's custom top-level categories)
+  const customTop = categories.filter((c) => !c.parent).map((c) => c.name.toLowerCase());
+  const options = [...new Set([...DEFAULT_CATEGORIES, ...customTop])];
   const initial: string = expense?.category ?? "utilities";
   // an edited expense may have a category no longer in the list — keep it
   if (initial && !options.includes(initial.toLowerCase())) options.push(initial.toLowerCase());
+
   const [cat, setCat] = useState<string>(initial);
   const [newCat, setNewCat] = useState("");
+  const [sub, setSub] = useState<string>(expense?.subcategory ?? NONE);
+  const [newSub, setNewSub] = useState("");
+
+  const effectiveCat = cat === NEW ? newCat : cat;
+  const subs = categories
+    .filter((c) => c.parent && c.parent.toLowerCase() === effectiveCat.toLowerCase())
+    .map((c) => c.name);
+  // keep an edited expense's existing sub-category in the list
+  if (expense?.subcategory && !subs.some((s) => s.toLowerCase() === expense.subcategory!.toLowerCase())) {
+    subs.push(expense.subcategory);
+  }
+  const subValue = sub === NEW ? newSub : sub === NONE ? "" : sub;
 
   return (
     <form action={action} className="space-y-4">
       {editing && <input type="hidden" name="id" value={expense!.id} />}
-      {/* the value actually submitted: typed name when adding a new category */}
-      <input type="hidden" name="category" value={cat === NEW ? newCat : cat} />
+      {/* the values actually submitted (typed names when adding new) */}
+      <input type="hidden" name="category" value={effectiveCat} />
+      <input type="hidden" name="subcategory" value={subValue} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
@@ -116,7 +137,10 @@ function ExpenseForm({
           <Select
             id="category_pick"
             value={cat}
-            onChange={(e) => setCat(e.target.value)}
+            onChange={(e) => {
+              setCat(e.target.value);
+              setSub(NONE); // reset sub-category when the parent changes
+            }}
           >
             {options.map((c) => (
               <option key={c} value={c} className="capitalize">
@@ -124,6 +148,21 @@ function ExpenseForm({
               </option>
             ))}
             <option value={NEW}>+ New category…</option>
+          </Select>
+        </FieldRow>
+        <FieldRow label="Sub-category" htmlFor="subcategory_pick">
+          <Select
+            id="subcategory_pick"
+            value={sub}
+            onChange={(e) => setSub(e.target.value)}
+          >
+            <option value={NONE}>— None —</option>
+            {subs.map((sName) => (
+              <option key={sName} value={sName} className="capitalize">
+                {cap(sName)}
+              </option>
+            ))}
+            <option value={NEW}>+ New sub-category…</option>
           </Select>
         </FieldRow>
         {cat === NEW && (
@@ -134,6 +173,17 @@ function ExpenseForm({
               onChange={(e) => setNewCat(e.target.value)}
               placeholder="e.g. Internet, Repairs, Staff food"
               autoFocus
+              required
+            />
+          </FieldRow>
+        )}
+        {sub === NEW && (
+          <FieldRow label="New sub-category name" htmlFor="subcategory_new" className="col-span-2">
+            <Input
+              id="subcategory_new"
+              value={newSub}
+              onChange={(e) => setNewSub(e.target.value)}
+              placeholder="e.g. Electricity, Water, Cook salary"
               required
             />
           </FieldRow>

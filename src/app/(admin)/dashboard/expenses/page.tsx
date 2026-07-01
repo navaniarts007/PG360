@@ -120,13 +120,20 @@ export default async function ExpensesPage() {
                   {expenses.map((e) => (
                     <tr
                       key={e.id}
-                      data-search={`${e.category} ${e.description ?? ""}`}
+                      data-search={`${e.category} ${e.subcategory ?? ""} ${e.description ?? ""}`}
                       className="border-b border-line last:border-0 hover:bg-paper-2/30"
                     >
                       <td className="px-6 py-3.5">
-                        <Badge tone={CATEGORY_TONE[e.category] ?? "neutral"} className="capitalize">
-                          {e.category}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge tone={CATEGORY_TONE[e.category] ?? "neutral"} className="capitalize">
+                            {e.category}
+                          </Badge>
+                          {e.subcategory && (
+                            <span className="rounded-full bg-paper-2 px-2 py-0.5 text-xs font-medium capitalize text-ink-soft ring-1 ring-line">
+                              {e.subcategory}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-3.5 text-ink-soft">{e.description ?? "—"}</td>
                       <td className="px-6 py-3.5 text-ink-muted tnum">{formatDate(e.date)}</td>

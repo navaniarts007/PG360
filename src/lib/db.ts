@@ -1033,16 +1033,21 @@ export async function listExpenses(month: string): Promise<Expense[]> {
   return (data ?? []) as Expense[];
 }
 
-/** Custom expense categories defined for the active property. */
-export async function listExpenseCategories(): Promise<string[]> {
+export interface ExpenseCat {
+  name: string;
+  parent: string; // "" = top-level, else the parent category name
+}
+
+/** Custom expense categories + sub-categories defined for the active property. */
+export async function listExpenseCategories(): Promise<ExpenseCat[]> {
   const s = await sb();
   const pid = await getActiveProperty();
   const { data } = await s
     .from("expense_categories")
-    .select("name")
+    .select("name, parent")
     .eq("pg_id", pid)
     .order("name");
-  return (data ?? []).map((c) => c.name as string);
+  return (data ?? []).map((c) => ({ name: c.name as string, parent: (c.parent as string) ?? "" }));
 }
 
 export async function expenseSummary(month: string) {

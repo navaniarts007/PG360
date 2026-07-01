@@ -963,6 +963,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 
 const expenseSchema = z.object({
   category: z.string().trim().min(1, "Pick a category.").max(40),
+  subcategory: z.string().trim().max(40).optional(),
   amount: z.coerce.number().min(0, "Enter an amount."),
   date: z.string().min(1, "Date is required."),
   description: z.string().optional(),
@@ -977,29 +978,36 @@ export async function addExpenseAction(
   if (!pid) return { error: "No active property selected." };
   const parsed = expenseSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const sub = parsed.data.subcategory?.trim() || null;
   const s = await createClient();
   const { error } = await s.from("expenses").insert({
     pg_id: pid,
     category: parsed.data.category,
+    subcategory: sub,
     amount: parsed.data.amount,
     date: parsed.data.date,
     description: parsed.data.description || null,
     added_by: me.id,
   });
   if (error) return { error: humanizeDbError(error) };
-  // remember any newly-typed category in the master (ignore duplicates/defaults)
+  // remember any newly-typed category / sub-category in the master
   if (!DEFAULT_EXPENSE_CATEGORIES.includes(parsed.data.category.toLowerCase())) {
     await s
       .from("expense_categories")
-      .upsert({ pg_id: pid, name: parsed.data.category }, { onConflict: "pg_id,name" });
+      .upsert({ pg_id: pid, name: parsed.data.category, parent: "" }, { onConflict: "pg_id,parent,name" });
   }
-  await logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}`);
+  if (sub) {
+    await s
+      .from("expense_categories")
+      .upsert({ pg_id: pid, name: sub, parent: parsed.data.category }, { onConflict: "pg_id,parent,name" });
+  }
+  await logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}${sub ? ` / ${sub}` : ""}`);
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };
 }
 
-/** Add a custom expense category to this property's master list. */
+/** Add a custom expense category (top-level) or a sub-category under `parent`. */
 export async function addExpenseCategoryAction(
   _prev: ActionState,
   formData: FormData,
@@ -1008,29 +1016,39 @@ export async function addExpenseCategoryAction(
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { error: "Enter a category name." };
-  if (name.length > 40) return { error: "Keep the category name short." };
+  const parent = String(formData.get("parent") ?? "").trim();
+  if (!name) return { error: parent ? "Enter a sub-category name." : "Enter a category name." };
+  if (name.length > 40) return { error: "Keep the name short." };
   const s = await createClient();
   const { error } = await s
     .from("expense_categories")
-    .insert({ pg_id: pid, name });
+    .insert({ pg_id: pid, name, parent });
   if (error) {
-    if (error.code === "23505") return { error: "That category already exists." };
+    if (error.code === "23505") return { error: `That ${parent ? "sub-category" : "category"} already exists.` };
     return { error: humanizeDbError(error) };
   }
-  await logActivity("expense.category_added", `Added expense category "${name}"`);
+  await logActivity(
+    "expense.category_added",
+    parent ? `Added sub-category "${name}" under "${parent}"` : `Added expense category "${name}"`,
+  );
   revalidatePath("/dashboard/expenses");
   return { ok: true };
 }
 
-/** Remove a custom expense category by name (existing expenses keep their label). */
+/** Remove a custom category (and its sub-categories) or a single sub-category.
+ *  Existing expenses keep their labels. */
 export async function deleteExpenseCategoryAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
   const pid = await getActiveProperty();
   if (!pid) return;
   const name = String(formData.get("name"));
+  const parent = String(formData.get("parent") ?? "").trim();
   const s = await createClient();
-  await s.from("expense_categories").delete().eq("name", name).eq("pg_id", pid);
+  await s.from("expense_categories").delete().eq("pg_id", pid).eq("name", name).eq("parent", parent);
+  // deleting a top-level category also removes its sub-categories
+  if (!parent) {
+    await s.from("expense_categories").delete().eq("pg_id", pid).eq("parent", name);
+  }
   revalidatePath("/dashboard/expenses");
 }
 
@@ -1131,6 +1149,7 @@ export async function updateExpenseAction(
     .from("expenses")
     .update({
       category: parsed.data.category,
+      subcategory: parsed.data.subcategory?.trim() || null,
       amount: parsed.data.amount,
       date: parsed.data.date,
       description: parsed.data.description || null,

@@ -373,6 +373,7 @@ export interface Expense {
   id: string;
   pg_id: string;
   category: ExpenseCategory;
+  subcategory: string | null;
   amount: number;
   date: string;
   description: string | null;
