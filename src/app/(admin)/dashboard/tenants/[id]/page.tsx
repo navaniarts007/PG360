@@ -26,11 +26,11 @@ import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { AddTenantDialog } from "@/components/admin/add-tenant-dialog";
 import { requireRole } from "@/lib/guards";
 import {
-  getActivePolicy,
   getBedOptions,
   getJoiningFees,
   getKycSignedUrl,
   getPayTenants,
+  getPgPolicy,
   getTenantDetail,
   listTenantDocumentsSigned,
   listTenantEvents,
@@ -69,7 +69,7 @@ export default async function TenantDetail({
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
-    getActivePolicy(),
+    getPgPolicy(tenant.pg_id),
     listTenantEvents(id),
     getKycSignedUrl(tenant.aadhaar_photo_url),
     listTenantDocumentsSigned(id),
