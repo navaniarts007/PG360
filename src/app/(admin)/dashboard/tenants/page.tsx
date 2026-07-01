@@ -13,9 +13,28 @@ import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
 import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
+import { firstProRataPeriod } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tenants" };
+
+const EMPTY_PAID = new Map<string, "paid" | "partial">();
+
+/** What to actually collect from this tenant right now: the pro-rata first
+ *  period amount while they're still in it (mid-month join), else full rent. */
+function currentRent(t: {
+  rent_amount: number;
+  checkin_date: string;
+  rent_due_day: number;
+  stay_type?: "monthly" | "daily" | null;
+}): { amount: number; proRata: boolean } {
+  if (t.stay_type === "daily") return { amount: t.rent_amount, proRata: false };
+  const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, EMPTY_PAID);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  // still inside the first partial period (up to & including the first due date)
+  if (fp.isProRata && todayISO <= fp.toISO) return { amount: fp.amount, proRata: true };
+  return { amount: t.rent_amount, proRata: false };
+}
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
@@ -110,7 +129,24 @@ export default async function TenantsPage() {
                         <Phone className="size-3.5 text-ink-muted" /> {t.phone}
                       </span>
                     </td>
-                    <td className="px-6 py-3.5 font-semibold text-ink tnum">{inr(t.rent_amount)}</td>
+                    <td className="px-6 py-3.5 tnum">
+                      {(() => {
+                        const cr = currentRent(t);
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-ink">{inr(cr.amount)}</span>
+                            {cr.proRata && (
+                              <span
+                                className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
+                                title={`Pro-rata 1st month — full rent ${inr(t.rent_amount)} from next month`}
+                              >
+                                1st mo
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-3.5">
                       <TenantStatusPill status={t.status} />
                     </td>
