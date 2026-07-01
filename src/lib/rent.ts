@@ -75,9 +75,66 @@ export interface MonthDue {
   status: DueStatus;
 }
 
-/** Per-month paid/due timeline for one tenant, from check-in to the current
- *  month, plus the next date the admin should collect on. `paidStatus` maps a
- *  "YYYY-MM" to a recorded payment status ("paid" | "partial"). */
+/** Whole days from a → b (b exclusive), never negative. */
+function dayDiff(aISO: string, bISO: string): number {
+  const a = new Date(aISO + "T00:00:00").getTime();
+  const b = new Date(bISO + "T00:00:00").getTime();
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}
+
+/** The first regular rent-due date on or after the check-in date — the start of
+ *  the monthly cycle. With a 1st-of-month schedule: check-in 17 Jun → 1 Jul;
+ *  check-in exactly on the 1st → that same 1st (no partial period). */
+export function firstDueAfter(checkinISO: string, rentDueDay: number): string {
+  const checkin = checkinISO.slice(0, 10);
+  const month = checkin.slice(0, 7);
+  let due = dueDateFor(month, rentDueDay);
+  if (due < checkin) due = dueDateFor(addMonths(month, 1), rentDueDay);
+  return due;
+}
+
+export interface FirstPeriod {
+  fromISO: string; // check-in date
+  toISO: string; // first regular due date (period end, exclusive)
+  days: number; // pro-rata days billed
+  isProRata: boolean; // false when the tenant joined exactly on the due day
+  dailyRate: number; // monthly ÷ 30 (whole rupees)
+  amount: number; // dailyRate × days (or full month when not pro-rata)
+  status: DueStatus;
+}
+
+/** The first (partial) rent period from check-in to the first regular due date,
+ *  billed pro-rata at monthly ÷ 30 per day. E.g. check-in 17 Jun, rent due on
+ *  the 1st, ₹7,000/mo → 17 Jun–1 Jul, 14 days, ₹233/day, ₹3,267. */
+export function firstProRataPeriod(
+  checkinISO: string,
+  rentDueDay: number,
+  monthlyRent: number,
+  paidStatus: Map<string, "paid" | "partial">,
+  today = new Date(),
+): FirstPeriod {
+  const from = checkinISO.slice(0, 10);
+  const to = firstDueAfter(from, rentDueDay);
+  const days = dayDiff(from, to);
+  // a partial period exists only when the tenant arrived before the cycle's
+  // first due date (i.e. mid-month); joining exactly on the due day = no pro-rata
+  const isProRata = days > 0;
+  const dailyRate = Math.round(monthlyRent / 30);
+  const amount = isProRata ? Math.round((monthlyRent / 30) * days) : monthlyRent;
+
+  const recorded = paidStatus.get(from.slice(0, 7));
+  const todayISO = today.toISOString().slice(0, 10);
+  const status: DueStatus =
+    recorded === "paid" ? "paid" : recorded === "partial" ? "partial" : from < todayISO ? "overdue" : "upcoming";
+
+  return { fromISO: from, toISO: to, days, isProRata, dailyRate, amount, status };
+}
+
+/** Per-month paid/due timeline for one tenant. The check-in month's partial
+ *  rent is handled separately (see firstProRataPeriod); this covers the regular
+ *  monthly cycle from the first full due date onward, plus the next date the
+ *  admin should collect on. `paidStatus` maps a "YYYY-MM" to a recorded payment
+ *  status ("paid" | "partial"). */
 export function tenantSchedule(
   checkinISO: string,
   rentDueDay: number,
@@ -86,15 +143,17 @@ export function tenantSchedule(
 ): { timeline: MonthDue[]; nextDueDate: string | null; pendingMonths: number } {
   const todayISO = today.toISOString().slice(0, 10);
   const checkinDate = checkinISO.slice(0, 10);
-  const startMonth = checkinDate.slice(0, 7);
+  // the regular cycle starts on the first due date after check-in (the 1st of
+  // the next month for a mid-month join), so the "next collection" reflects the
+  // rent-due-day schedule, not the arrival date.
+  const firstDue = firstDueAfter(checkinDate, rentDueDay);
+  const startMonth = firstDue.slice(0, 7);
   const curMonth = todayISO.slice(0, 7);
-  const months = monthsFromTo(startMonth, curMonth);
+  const lastMonth = curMonth >= startMonth ? curMonth : startMonth;
+  const months = monthsFromTo(startMonth, lastMonth);
 
   const timeline: MonthDue[] = months.map((month) => {
-    let dueDate = dueDateFor(month, rentDueDay);
-    // the first (check-in) month can't be due before the tenant arrived — the
-    // pro-rata first rent is collected on arrival.
-    if (month === startMonth && dueDate < checkinDate) dueDate = checkinDate;
+    const dueDate = dueDateFor(month, rentDueDay);
     const recorded = paidStatus.get(month);
     let status: DueStatus;
     if (recorded === "paid") status = "paid";
@@ -107,7 +166,7 @@ export function tenantSchedule(
 
   // next collection date: the earliest still-owed month, else next month's due day
   const owed = timeline.find((t) => t.status !== "paid");
-  const nextDueDate = owed ? owed.dueDate : dueDateFor(addMonths(curMonth, 1), rentDueDay);
+  const nextDueDate = owed ? owed.dueDate : dueDateFor(addMonths(lastMonth, 1), rentDueDay);
 
   return { timeline, nextDueDate, pendingMonths };
 }

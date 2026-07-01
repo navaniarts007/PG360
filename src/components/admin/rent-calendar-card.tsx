@@ -2,6 +2,7 @@ import { CalendarDays, CircleAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   dueDateFor,
+  firstProRataPeriod,
   monthLabel,
   stayDuration,
   tenantSchedule,
@@ -32,6 +33,7 @@ const STATUS_CHIP: Record<DueStatus, string> = {
 export function RentCalendarCard({
   checkinDate,
   rentDueDay,
+  monthlyRent,
   payments,
   stayType = "monthly",
   dailyRate,
@@ -39,6 +41,7 @@ export function RentCalendarCard({
 }: {
   checkinDate: string;
   rentDueDay: number;
+  monthlyRent: number;
   payments: Payment[];
   stayType?: "monthly" | "daily";
   dailyRate?: number | null;
@@ -91,6 +94,7 @@ export function RentCalendarCard({
   }
 
   const { timeline, nextDueDate, pendingMonths } = tenantSchedule(checkinDate, rentDueDay, paidStatus);
+  const firstPeriod = firstProRataPeriod(checkinDate, rentDueDay, monthlyRent, paidStatus);
   const stay = stayDuration(checkinDate);
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
@@ -126,6 +130,41 @@ export function RentCalendarCard({
           tone={overdue ? "rose" : "ink"}
         />
       </div>
+
+      {/* first (partial) rent period — daily pro-rata from check-in to the 1st */}
+      {firstPeriod.isProRata && (
+        <div
+          className={`mt-4 rounded-xl border px-4 py-3 ${
+            firstPeriod.status === "paid"
+              ? "border-teal-200 bg-teal-50/60"
+              : "border-clay-100 bg-clay-50/40"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              First period · pro-rata
+            </p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[0.7rem] font-semibold ring-1 ${STATUS_CHIP[firstPeriod.status]}`}
+            >
+              {firstPeriod.status === "paid" ? "Collected" : firstPeriod.status === "overdue" ? "Due now" : "Upcoming"}
+            </span>
+          </div>
+          <p className="mt-1.5 text-sm text-ink">
+            {formatDate(firstPeriod.fromISO)} → {formatDate(firstPeriod.toISO)}
+          </p>
+          <div className="mt-1 flex items-baseline justify-between text-sm">
+            <span className="text-ink-muted tnum">
+              {firstPeriod.days} day{firstPeriod.days === 1 ? "" : "s"} × {inr(firstPeriod.dailyRate)}/day
+            </span>
+            <span className="font-display text-lg font-semibold text-ink tnum">{inr(firstPeriod.amount)}</span>
+          </div>
+          <p className="mt-1 text-[0.7rem] text-ink-muted">
+            Collected on arrival. Full monthly rent then follows the {rentDueDay}
+            {ordinal(rentDueDay)}-of-month schedule.
+          </p>
+        </div>
+      )}
 
       {overdue && (
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-600">
