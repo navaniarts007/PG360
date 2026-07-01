@@ -12,7 +12,7 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
-import { getBedOptions, listTenantsWithRoom } from "@/lib/db";
+import { getBedOptions, joiningFeeTotals, listTenantsWithRoom } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
 
@@ -20,10 +20,11 @@ export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, beds, client] = await Promise.all([
+  const [tenants, beds, client, joiningTotals] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
     getEdition(),
+    joiningFeeTotals(),
   ]);
   // Custom editions register residents as records (no login + ID capture).
   const addTenant =
@@ -113,14 +114,23 @@ export default async function TenantsPage() {
                     </td>
                     <td className="px-6 py-3.5 tnum">
                       {(() => {
-                        const cr = currentMonthRent(t);
+                        const cr = currentMonthRent(t, {
+                          securityDeposit: t.security_deposit,
+                          joiningFee: joiningTotals[t.id] ?? 0,
+                        });
+                        const tip = cr.proRata
+                          ? `1st month = rent ${inr(cr.rent)}` +
+                            (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
+                            (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
+                            ` = ${inr(cr.amount)}. Full rent ${inr(t.rent_amount)} from next month.`
+                          : undefined;
                         return (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-ink">{inr(cr.amount)}</span>
+                            <span className="font-semibold text-ink" title={tip}>{inr(cr.amount)}</span>
                             {cr.proRata && (
                               <span
                                 className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
-                                title={`Pro-rata 1st month — full rent ${inr(t.rent_amount)} from next month`}
+                                title={tip}
                               >
                                 1st mo
                               </span>

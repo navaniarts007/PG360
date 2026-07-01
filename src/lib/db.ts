@@ -490,6 +490,21 @@ export async function getBedOptions(): Promise<BedOption[]> {
 
 type TenantRow = Tenant & { room: { room_number: string; floor: number } | null };
 
+/** Total joining/admission fees per tenant for the active property. */
+export async function joiningFeeTotals(): Promise<Record<string, number>> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const { data } = await s
+    .from("joining_fees")
+    .select("tenant_id, amount")
+    .eq("pg_id", pid);
+  const map: Record<string, number> = {};
+  for (const r of (data ?? []) as { tenant_id: string; amount: number }[]) {
+    map[r.tenant_id] = (map[r.tenant_id] ?? 0) + r.amount;
+  }
+  return map;
+}
+
 export async function listTenantsWithRoom(): Promise<TenantRow[]> {
   const s = await sb();
   const pid = await getActiveProperty();
@@ -617,6 +632,7 @@ export interface BillRow {
   payment_mode: string | null;
   screenshot_url: string | null;
   rent_amount: number;
+  security_deposit: number;
   stay_type: "monthly" | "daily";
   rent_due_day: number;
   checkin_date: string;
@@ -631,7 +647,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
   const [{ data: tenants }, { data: pays }, { data: pg }] = await Promise.all([
     s
       .from("tenants")
-      .select("id, name, rent_amount, checkin_date, rent_due_day, food_opt_out, stay_type, daily_rate, stay_days, room:rooms(room_number)")
+      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, food_opt_out, stay_type, daily_rate, stay_days, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
     s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
@@ -643,6 +659,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
     id: string;
     name: string;
     rent_amount: number;
+    security_deposit: number;
     checkin_date: string;
     rent_due_day: number;
     food_opt_out: boolean;
@@ -675,6 +692,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
           payment_mode: p?.payment_mode ?? null,
           screenshot_url: p?.payment_screenshot_url ?? null,
           rent_amount: t.rent_amount,
+          security_deposit: t.security_deposit,
           stay_type: t.stay_type,
           rent_due_day: t.rent_due_day,
           checkin_date: t.checkin_date,
@@ -706,6 +724,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         payment_mode: p?.payment_mode ?? null,
         screenshot_url: p?.payment_screenshot_url ?? null,
         rent_amount: t.rent_amount,
+        security_deposit: t.security_deposit,
         stay_type: t.stay_type,
         rent_due_day: t.rent_due_day,
         checkin_date: t.checkin_date,

@@ -7,7 +7,7 @@ import { PaymentStatusPill } from "@/components/ui/status";
 import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthBill, getPayTenants } from "@/lib/db";
+import { adminKpis, getMonthBill, getPayTenants, joiningFeeTotals } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { currentMonth, inr, inrCompact } from "@/lib/utils";
 
@@ -18,10 +18,11 @@ const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 export default async function PaymentsPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, rows, payTenants] = await Promise.all([
+  const [kpis, rows, payTenants, joiningTotals] = await Promise.all([
     adminKpis(month),
     getMonthBill(month),
     getPayTenants(),
+    joiningFeeTotals(),
   ]);
 
   const paidCount = rows.filter((r) => r.status === "paid").length;
@@ -90,17 +91,26 @@ export default async function PaymentsPage() {
                     </td>
                     <td className="px-6 py-3.5 tnum">
                       {(() => {
-                        const cr = currentMonthRent(r);
+                        const cr = currentMonthRent(r, {
+                          securityDeposit: r.security_deposit,
+                          joiningFee: joiningTotals[r.tenant_id] ?? 0,
+                        });
                         // if we recorded a bill this month, that's the source of truth;
-                        // otherwise show the pro-rata first-month amount when applicable
+                        // otherwise show the first-month total (rent + deposit + joining)
                         const showProRata = cr.proRata && !r.paymentId;
+                        const tip = showProRata
+                          ? `1st month = rent ${inr(cr.rent)}` +
+                            (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
+                            (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
+                            ` = ${inr(cr.amount)}. Full rent ${inr(r.rent_amount)} from next month.`
+                          : undefined;
                         return (
                           <span className="flex items-center gap-1.5">
-                            <span className="text-ink-soft">{inr(showProRata ? cr.amount : r.total)}</span>
+                            <span className="text-ink-soft" title={tip}>{inr(showProRata ? cr.amount : r.total)}</span>
                             {showProRata && (
                               <span
                                 className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
-                                title={`Pro-rata 1st month — full rent ${inr(r.rent_amount)} from next month`}
+                                title={tip}
                               >
                                 1st mo
                               </span>

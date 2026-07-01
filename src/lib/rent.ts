@@ -130,10 +130,19 @@ export function firstProRataPeriod(
   return { fromISO: from, toISO: to, days, isProRata, dailyRate, amount, status };
 }
 
-/** What to actually collect from a monthly tenant right now: the pro-rata first
- *  period amount while they're still in it (a mid-month join), else full rent.
- *  Shared by the tenants list and the payments page so both show the same
- *  figure. Day-wise tenants always show their stored amount. */
+export interface CurrentRent {
+  amount: number; // what to collect this month (first month = rent + deposit + joining)
+  proRata: boolean; // true while in the first (partial) month
+  rent: number; // the rent portion
+  deposit: number; // security deposit added in the first month
+  joining: number; // joining / admission fee added in the first month
+}
+
+/** What to actually collect from a monthly tenant right now. In the first
+ *  (partial) month this is the pro-rata rent PLUS the one-time security deposit
+ *  and joining fee; from the next month it's just the full rent. Shared by the
+ *  tenants list and the payments page so both show the same figure. Day-wise
+ *  tenants always show their stored amount. */
 export function currentMonthRent(
   t: {
     rent_amount: number;
@@ -141,14 +150,20 @@ export function currentMonthRent(
     rent_due_day: number;
     stay_type?: "monthly" | "daily" | null;
   },
+  extras?: { securityDeposit?: number; joiningFee?: number },
   today = new Date(),
-): { amount: number; proRata: boolean } {
-  if (t.stay_type === "daily") return { amount: t.rent_amount, proRata: false };
+): CurrentRent {
+  const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, joining: 0 });
+  if (t.stay_type === "daily") return plain(t.rent_amount);
   const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
   const todayISO = today.toISOString().slice(0, 10);
   // still inside the first partial period (up to & including the first due date)
-  if (fp.isProRata && todayISO <= fp.toISO) return { amount: fp.amount, proRata: true };
-  return { amount: t.rent_amount, proRata: false };
+  if (fp.isProRata && todayISO <= fp.toISO) {
+    const deposit = extras?.securityDeposit ?? 0;
+    const joining = extras?.joiningFee ?? 0;
+    return { amount: fp.amount + deposit + joining, proRata: true, rent: fp.amount, deposit, joining };
+  }
+  return plain(t.rent_amount);
 }
 
 /** Per-month paid/due timeline for one tenant. The check-in month's partial
