@@ -176,6 +176,7 @@ export default async function TenantDetail({
           checkinDate={tenant.checkin_date}
           rentDueDay={tenant.rent_due_day}
           monthlyRent={tenant.rent_amount}
+          securityDeposit={tenant.security_deposit}
           payments={payments}
           stayType={tenant.stay_type}
           dailyRate={tenant.daily_rate}

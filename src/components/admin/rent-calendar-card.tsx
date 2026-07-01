@@ -34,6 +34,7 @@ export function RentCalendarCard({
   checkinDate,
   rentDueDay,
   monthlyRent,
+  securityDeposit = 0,
   payments,
   stayType = "monthly",
   dailyRate,
@@ -42,6 +43,7 @@ export function RentCalendarCard({
   checkinDate: string;
   rentDueDay: number;
   monthlyRent: number;
+  securityDeposit?: number;
   payments: Payment[];
   stayType?: "monthly" | "daily";
   dailyRate?: number | null;
@@ -131,7 +133,7 @@ export function RentCalendarCard({
         />
       </div>
 
-      {/* first (partial) rent period — daily pro-rata from check-in to the 1st */}
+      {/* first month — pro-rata rent + security deposit, collected on arrival */}
       {firstPeriod.isProRata && (
         <div
           className={`mt-4 rounded-xl border px-4 py-3 ${
@@ -142,7 +144,7 @@ export function RentCalendarCard({
         >
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              First period · pro-rata
+              First month · to collect
             </p>
             <span
               className={`rounded-full px-2 py-0.5 text-[0.7rem] font-semibold ring-1 ${STATUS_CHIP[firstPeriod.status]}`}
@@ -150,18 +152,33 @@ export function RentCalendarCard({
               {firstPeriod.status === "paid" ? "Collected" : firstPeriod.status === "overdue" ? "Due now" : "Upcoming"}
             </span>
           </div>
-          <p className="mt-1.5 text-sm text-ink">
-            {formatDate(firstPeriod.fromISO)} → {formatDate(firstPeriod.toISO)}
+          <p className="mt-1.5 text-xs text-ink-muted">
+            {formatDate(firstPeriod.fromISO)} → {formatDate(firstPeriod.toISO)} ·{" "}
+            {firstPeriod.days} day{firstPeriod.days === 1 ? "" : "s"} × {inr(firstPeriod.dailyRate)}/day
           </p>
-          <div className="mt-1 flex items-baseline justify-between text-sm">
-            <span className="text-ink-muted tnum">
-              {firstPeriod.days} day{firstPeriod.days === 1 ? "" : "s"} × {inr(firstPeriod.dailyRate)}/day
-            </span>
-            <span className="font-display text-lg font-semibold text-ink tnum">{inr(firstPeriod.amount)}</span>
+
+          <div className="mt-2 space-y-1.5 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-ink-soft">Rent (pro-rata)</span>
+              <span className="font-medium text-ink tnum">{inr(firstPeriod.amount)}</span>
+            </div>
+            {securityDeposit > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-ink-soft">Security deposit</span>
+                <span className="font-medium text-ink tnum">{inr(securityDeposit)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-line pt-1.5">
+              <span className="font-semibold text-ink">First-month total</span>
+              <span className="font-display text-lg font-semibold text-ink tnum">
+                {inr(firstPeriod.amount + securityDeposit)}
+              </span>
+            </div>
           </div>
-          <p className="mt-1 text-[0.7rem] text-ink-muted">
-            Collected on arrival. Full monthly rent then follows the {rentDueDay}
-            {ordinal(rentDueDay)}-of-month schedule.
+
+          <p className="mt-2 rounded-lg bg-paper-2/60 px-2.5 py-1.5 text-xs text-ink-soft">
+            Next month: <span className="font-semibold text-ink tnum">{inr(monthlyRent)}</span> rent
+            (deposit not repeated), due {formatDate(firstPeriod.toISO)}.
           </p>
         </div>
       )}
