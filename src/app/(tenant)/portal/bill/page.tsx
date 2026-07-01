@@ -16,7 +16,7 @@ import { TenantRecordPaymentDialog } from "@/components/tenant/record-payment-di
 import { RentReminder } from "@/components/tenant/rent-reminder";
 import { UpiPay } from "@/components/tenant/upi-pay";
 import { requireRole } from "@/lib/guards";
-import { getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
+import { getMyJoiningFees, getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
 import { computeBill } from "@/lib/money";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
@@ -37,7 +37,11 @@ export default async function MyBill() {
   const tenant = mine.tenant;
   const room = mine.room;
 
-  const [payments, pg] = await Promise.all([getMyPayments(), getMyPg()]);
+  const [payments, pg, joiningFees] = await Promise.all([
+    getMyPayments(),
+    getMyPg(),
+    getMyJoiningFees(),
+  ]);
   const month = currentMonth();
   const current = payments.find((p) => p.month_for === month);
   const history = payments.filter((p) => p.month_for !== month);
@@ -79,6 +83,14 @@ export default async function MyBill() {
 
   const noBed = !room && !current;
   const pendingVerify = !!current && !current.verified && paid > 0;
+
+  // account money summary (mirrors the owner's profile "Money" card)
+  const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
+  const onboardingTotal = (tenant.rent_amount ?? 0) + tenant.security_deposit + joiningTotal;
+  const outstanding = payments
+    .filter((p) => p.status !== "paid")
+    .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
+  const indicativeRefund = tenant.security_deposit - outstanding;
 
   const lines: { icon: typeof Home; label: string; value: number }[] = isDaily
     ? [{ icon: Home, label: `Stay (${tenant.stay_days ?? 0} days)`, value: baseRent }]
@@ -308,6 +320,33 @@ export default async function MyBill() {
           </div>
         </Card>
 
+        {/* Account money summary */}
+        <Card className="p-5 sm:p-6">
+          <h3 className="text-lg text-ink">Your account</h3>
+          <div className="mt-4 space-y-3">
+            <MoneyRow label="Monthly rent" value={inr(tenant.rent_amount ?? 0)} />
+            <MoneyRow label="Security deposit" value={inr(tenant.security_deposit)} />
+            <MoneyRow label="Joining / admission fee" value={inr(joiningTotal)} />
+            <MoneyRow label="Total onboarding" value={inr(onboardingTotal)} strong />
+            <MoneyRow
+              label="Outstanding"
+              value={inr(outstanding)}
+              tone={outstanding > 0 ? "rose" : "teal"}
+            />
+            <div className="mt-2 rounded-xl bg-ink p-4 text-paper">
+              <p className="flex items-center gap-1.5 text-xs text-paper/60">
+                <ShieldCheck className="size-3.5" /> Indicative deposit refund
+              </p>
+              <p className="mt-1 font-display text-2xl font-semibold tnum">
+                {inr(indicativeRefund)}
+              </p>
+              <p className="text-xs text-paper/50">
+                deposit − dues · final amount is settled at checkout
+              </p>
+            </div>
+          </div>
+        </Card>
+
         {/* History */}
         <Card>
           <div className="border-b border-line p-5 sm:p-6">
@@ -343,6 +382,41 @@ export default async function MyBill() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function MoneyRow({
+  label,
+  value,
+  tone,
+  strong,
+}: {
+  label: string;
+  value: string;
+  tone?: "rose" | "teal";
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className={
+        strong
+          ? "-mx-1 flex items-center justify-between rounded-lg border-b border-line bg-paper-2/60 px-2 py-1 pb-3 text-sm last:border-0"
+          : "flex items-center justify-between border-b border-line pb-3 text-sm last:border-0"
+      }
+    >
+      <span className={strong ? "font-semibold text-ink" : "text-ink-muted"}>{label}</span>
+      <span
+        className={
+          tone === "rose"
+            ? "font-semibold text-rose-600 tnum"
+            : tone === "teal"
+              ? "font-semibold text-teal-600 tnum"
+              : "font-semibold text-ink tnum"
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }

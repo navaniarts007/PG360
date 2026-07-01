@@ -597,6 +597,7 @@ export async function updateTenantAction(
     const pid = await getActiveProperty();
     if (pid && newBedId) {
       await logTenantEvent({ pgId: pid, tenantId: id, type: "room_changed", detail: "Moved room", roomId });
+      await notifyTenant(pid, id, "Your room / bed was updated by your PG owner.", "/portal");
     }
   }
 
@@ -624,7 +625,10 @@ export async function checkoutTenantAction(formData: FormData): Promise<void> {
   // free their bed (trigger re-syncs the room's occupancy)
   await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", id);
   const pid = await getActiveProperty();
-  if (pid) await logTenantEvent({ pgId: pid, tenantId: id, type: "checked_out", detail: "Checked out" });
+  if (pid) {
+    await logTenantEvent({ pgId: pid, tenantId: id, type: "checked_out", detail: "Checked out" });
+    await notifyTenant(pid, id, "You've been checked out of the PG.", "/portal/bill");
+  }
   revalidatePath("/dashboard/tenants");
   revalidatePath(`/dashboard/tenants/${id}`);
   revalidatePath("/dashboard/rooms");
@@ -714,6 +718,12 @@ export async function saveSettlementAction(
       type: "checked_out",
       detail: `Checked out · refund ₹${res.refundableAmount.toLocaleString("en-IN")}`,
     });
+    await notifyTenant(
+      pid,
+      d.tenant_id,
+      `You've been checked out. Indicative deposit refund: ₹${res.refundableAmount.toLocaleString("en-IN")}.`,
+      "/portal/bill",
+    );
   }
 
   revalidatePath("/dashboard/tenants");
