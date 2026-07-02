@@ -158,11 +158,25 @@ export function currentMonthRent(
   if (t.stay_type === "daily") return plain(t.rent_amount);
   const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
   const todayISO = today.toISOString().slice(0, 10);
-  // still inside the first partial period (up to & including the first due date)
-  if (fp.isProRata && todayISO <= fp.toISO) {
+  const checkinMonth = t.checkin_date.slice(0, 7);
+  const inProRataWindow = fp.isProRata && todayISO <= fp.toISO;
+  // "First month" = the check-in calendar month, or the still-open pro-rata
+  // window of a mid-month join. In the first month we collect rent + the one-time
+  // security deposit + joining fee (whether or not the rent itself is pro-rata —
+  // e.g. a tenant who joined exactly on the rent-due day still owes the deposit).
+  const isFirstMonth = todayISO.slice(0, 7) === checkinMonth || inProRataWindow;
+  if (isFirstMonth) {
+    const rent = inProRataWindow ? fp.amount : t.rent_amount;
     const deposit = extras?.securityDeposit ?? 0;
     const joining = extras?.joiningFee ?? 0;
-    return { amount: fp.amount + deposit + joining, proRata: true, rent: fp.amount, deposit, joining, days: fp.days };
+    return {
+      amount: rent + deposit + joining,
+      proRata: true,
+      rent,
+      deposit,
+      joining,
+      days: inProRataWindow ? fp.days : 30,
+    };
   }
   return plain(t.rent_amount);
 }
