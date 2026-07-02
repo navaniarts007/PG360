@@ -12,7 +12,7 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
-import { getBedOptions, joiningFeeTotals, listTenantsWithRoom, recordedPaymentKeys } from "@/lib/db";
+import { getBedOptions, listTenantsWithRoom, recordedPaymentKeys } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
 
@@ -20,11 +20,10 @@ export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, beds, client, joiningTotals, paidKeys] = await Promise.all([
+  const [tenants, beds, client, paidKeys] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
     getEdition(),
-    joiningFeeTotals(),
     recordedPaymentKeys(),
   ]);
   // Custom editions register residents as records (no login + ID capture).
@@ -117,13 +116,11 @@ export default async function TenantsPage() {
                       {(() => {
                         const cr = currentMonthRent(t, {
                           securityDeposit: t.security_deposit,
-                          joiningFee: joiningTotals[t.id] ?? 0,
                           firstMonthPending: !paidKeys.has(`${t.id}|${t.checkin_date.slice(0, 7)}`),
                         });
                         const tip = cr.proRata
                           ? `1st month = rent ${inr(cr.rent)}` +
                             (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
-                            (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
                             ` = ${inr(cr.amount)}. Full rent ${inr(t.rent_amount)} from next month.`
                           : undefined;
                         return (

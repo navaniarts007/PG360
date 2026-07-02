@@ -7,7 +7,7 @@ import { PaymentStatusPill } from "@/components/ui/status";
 import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthBill, getPayTenants, joiningFeeTotals, pendingFirstMonthPartials } from "@/lib/db";
+import { adminKpis, getMonthBill, getPayTenants, pendingFirstMonthPartials } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
@@ -18,11 +18,10 @@ const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 export default async function PaymentsPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, rows, payTenants, joiningTotals, earlyDues] = await Promise.all([
+  const [kpis, rows, payTenants, earlyDues] = await Promise.all([
     adminKpis(month),
     getMonthBill(month),
     getPayTenants(),
-    joiningFeeTotals(),
     pendingFirstMonthPartials(month),
   ]);
 
@@ -73,7 +72,6 @@ export default async function PaymentsPage() {
                     title={
                       `rent ${inr(e.rent)}` +
                       (e.deposit ? ` + deposit ${inr(e.deposit)}` : "") +
-                      (e.joining ? ` + joining ${inr(e.joining)}` : "") +
                       ` = ${inr(e.amount)}`
                     }
                   >
@@ -84,7 +82,7 @@ export default async function PaymentsPage() {
                     month={e.month_for}
                     preselectId={e.tenant_id}
                     variant="collect"
-                    prefill={{ baseRent: e.rent, days: e.days, deposit: e.deposit, joining: e.joining }}
+                    prefill={{ baseRent: e.rent, days: e.days, deposit: e.deposit }}
                   />
                 </div>
               </div>
@@ -124,16 +122,12 @@ export default async function PaymentsPage() {
               {rows.map((r) => {
                 const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
                 const pstatus = awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
-                const cr = currentMonthRent(r, {
-                  securityDeposit: r.security_deposit,
-                  joiningFee: joiningTotals[r.tenant_id] ?? 0,
-                });
+                const cr = currentMonthRent(r, { securityDeposit: r.security_deposit });
                 // show the first-month total only when nothing's been recorded yet
                 const showProRata = cr.proRata && !r.paymentId;
                 const tip = showProRata
                   ? `1st month = rent ${inr(cr.rent)}` +
                     (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
-                    (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
                     ` = ${inr(cr.amount)}. Full rent ${inr(r.rent_amount)} from next month.`
                   : undefined;
                 return (
@@ -166,7 +160,7 @@ export default async function PaymentsPage() {
                                 </span>
                               )}
                             </span>
-                            {showProRata && (cr.deposit > 0 || cr.joining > 0) && (
+                            {showProRata && cr.deposit > 0 && (
                               <span className="text-[0.7rem] text-ink-muted">to collect · incl. deposit</span>
                             )}
                           </span>
@@ -221,7 +215,7 @@ export default async function PaymentsPage() {
                             variant="collect"
                             prefill={
                               showProRata
-                                ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit, joining: cr.joining }
+                                ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit }
                                 : undefined
                             }
                           />

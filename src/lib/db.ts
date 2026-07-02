@@ -490,14 +490,18 @@ export async function getBedOptions(): Promise<BedOption[]> {
 
 type TenantRow = Tenant & { room: { room_number: string; floor: number } | null };
 
-/** Set of `${tenant_id}|${month_for}` for every recorded bill in the active
+/** Set of `${tenant_id}|${month_for}` for every fully-PAID bill in the active
  *  property — lets the roster tell whether a tenant's first month is still
- *  uncollected without an N+1 query. */
+ *  uncollected (an unpaid "due" bill does NOT count as collected). */
 export async function recordedPaymentKeys(): Promise<Set<string>> {
   const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return new Set();
-  const { data } = await s.from("payments").select("tenant_id, month_for").eq("pg_id", pid);
+  const { data } = await s
+    .from("payments")
+    .select("tenant_id, month_for")
+    .eq("pg_id", pid)
+    .eq("status", "paid");
   return new Set(
     ((data ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
   );
@@ -755,8 +759,7 @@ export interface EarlyPartialDue {
   month_for: string; // the check-in month, YYYY-MM
   rent: number; // pro-rata first-month rent
   deposit: number;
-  joining: number;
-  amount: number; // rent + deposit + joining
+  amount: number; // rent + deposit
   days: number;
   checkin_date: string;
 }
@@ -768,14 +771,14 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
   const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  const [{ data: tenants }, { data: pays }, joinMap] = await Promise.all([
+  const [{ data: tenants }, { data: pays }] = await Promise.all([
     s
       .from("tenants")
       .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
-    s.from("payments").select("tenant_id, month_for").eq("pg_id", pid).lt("month_for", currentMonth),
-    joiningFeeTotals(),
+    // only fully-PAID bills count as collected — an unpaid "due" bill is still owed
+    s.from("payments").select("tenant_id, month_for").eq("pg_id", pid).eq("status", "paid").lt("month_for", currentMonth),
   ]);
   const recorded = new Set(
     ((pays ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
@@ -799,7 +802,6 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
     const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map());
     if (!fp.isProRata) continue;
     const deposit = t.security_deposit ?? 0;
-    const joining = joinMap[t.id] ?? 0;
     out.push({
       tenant_id: t.id,
       name: t.name,
@@ -807,8 +809,7 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
       month_for: checkinMonth,
       rent: fp.amount,
       deposit,
-      joining,
-      amount: fp.amount + deposit + joining,
+      amount: fp.amount + deposit,
       days: fp.days,
       checkin_date: t.checkin_date,
     });

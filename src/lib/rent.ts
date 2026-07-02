@@ -131,11 +131,10 @@ export function firstProRataPeriod(
 }
 
 export interface CurrentRent {
-  amount: number; // what to collect this month (first month = rent + deposit + joining)
+  amount: number; // what to collect this month (first month = rent + deposit)
   proRata: boolean; // true while in the first (partial) month
   rent: number; // the rent portion
   deposit: number; // security deposit added in the first month
-  joining: number; // joining / admission fee added in the first month
   days: number; // pro-rata days (0 when not a partial month)
 }
 
@@ -153,8 +152,7 @@ export function currentMonthRent(
   },
   extras?: {
     securityDeposit?: number;
-    joiningFee?: number;
-    /** the first month's bill hasn't been recorded yet — keep showing the
+    /** the first month's bill hasn't been fully paid yet — keep showing the
      *  first-month total (deposit included) even after the calendar rolls past
      *  the pro-rata window, until it's actually collected. Used by the roster
      *  (tenants list); omitted on the month-scoped payments table. */
@@ -162,28 +160,26 @@ export function currentMonthRent(
   },
   today = new Date(),
 ): CurrentRent {
-  const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, joining: 0, days: 0 });
+  const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, days: 0 });
   if (t.stay_type === "daily") return plain(t.rent_amount);
   const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
   const todayISO = today.toISOString().slice(0, 10);
   const checkinMonth = t.checkin_date.slice(0, 7);
   const sameMonth = todayISO.slice(0, 7) === checkinMonth;
   const inProRataWindow = fp.isProRata && todayISO <= fp.toISO;
-  // Show the first-month treatment (rent + deposit + joining) when it's the
-  // check-in month, the pro-rata window is still open, OR a mid-month join's
-  // first month remains uncollected.
+  // Show the first-month treatment (rent + deposit) when it's the check-in
+  // month, the pro-rata window is still open, OR a mid-month join's first month
+  // remains uncollected. (Joining fees are tracked separately, not folded in.)
   const firstMonthActive = sameMonth || inProRataWindow || (fp.isProRata && (extras?.firstMonthPending ?? false));
   if (firstMonthActive) {
     // pro-rata rent for a mid-month join, else the full month (e.g. joined on the due day)
     const rent = fp.isProRata ? fp.amount : t.rent_amount;
     const deposit = extras?.securityDeposit ?? 0;
-    const joining = extras?.joiningFee ?? 0;
     return {
-      amount: rent + deposit + joining,
+      amount: rent + deposit,
       proRata: true,
       rent,
       deposit,
-      joining,
       days: fp.isProRata ? fp.days : 30,
     };
   }
