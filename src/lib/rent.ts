@@ -151,7 +151,15 @@ export function currentMonthRent(
     rent_due_day: number;
     stay_type?: "monthly" | "daily" | null;
   },
-  extras?: { securityDeposit?: number; joiningFee?: number },
+  extras?: {
+    securityDeposit?: number;
+    joiningFee?: number;
+    /** the first month's bill hasn't been recorded yet — keep showing the
+     *  first-month total (deposit included) even after the calendar rolls past
+     *  the pro-rata window, until it's actually collected. Used by the roster
+     *  (tenants list); omitted on the month-scoped payments table. */
+    firstMonthPending?: boolean;
+  },
   today = new Date(),
 ): CurrentRent {
   const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, joining: 0, days: 0 });
@@ -159,14 +167,15 @@ export function currentMonthRent(
   const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
   const todayISO = today.toISOString().slice(0, 10);
   const checkinMonth = t.checkin_date.slice(0, 7);
+  const sameMonth = todayISO.slice(0, 7) === checkinMonth;
   const inProRataWindow = fp.isProRata && todayISO <= fp.toISO;
-  // "First month" = the check-in calendar month, or the still-open pro-rata
-  // window of a mid-month join. In the first month we collect rent + the one-time
-  // security deposit + joining fee (whether or not the rent itself is pro-rata —
-  // e.g. a tenant who joined exactly on the rent-due day still owes the deposit).
-  const isFirstMonth = todayISO.slice(0, 7) === checkinMonth || inProRataWindow;
-  if (isFirstMonth) {
-    const rent = inProRataWindow ? fp.amount : t.rent_amount;
+  // Show the first-month treatment (rent + deposit + joining) when it's the
+  // check-in month, the pro-rata window is still open, OR a mid-month join's
+  // first month remains uncollected.
+  const firstMonthActive = sameMonth || inProRataWindow || (fp.isProRata && (extras?.firstMonthPending ?? false));
+  if (firstMonthActive) {
+    // pro-rata rent for a mid-month join, else the full month (e.g. joined on the due day)
+    const rent = fp.isProRata ? fp.amount : t.rent_amount;
     const deposit = extras?.securityDeposit ?? 0;
     const joining = extras?.joiningFee ?? 0;
     return {
@@ -175,7 +184,7 @@ export function currentMonthRent(
       rent,
       deposit,
       joining,
-      days: inProRataWindow ? fp.days : 30,
+      days: fp.isProRata ? fp.days : 30,
     };
   }
   return plain(t.rent_amount);

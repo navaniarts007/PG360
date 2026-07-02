@@ -490,6 +490,19 @@ export async function getBedOptions(): Promise<BedOption[]> {
 
 type TenantRow = Tenant & { room: { room_number: string; floor: number } | null };
 
+/** Set of `${tenant_id}|${month_for}` for every recorded bill in the active
+ *  property — lets the roster tell whether a tenant's first month is still
+ *  uncollected without an N+1 query. */
+export async function recordedPaymentKeys(): Promise<Set<string>> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  if (!pid) return new Set();
+  const { data } = await s.from("payments").select("tenant_id, month_for").eq("pg_id", pid);
+  return new Set(
+    ((data ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
+  );
+}
+
 /** Total joining/admission fees per tenant for the active property. */
 export async function joiningFeeTotals(): Promise<Record<string, number>> {
   const s = await sb();
