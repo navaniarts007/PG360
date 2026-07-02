@@ -7,9 +7,9 @@ import { PaymentStatusPill } from "@/components/ui/status";
 import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
-import { adminKpis, getMonthBill, getPayTenants, joiningFeeTotals } from "@/lib/db";
+import { adminKpis, getMonthBill, getPayTenants, joiningFeeTotals, pendingFirstMonthPartials } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
-import { currentMonth, inr, inrCompact } from "@/lib/utils";
+import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
 
@@ -18,11 +18,12 @@ const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 export default async function PaymentsPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [kpis, rows, payTenants, joiningTotals] = await Promise.all([
+  const [kpis, rows, payTenants, joiningTotals, earlyDues] = await Promise.all([
     adminKpis(month),
     getMonthBill(month),
     getPayTenants(),
     joiningFeeTotals(),
+    pendingFirstMonthPartials(month),
   ]);
 
   const paidCount = rows.filter((r) => r.status === "paid").length;
@@ -42,6 +43,55 @@ export default async function PaymentsPage() {
         <SummaryStat icon={Clock} accent="rose" label="Outstanding" value={inrCompact(kpis.due)} sub={`${rows.length - paidCount} tenants pending`} />
         <SummaryStat icon={CheckCircle2} accent="gold" label="To verify" value={String(pendingVerify)} sub="tenant-submitted payments" />
       </div>
+
+      {/* uncollected first-month partials from earlier months (rolled off this month's bill) */}
+      {earlyDues.length > 0 && (
+        <Card className="overflow-hidden border-clay-200">
+          <div className="flex items-center gap-2 border-b border-clay-100 bg-clay-50/50 px-6 py-3">
+            <Clock className="size-4 text-clay-600" />
+            <h3 className="text-sm font-semibold text-clay-800">
+              Earlier dues · {earlyDues.length} first-month partial{earlyDues.length === 1 ? "" : "s"} not yet collected
+            </h3>
+          </div>
+          <div className="divide-y divide-line">
+            {earlyDues.map((e) => (
+              <div key={e.tenant_id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-3.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid size-8 place-items-center rounded-full bg-clay-50 text-[0.7rem] font-bold text-clay-600">
+                    {e.room}
+                  </span>
+                  <div>
+                    <p className="font-semibold text-ink">{e.name}</p>
+                    <p className="text-xs text-ink-muted">
+                      1st month ({e.month_for}) · {e.days} day{e.days === 1 ? "" : "s"} from {formatDate(e.checkin_date)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className="font-semibold text-ink tnum"
+                    title={
+                      `rent ${inr(e.rent)}` +
+                      (e.deposit ? ` + deposit ${inr(e.deposit)}` : "") +
+                      (e.joining ? ` + joining ${inr(e.joining)}` : "") +
+                      ` = ${inr(e.amount)}`
+                    }
+                  >
+                    {inr(e.amount)}
+                  </span>
+                  <RecordPaymentDialog
+                    tenants={payTenants}
+                    month={e.month_for}
+                    preselectId={e.tenant_id}
+                    variant="collect"
+                    prefill={{ baseRent: e.rent, days: e.days, deposit: e.deposit, joining: e.joining }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Filterable
         placeholder="Search by tenant or room…"
@@ -74,6 +124,18 @@ export default async function PaymentsPage() {
               {rows.map((r) => {
                 const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
                 const pstatus = awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
+                const cr = currentMonthRent(r, {
+                  securityDeposit: r.security_deposit,
+                  joiningFee: joiningTotals[r.tenant_id] ?? 0,
+                });
+                // show the first-month total only when nothing's been recorded yet
+                const showProRata = cr.proRata && !r.paymentId;
+                const tip = showProRata
+                  ? `1st month = rent ${inr(cr.rent)}` +
+                    (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
+                    (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
+                    ` = ${inr(cr.amount)}. Full rent ${inr(r.rent_amount)} from next month.`
+                  : undefined;
                 return (
                   <tr
                     key={r.tenant_id}
@@ -91,29 +153,21 @@ export default async function PaymentsPage() {
                     </td>
                     <td className="px-6 py-3.5 tnum">
                       {(() => {
-                        const cr = currentMonthRent(r, {
-                          securityDeposit: r.security_deposit,
-                          joiningFee: joiningTotals[r.tenant_id] ?? 0,
-                        });
-                        // if we recorded a bill this month, that's the source of truth;
-                        // otherwise show the first-month total (rent + deposit + joining)
-                        const showProRata = cr.proRata && !r.paymentId;
-                        const tip = showProRata
-                          ? `1st month = rent ${inr(cr.rent)}` +
-                            (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
-                            (cr.joining ? ` + joining ${inr(cr.joining)}` : "") +
-                            ` = ${inr(cr.amount)}. Full rent ${inr(r.rent_amount)} from next month.`
-                          : undefined;
                         return (
-                          <span className="flex items-center gap-1.5">
-                            <span className="text-ink-soft" title={tip}>{inr(showProRata ? cr.amount : r.total)}</span>
-                            {showProRata && (
-                              <span
-                                className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
-                                title={tip}
-                              >
-                                1st mo
-                              </span>
+                          <span className="flex flex-col">
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-ink-soft" title={tip}>{inr(showProRata ? cr.amount : r.total)}</span>
+                              {showProRata && (
+                                <span
+                                  className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
+                                  title={tip}
+                                >
+                                  1st mo
+                                </span>
+                              )}
+                            </span>
+                            {showProRata && (cr.deposit > 0 || cr.joining > 0) && (
+                              <span className="text-[0.7rem] text-ink-muted">to collect · incl. deposit</span>
                             )}
                           </span>
                         );
@@ -165,6 +219,11 @@ export default async function PaymentsPage() {
                             month={month}
                             preselectId={r.tenant_id}
                             variant="collect"
+                            prefill={
+                              showProRata
+                                ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit, joining: cr.joining }
+                                : undefined
+                            }
                           />
                         )}
                       </div>

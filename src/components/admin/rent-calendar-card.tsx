@@ -154,7 +154,7 @@ export function RentCalendarCard({
           </div>
           <p className="mt-1.5 text-xs text-ink-muted">
             {formatDate(firstPeriod.fromISO)} → {formatDate(firstPeriod.toISO)} ·{" "}
-            {firstPeriod.days} day{firstPeriod.days === 1 ? "" : "s"} × {inr(firstPeriod.dailyRate)}/day
+            {firstPeriod.days} day{firstPeriod.days === 1 ? "" : "s"} · ≈ {inr(firstPeriod.dailyRate)}/day
           </p>
 
           <div className="mt-2 space-y-1.5 text-sm">

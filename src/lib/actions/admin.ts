@@ -652,8 +652,6 @@ export async function saveSettlementAction(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin", "staff"]);
-  const pid = await getActiveProperty();
-  if (!pid) return { error: "No active property selected." };
   const parsed = settlementSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
@@ -664,7 +662,8 @@ export async function saveSettlementAction(
     .select("id, pg_id, rent_amount, security_deposit, lock_in_end_date, notice_given_date, status")
     .eq("id", d.tenant_id)
     .maybeSingle();
-  if (!tenant || tenant.pg_id !== pid) return { error: "Tenant not found in this property." };
+  if (!tenant) return { error: "That tenant is not in any of your properties." };
+  const pid = tenant.pg_id as string;
 
   const { data: policy } = await s
     .from("pg_policies")
@@ -821,19 +820,32 @@ export async function recordPaymentAction(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin", "staff"]);
-  const pid = await getActiveProperty();
-  if (!pid) return { error: "No active property selected." };
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
   const s = await createClient();
 
+  // Resolve the property from the tenant (RLS only returns tenants the caller
+  // belongs to), so recording works even when the tenant's property isn't the
+  // one currently active in the switcher.
   const { data: tenant } = await s
     .from("tenants")
     .select("id, pg_id")
     .eq("id", d.tenant_id)
     .maybeSingle();
-  if (!tenant || tenant.pg_id !== pid) return { error: "That tenant is not in this property." };
+  if (!tenant) return { error: "That tenant is not in any of your properties." };
+  const pid = tenant.pg_id as string;
+
+  // Guard: don't silently overwrite a bill that's already fully paid.
+  const { data: existing } = await s
+    .from("payments")
+    .select("status")
+    .eq("tenant_id", d.tenant_id)
+    .eq("month_for", d.month_for)
+    .maybeSingle();
+  if (existing?.status === "paid") {
+    return { error: `A paid bill already exists for ${d.month_for}. Open that month to edit it instead of replacing it.` };
+  }
 
   const { error } = await s.from("payments").upsert(
     {
@@ -887,8 +899,6 @@ export async function recordElectricityAction(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin", "staff"]);
-  const pid = await getActiveProperty();
-  if (!pid) return { error: "No active property selected." };
   const parsed = electricitySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
@@ -899,7 +909,8 @@ export async function recordElectricityAction(
     .select("pg_id, rent_amount, checkin_date, food_opt_out")
     .eq("id", d.tenant_id)
     .maybeSingle();
-  if (!tenant || tenant.pg_id !== pid) return { error: "That tenant is not in this property." };
+  if (!tenant) return { error: "That tenant is not in any of your properties." };
+  const pid = tenant.pg_id as string;
 
   const [{ data: policy }, { data: pg }, { data: existing }] = await Promise.all([
     s.from("pg_policies").select("electricity_included_units, electricity_per_unit_rate").eq("pg_id", pid).maybeSingle(),

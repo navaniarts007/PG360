@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, IndianRupee, Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,17 +16,28 @@ export interface PayTenant {
   room_label: string;
 }
 
+/** Optional starting values for the bill — e.g. a tenant's first-month
+ *  breakdown (pro-rata rent + deposit + joining) opened from the Collect chip. */
+export interface PaymentPrefill {
+  baseRent?: number;
+  days?: number;
+  deposit?: number;
+  joining?: number;
+}
+
 export function RecordPaymentDialog({
   tenants,
   month,
   preselectId,
   variant = "primary",
+  prefill,
 }: {
   tenants: PayTenant[];
   month: string;
   preselectId?: string;
   /** "primary" = full button, "collect" = compact chip (used in tables/lists). */
   variant?: "primary" | "collect";
+  prefill?: PaymentPrefill;
 }) {
   return (
     <Modal
@@ -52,6 +63,7 @@ export function RecordPaymentDialog({
           tenants={tenants}
           month={month}
           preselectId={preselectId}
+          prefill={prefill}
           onDone={close}
         />
       )}
@@ -63,11 +75,13 @@ function PaymentForm({
   tenants,
   month,
   preselectId,
+  prefill,
   onDone,
 }: {
   tenants: PayTenant[];
   month: string;
   preselectId?: string;
+  prefill?: PaymentPrefill;
   onDone: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -79,8 +93,8 @@ function PaymentForm({
   const selected = tenants.find((t) => t.id === tenantId);
 
   const monthly = selected?.rent_amount ?? 0;
-  const [rent, setRent] = useState(monthly);
-  const [days, setDays] = useState(30);
+  const [rent, setRent] = useState(prefill?.baseRent ?? monthly);
+  const [days, setDays] = useState(prefill?.days ?? 30);
   // billing period: a whole calendar month, or a custom day range
   const [periodMode, setPeriodMode] = useState<"month" | "days">("month");
   const [monthInput, setMonthInput] = useState(month);
@@ -89,8 +103,8 @@ function PaymentForm({
   const [power, setPower] = useState(0);
   const [food, setFood] = useState(0);
   const [other, setOther] = useState(0);
-  const [deposit, setDeposit] = useState(0);
-  const [joining, setJoining] = useState(0);
+  const [deposit, setDeposit] = useState(prefill?.deposit ?? 0);
+  const [joining, setJoining] = useState(prefill?.joining ?? 0);
   const [paid, setPaid] = useState(0);
   const router = useRouter();
 
@@ -104,10 +118,18 @@ function PaymentForm({
     }
   }, [state.ok, onDone, router]);
 
-  // keep rent in sync when tenant changes (reset to a full month)
+  // keep rent in sync when tenant changes (reset to a full month) — but keep the
+  // prefill intact on the initial open.
+  const firstRun = useRef(true);
   useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
     setRent(selected?.rent_amount ?? 0);
     setDays(30);
+    setDeposit(0);
+    setJoining(0);
   }, [selected?.rent_amount]);
 
   // pro-rata: enter the number of days stayed → base rent = ₹/day × days
@@ -211,6 +233,10 @@ function PaymentForm({
             {periodLabel && (
               <p className="col-span-2 -mt-1 text-xs font-medium text-clay-700">{periodLabel}</p>
             )}
+            <p className="col-span-2 text-[0.7rem] text-ink-muted">
+              One bill is stored per calendar month — saving replaces any existing entry for{" "}
+              {monthForValue ? monthForValue : "that month"}.
+            </p>
           </>
         )}
       </div>

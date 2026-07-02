@@ -4,7 +4,7 @@ import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty, getSession } from "./auth";
 import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
-import { dueDateFor } from "./rent";
+import { dueDateFor, firstProRataPeriod } from "./rent";
 
 let cldReady = false;
 function cld() {
@@ -733,6 +733,74 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
     })
     .filter((r): r is BillRow => r !== null)
     .sort((a, b) => order[a.status] - order[b.status] || b.balance - a.balance);
+}
+
+export interface EarlyPartialDue {
+  tenant_id: string;
+  name: string;
+  room: string;
+  month_for: string; // the check-in month, YYYY-MM
+  rent: number; // pro-rata first-month rent
+  deposit: number;
+  joining: number;
+  amount: number; // rent + deposit + joining
+  days: number;
+  checkin_date: string;
+}
+
+/** Uncollected first-month partials from BEFORE the current month — a mid-month
+ *  join whose pro-rata first month was never recorded and has since rolled off
+ *  the current-month bill. Lets the owner still collect it. */
+export async function pendingFirstMonthPartials(currentMonth: string): Promise<EarlyPartialDue[]> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  if (!pid) return [];
+  const [{ data: tenants }, { data: pays }, joinMap] = await Promise.all([
+    s
+      .from("tenants")
+      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, room:rooms(room_number)")
+      .eq("pg_id", pid)
+      .eq("status", "active"),
+    s.from("payments").select("tenant_id, month_for").eq("pg_id", pid).lt("month_for", currentMonth),
+    joiningFeeTotals(),
+  ]);
+  const recorded = new Set(
+    ((pays ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
+  );
+  type T = {
+    id: string;
+    name: string;
+    rent_amount: number;
+    security_deposit: number;
+    checkin_date: string;
+    rent_due_day: number;
+    stay_type: "monthly" | "daily";
+    room: { room_number: string } | null;
+  };
+  const out: EarlyPartialDue[] = [];
+  for (const t of (tenants ?? []) as unknown as T[]) {
+    if (t.stay_type === "daily") continue;
+    const checkinMonth = t.checkin_date.slice(0, 7);
+    if (checkinMonth >= currentMonth) continue; // current month handled by getMonthBill
+    if (recorded.has(`${t.id}|${checkinMonth}`)) continue; // already billed
+    const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map());
+    if (!fp.isProRata) continue;
+    const deposit = t.security_deposit ?? 0;
+    const joining = joinMap[t.id] ?? 0;
+    out.push({
+      tenant_id: t.id,
+      name: t.name,
+      room: t.room?.room_number ?? "—",
+      month_for: checkinMonth,
+      rent: fp.amount,
+      deposit,
+      joining,
+      amount: fp.amount + deposit + joining,
+      days: fp.days,
+      checkin_date: t.checkin_date,
+    });
+  }
+  return out;
 }
 
 export async function listStaff(): Promise<

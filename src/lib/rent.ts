@@ -136,6 +136,7 @@ export interface CurrentRent {
   rent: number; // the rent portion
   deposit: number; // security deposit added in the first month
   joining: number; // joining / admission fee added in the first month
+  days: number; // pro-rata days (0 when not a partial month)
 }
 
 /** What to actually collect from a monthly tenant right now. In the first
@@ -153,7 +154,7 @@ export function currentMonthRent(
   extras?: { securityDeposit?: number; joiningFee?: number },
   today = new Date(),
 ): CurrentRent {
-  const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, joining: 0 });
+  const plain = (amount: number): CurrentRent => ({ amount, proRata: false, rent: amount, deposit: 0, joining: 0, days: 0 });
   if (t.stay_type === "daily") return plain(t.rent_amount);
   const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map(), today);
   const todayISO = today.toISOString().slice(0, 10);
@@ -161,7 +162,7 @@ export function currentMonthRent(
   if (fp.isProRata && todayISO <= fp.toISO) {
     const deposit = extras?.securityDeposit ?? 0;
     const joining = extras?.joiningFee ?? 0;
-    return { amount: fp.amount + deposit + joining, proRata: true, rent: fp.amount, deposit, joining };
+    return { amount: fp.amount + deposit + joining, proRata: true, rent: fp.amount, deposit, joining, days: fp.days };
   }
   return plain(t.rent_amount);
 }
