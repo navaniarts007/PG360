@@ -355,30 +355,24 @@ export async function addTenantAction(
     });
   }
 
-  if (bedId) {
-    await admin
-      .from("beds")
-      .update({ status: "occupied", current_tenant_id: tenant.id })
-      .eq("id", bedId);
-  }
-
-  await logTenantEvent({
-    pgId: pid,
-    tenantId: tenant.id,
-    type: "joined",
-    detail: roomId ? "Checked in" : "Added (no bed yet)",
-    roomId,
-  });
-  await logActivity("tenant.added", `Added tenant ${d.name}`);
-
-  // One-time joining/admission fee (non-refundable), if entered.
-  if (d.joining_fee && d.joining_fee > 0) {
-    await admin.from("joining_fees").insert({
-      pg_id: pid,
-      tenant_id: tenant.id,
-      amount: d.joining_fee,
-    });
-  }
+  // occupy the bed, log the timeline + activity, and record any joining fee —
+  // all independent writes, run concurrently to keep the save snappy.
+  await Promise.all([
+    bedId
+      ? admin.from("beds").update({ status: "occupied", current_tenant_id: tenant.id }).eq("id", bedId)
+      : Promise.resolve(),
+    logTenantEvent({
+      pgId: pid,
+      tenantId: tenant.id,
+      type: "joined",
+      detail: roomId ? "Checked in" : "Added (no bed yet)",
+      roomId,
+    }),
+    logActivity("tenant.added", `Added tenant ${d.name}`),
+    d.joining_fee && d.joining_fee > 0
+      ? admin.from("joining_fees").insert({ pg_id: pid, tenant_id: tenant.id, amount: d.joining_fee })
+      : Promise.resolve(),
+  ]);
 
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
@@ -475,17 +469,19 @@ export async function addTenantRecordAction(
     .single();
   if (error || !tenant) return { error: humanizeDbError(error, "Could not save the record.") };
 
-  if (bedId) {
-    await admin.from("beds").update({ status: "occupied", current_tenant_id: tenant.id }).eq("id", bedId);
-  }
-  await logTenantEvent({
-    pgId: pid,
-    tenantId: tenant.id,
-    type: "joined",
-    detail: roomId ? "Checked in" : "Registered",
-    roomId,
-  });
-  await logActivity("tenant.added", `Registered tenant ${d.name}`);
+  await Promise.all([
+    bedId
+      ? admin.from("beds").update({ status: "occupied", current_tenant_id: tenant.id }).eq("id", bedId)
+      : Promise.resolve(),
+    logTenantEvent({
+      pgId: pid,
+      tenantId: tenant.id,
+      type: "joined",
+      detail: roomId ? "Checked in" : "Registered",
+      roomId,
+    }),
+    logActivity("tenant.added", `Registered tenant ${d.name}`),
+  ]);
 
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
@@ -596,8 +592,10 @@ export async function updateTenantAction(
     }
     const pid = await getActiveProperty();
     if (pid && newBedId) {
-      await logTenantEvent({ pgId: pid, tenantId: id, type: "room_changed", detail: "Moved room", roomId });
-      await notifyTenant(pid, id, "Your room / bed was updated by your PG owner.", "/portal");
+      await Promise.all([
+        logTenantEvent({ pgId: pid, tenantId: id, type: "room_changed", detail: "Moved room", roomId }),
+        notifyTenant(pid, id, "Your room / bed was updated by your PG owner.", "/portal"),
+      ]);
     }
   }
 
@@ -626,8 +624,10 @@ export async function checkoutTenantAction(formData: FormData): Promise<void> {
   await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", id);
   const pid = await getActiveProperty();
   if (pid) {
-    await logTenantEvent({ pgId: pid, tenantId: id, type: "checked_out", detail: "Checked out" });
-    await notifyTenant(pid, id, "You've been checked out of the PG.", "/portal/bill");
+    await Promise.all([
+      logTenantEvent({ pgId: pid, tenantId: id, type: "checked_out", detail: "Checked out" }),
+      notifyTenant(pid, id, "You've been checked out of the PG.", "/portal/bill"),
+    ]);
   }
   revalidatePath("/dashboard/tenants");
   revalidatePath(`/dashboard/tenants/${id}`);
@@ -710,19 +710,21 @@ export async function saveSettlementAction(
         notice_given_date: d.notice_given_date || tenant.notice_given_date || null,
       })
       .eq("id", d.tenant_id);
-    await s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", d.tenant_id);
-    await logTenantEvent({
-      pgId: pid,
-      tenantId: d.tenant_id,
-      type: "checked_out",
-      detail: `Checked out · refund ₹${res.refundableAmount.toLocaleString("en-IN")}`,
-    });
-    await notifyTenant(
-      pid,
-      d.tenant_id,
-      `You've been checked out. Indicative deposit refund: ₹${res.refundableAmount.toLocaleString("en-IN")}.`,
-      "/portal/bill",
-    );
+    await Promise.all([
+      s.from("beds").update({ status: "vacant", current_tenant_id: null }).eq("current_tenant_id", d.tenant_id),
+      logTenantEvent({
+        pgId: pid,
+        tenantId: d.tenant_id,
+        type: "checked_out",
+        detail: `Checked out · refund ₹${res.refundableAmount.toLocaleString("en-IN")}`,
+      }),
+      notifyTenant(
+        pid,
+        d.tenant_id,
+        `You've been checked out. Indicative deposit refund: ₹${res.refundableAmount.toLocaleString("en-IN")}.`,
+        "/portal/bill",
+      ),
+    ]);
   }
 
   revalidatePath("/dashboard/tenants");
@@ -826,23 +828,15 @@ export async function recordPaymentAction(
   const s = await createClient();
 
   // Resolve the property from the tenant (RLS only returns tenants the caller
-  // belongs to), so recording works even when the tenant's property isn't the
-  // one currently active in the switcher.
-  const { data: tenant } = await s
-    .from("tenants")
-    .select("id, pg_id")
-    .eq("id", d.tenant_id)
-    .maybeSingle();
+  // belongs to) and check any existing bill — in parallel (independent reads).
+  const [{ data: tenant }, { data: existing }] = await Promise.all([
+    s.from("tenants").select("id, pg_id").eq("id", d.tenant_id).maybeSingle(),
+    s.from("payments").select("status").eq("tenant_id", d.tenant_id).eq("month_for", d.month_for).maybeSingle(),
+  ]);
   if (!tenant) return { error: "That tenant is not in any of your properties." };
   const pid = tenant.pg_id as string;
 
   // Guard: don't silently overwrite a bill that's already fully paid.
-  const { data: existing } = await s
-    .from("payments")
-    .select("status")
-    .eq("tenant_id", d.tenant_id)
-    .eq("month_for", d.month_for)
-    .maybeSingle();
   if (existing?.status === "paid") {
     return { error: `A paid bill already exists for ${d.month_for}. Open that month to edit it instead of replacing it.` };
   }
@@ -868,16 +862,19 @@ export async function recordPaymentAction(
   );
   if (error) return { error: humanizeDbError(error) };
 
-  await notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill");
-  await logActivity("payment.recorded", `Recorded ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`);
-  if (d.amount_paid > 0) {
-    await logTenantEvent({
-      pgId: pid,
-      tenantId: d.tenant_id,
-      type: "payment",
-      detail: `Paid ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`,
-    });
-  }
+  // best-effort side-effects run concurrently (none blocks the others)
+  await Promise.all([
+    notifyTenant(pid, d.tenant_id, `Your payment for ${d.month_for} was recorded.`, "/portal/bill"),
+    logActivity("payment.recorded", `Recorded ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`),
+    d.amount_paid > 0
+      ? logTenantEvent({
+          pgId: pid,
+          tenantId: d.tenant_id,
+          type: "payment",
+          detail: `Paid ₹${d.amount_paid.toLocaleString("en-IN")} for ${d.month_for}`,
+        })
+      : Promise.resolve(),
+  ]);
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -1075,13 +1072,15 @@ export async function verifyPaymentAction(formData: FormData): Promise<void> {
     .maybeSingle();
   await s.from("payments").update({ verified: true }).eq("id", id);
   if (p) {
-    await notifyTenant(
-      p.pg_id as string,
-      p.tenant_id as string,
-      `Your payment for ${p.month_for} was confirmed ✓`,
-      "/portal/bill",
-    );
-    await logActivity("payment.verified", `Verified payment for ${p.month_for}`);
+    await Promise.all([
+      notifyTenant(
+        p.pg_id as string,
+        p.tenant_id as string,
+        `Your payment for ${p.month_for} was confirmed ✓`,
+        "/portal/bill",
+      ),
+      logActivity("payment.verified", `Verified payment for ${p.month_for}`),
+    ]);
   }
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
