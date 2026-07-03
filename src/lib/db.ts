@@ -540,6 +540,11 @@ export interface PayTenant {
   name: string;
   rent_amount: number;
   room_label: string;
+  // fields the record-payment dialog uses to auto-calculate the first month
+  checkin_date: string;
+  rent_due_day: number;
+  security_deposit: number;
+  stay_type: "monthly" | "daily";
 }
 
 export async function getPayTenants(): Promise<PayTenant[]> {
@@ -547,13 +552,17 @@ export async function getPayTenants(): Promise<PayTenant[]> {
   const pid = await getActiveProperty();
   const { data } = await s
     .from("tenants")
-    .select("id, name, rent_amount, status, room:rooms(room_number)")
+    .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, status, room:rooms(room_number)")
     .eq("pg_id", pid)
     .eq("status", "active");
   type Row = {
     id: string;
     name: string;
     rent_amount: number;
+    security_deposit: number;
+    checkin_date: string;
+    rent_due_day: number;
+    stay_type: "monthly" | "daily";
     room: { room_number: string } | null;
   };
   return ((data ?? []) as unknown as Row[]).map((t) => ({
@@ -561,6 +570,10 @@ export async function getPayTenants(): Promise<PayTenant[]> {
     name: t.name,
     rent_amount: t.rent_amount,
     room_label: t.room ? `Room ${t.room.room_number}` : "Unassigned",
+    checkin_date: t.checkin_date,
+    rent_due_day: t.rent_due_day,
+    security_deposit: t.security_deposit,
+    stay_type: t.stay_type,
   }));
 }
 

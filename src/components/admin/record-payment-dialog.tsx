@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
 import { recordPaymentAction, type ActionState } from "@/lib/actions/admin";
+import { currentMonthRent } from "@/lib/rent";
 import { inr } from "@/lib/utils";
 
 export interface PayTenant {
@@ -14,6 +15,10 @@ export interface PayTenant {
   name: string;
   rent_amount: number;
   room_label: string;
+  checkin_date: string;
+  rent_due_day: number;
+  security_deposit: number;
+  stay_type: "monthly" | "daily";
 }
 
 /** Optional starting values for the bill — e.g. a tenant's first-month
@@ -23,6 +28,23 @@ export interface PaymentPrefill {
   days?: number;
   deposit?: number;
   joining?: number;
+}
+
+/** Auto-calculate the bill for a tenant: their first-month pro-rata rent +
+ *  security deposit (filed under the check-in month) while they're in their
+ *  first month, else the full monthly rent for the given fallback month. Shared
+ *  by the Collect chip and the plain "Record payment" button so both pre-fill. */
+function autoCalcFor(t: PayTenant, fallbackMonth: string): {
+  baseRent: number;
+  days: number;
+  deposit: number;
+  month: string;
+} {
+  const cr = currentMonthRent(t, { securityDeposit: t.security_deposit });
+  if (cr.proRata) {
+    return { baseRent: cr.rent, days: cr.days || 30, deposit: cr.deposit, month: t.checkin_date.slice(0, 7) };
+  }
+  return { baseRent: t.rent_amount, days: 30, deposit: 0, month: fallbackMonth };
 }
 
 export function RecordPaymentDialog({
@@ -93,17 +115,23 @@ function PaymentForm({
   const selected = tenants.find((t) => t.id === tenantId);
 
   const monthly = selected?.rent_amount ?? 0;
-  const [rent, setRent] = useState(prefill?.baseRent ?? monthly);
-  const [days, setDays] = useState(prefill?.days ?? 30);
+  // initial fill: an explicit prefill (Collect) wins; otherwise auto-calculate
+  // the selected tenant's first month so the plain "Record payment" button is
+  // pre-filled too.
+  const init = prefill ?? (selected ? autoCalcFor(selected, month) : undefined);
+  const [rent, setRent] = useState(init?.baseRent ?? monthly);
+  const [days, setDays] = useState(init?.days ?? 30);
   // billing period: a whole calendar month, or a custom day range
   const [periodMode, setPeriodMode] = useState<"month" | "days">("month");
-  const [monthInput, setMonthInput] = useState(month);
+  const [monthInput, setMonthInput] = useState(
+    prefill ? month : selected ? autoCalcFor(selected, month).month : month,
+  );
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [power, setPower] = useState(0);
   const [food, setFood] = useState(0);
   const [other, setOther] = useState(0);
-  const [deposit, setDeposit] = useState(prefill?.deposit ?? 0);
+  const [deposit, setDeposit] = useState(init?.deposit ?? 0);
   const [joining, setJoining] = useState(prefill?.joining ?? 0);
   const [paid, setPaid] = useState(0);
   const router = useRouter();
@@ -118,19 +146,24 @@ function PaymentForm({
     }
   }, [state.ok, onDone, router]);
 
-  // keep rent in sync when tenant changes (reset to a full month) — but keep the
-  // prefill intact on the initial open.
+  // when the tenant changes, auto-calculate that tenant's first month (rent +
+  // deposit + the right month) — but keep the initial fill on first open.
   const firstRun = useRef(true);
   useEffect(() => {
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
-    setRent(selected?.rent_amount ?? 0);
-    setDays(30);
-    setDeposit(0);
+    if (!selected) return;
+    const c = autoCalcFor(selected, month);
+    setRent(c.baseRent);
+    setDays(c.days);
+    setDeposit(c.deposit);
     setJoining(0);
-  }, [selected?.rent_amount]);
+    setMonthInput(c.month);
+    setPeriodMode("month");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
 
   // pro-rata: enter the number of days stayed → base rent = ₹/day × days
   const applyDays = (d: number) => {
