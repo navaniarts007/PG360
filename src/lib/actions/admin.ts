@@ -998,18 +998,17 @@ export async function addExpenseAction(
     added_by: me.id,
   });
   if (error) return { error: humanizeDbError(error) };
-  // remember any newly-typed category / sub-category in the master
-  if (!DEFAULT_EXPENSE_CATEGORIES.includes(parsed.data.category.toLowerCase())) {
-    await s
-      .from("expense_categories")
-      .upsert({ pg_id: pid, name: parsed.data.category, parent: "" }, { onConflict: "pg_id,parent,name" });
-  }
-  if (sub) {
-    await s
-      .from("expense_categories")
-      .upsert({ pg_id: pid, name: sub, parent: parsed.data.category }, { onConflict: "pg_id,parent,name" });
-  }
-  await logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}${sub ? ` / ${sub}` : ""}`);
+  // remember any newly-typed category / sub-category + log activity — all
+  // independent of each other, so run them concurrently to keep the save fast.
+  await Promise.all([
+    DEFAULT_EXPENSE_CATEGORIES.includes(parsed.data.category.toLowerCase())
+      ? Promise.resolve()
+      : s.from("expense_categories").upsert({ pg_id: pid, name: parsed.data.category, parent: "" }, { onConflict: "pg_id,parent,name" }),
+    sub
+      ? s.from("expense_categories").upsert({ pg_id: pid, name: sub, parent: parsed.data.category }, { onConflict: "pg_id,parent,name" })
+      : Promise.resolve(),
+    logActivity("expense.added", `Added expense ₹${parsed.data.amount.toLocaleString("en-IN")} · ${parsed.data.category}${sub ? ` / ${sub}` : ""}`),
+  ]);
   revalidatePath("/dashboard/expenses");
   revalidatePath("/dashboard/reports");
   return { ok: true };

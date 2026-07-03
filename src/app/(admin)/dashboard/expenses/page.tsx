@@ -10,7 +10,7 @@ import { ExpenseCategoriesDialog } from "@/components/admin/expense-categories-d
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteExpenseAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
-import { expenseSummary, listExpenseCategories, listExpenses } from "@/lib/db";
+import { listExpenseCategories, listExpenses } from "@/lib/db";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Expenses" };
@@ -37,11 +37,20 @@ const CATEGORY_TONE: Record<string, "clay" | "teal" | "gold" | "rose" | "neutral
 export default async function ExpensesPage() {
   await requireRole(["admin", "staff"]);
   const month = currentMonth();
-  const [expenses, summary, categories] = await Promise.all([
+  // fetch expenses + categories once; derive the summary locally (avoids a
+  // duplicate expenses query that expenseSummary would run).
+  const [expenses, categories] = await Promise.all([
     listExpenses(month),
-    expenseSummary(month),
     listExpenseCategories(),
   ]);
+  const byCat = new Map<string, number>();
+  for (const e of expenses) byCat.set(e.category, (byCat.get(e.category) ?? 0) + e.amount);
+  const summary = {
+    total: expenses.reduce((sum, e) => sum + e.amount, 0),
+    byCategory: [...byCat.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  };
   const today = new Date().toISOString().slice(0, 10);
   const maxCat = summary.byCategory[0]?.amount ?? 1;
 

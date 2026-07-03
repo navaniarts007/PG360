@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -91,13 +92,17 @@ function ExpenseForm({
   onDone: () => void;
 }) {
   const editing = !!expense;
+  const router = useRouter();
   const [state, action, pending] = useActionState<ActionState, FormData>(
     editing ? updateExpenseAction : addExpenseAction,
     {},
   );
   useEffect(() => {
-    if (state.ok) onDone();
-  }, [state.ok, onDone]);
+    if (state.ok) {
+      router.refresh(); // reflect the new/edited expense in the list immediately
+      onDone();
+    }
+  }, [state.ok, onDone, router]);
 
   // top-level options (defaults + this property's custom top-level categories)
   const customTop = categories.filter((c) => !c.parent).map((c) => c.name.toLowerCase());
