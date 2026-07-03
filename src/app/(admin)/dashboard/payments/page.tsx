@@ -213,10 +213,12 @@ export default async function PaymentsPage() {
                             month={month}
                             preselectId={r.tenant_id}
                             variant="collect"
+                            // this table is month-scoped: always bill the current
+                            // month (pro-rata for a current first month, else full)
                             prefill={
                               showProRata
                                 ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit }
-                                : undefined
+                                : { baseRent: r.rent_amount, days: 30, deposit: 0 }
                             }
                           />
                         )}

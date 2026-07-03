@@ -4,7 +4,7 @@ import { createAdminClient } from "./supabase/admin";
 import { getActiveProperty, getSession } from "./auth";
 import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
-import { dueDateFor, firstProRataPeriod } from "./rent";
+import { currentMonthRent, dueDateFor, firstProRataPeriod } from "./rent";
 
 let cldReady = false;
 function cld() {
@@ -535,6 +535,17 @@ export async function listTenantsWithRoom(): Promise<TenantRow[]> {
   return (data ?? []) as unknown as TenantRow[];
 }
 
+/** The bill the record-payment dialog should open pre-filled with for a tenant:
+ *  their uncollected first month (pro-rata rent + deposit, filed under the
+ *  check-in month) if still pending, else the regular full month. */
+export interface BillSuggestion {
+  baseRent: number;
+  days: number;
+  deposit: number;
+  month: string; // YYYY-MM the bill is filed under
+  proRata: boolean;
+}
+
 export interface PayTenant {
   id: string;
   name: string;
@@ -545,16 +556,21 @@ export interface PayTenant {
   rent_due_day: number;
   security_deposit: number;
   stay_type: "monthly" | "daily";
+  suggested: BillSuggestion;
 }
 
 export async function getPayTenants(): Promise<PayTenant[]> {
   const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("tenants")
-    .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, status, room:rooms(room_number)")
-    .eq("pg_id", pid)
-    .eq("status", "active");
+  const [{ data }, paidKeys] = await Promise.all([
+    s
+      .from("tenants")
+      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, status, room:rooms(room_number)")
+      .eq("pg_id", pid)
+      .eq("status", "active"),
+    recordedPaymentKeys(),
+  ]);
+  const nowMonth = new Date().toISOString().slice(0, 10).slice(0, 7);
   type Row = {
     id: string;
     name: string;
@@ -565,16 +581,25 @@ export async function getPayTenants(): Promise<PayTenant[]> {
     stay_type: "monthly" | "daily";
     room: { room_number: string } | null;
   };
-  return ((data ?? []) as unknown as Row[]).map((t) => ({
-    id: t.id,
-    name: t.name,
-    rent_amount: t.rent_amount,
-    room_label: t.room ? `Room ${t.room.room_number}` : "Unassigned",
-    checkin_date: t.checkin_date,
-    rent_due_day: t.rent_due_day,
-    security_deposit: t.security_deposit,
-    stay_type: t.stay_type,
-  }));
+  return ((data ?? []) as unknown as Row[]).map((t) => {
+    const checkinMonth = t.checkin_date.slice(0, 7);
+    const pending = !paidKeys.has(`${t.id}|${checkinMonth}`);
+    const cr = currentMonthRent(t, { securityDeposit: t.security_deposit, firstMonthPending: pending });
+    const suggested: BillSuggestion = cr.proRata
+      ? { baseRent: cr.rent, days: cr.days || 30, deposit: cr.deposit, month: checkinMonth, proRata: true }
+      : { baseRent: t.rent_amount, days: 30, deposit: 0, month: nowMonth, proRata: false };
+    return {
+      id: t.id,
+      name: t.name,
+      rent_amount: t.rent_amount,
+      room_label: t.room ? `Room ${t.room.room_number}` : "Unassigned",
+      checkin_date: t.checkin_date,
+      rent_due_day: t.rent_due_day,
+      security_deposit: t.security_deposit,
+      stay_type: t.stay_type,
+      suggested,
+    };
+  });
 }
 
 export async function getTenantDetail(id: string): Promise<{

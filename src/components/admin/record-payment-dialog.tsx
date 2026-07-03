@@ -7,8 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
 import { recordPaymentAction, type ActionState } from "@/lib/actions/admin";
-import { currentMonthRent } from "@/lib/rent";
 import { inr } from "@/lib/utils";
+
+/** Pre-fill the dialog opens with for a tenant (mirrors db.ts BillSuggestion). */
+export interface BillSuggestion {
+  baseRent: number;
+  days: number;
+  deposit: number;
+  month: string;
+  proRata: boolean;
+}
 
 export interface PayTenant {
   id: string;
@@ -19,6 +27,7 @@ export interface PayTenant {
   rent_due_day: number;
   security_deposit: number;
   stay_type: "monthly" | "daily";
+  suggested: BillSuggestion;
 }
 
 /** Optional starting values for the bill — e.g. a tenant's first-month
@@ -30,22 +39,6 @@ export interface PaymentPrefill {
   joining?: number;
 }
 
-/** Auto-calculate the bill for a tenant: their first-month pro-rata rent +
- *  security deposit (filed under the check-in month) while they're in their
- *  first month, else the full monthly rent for the given fallback month. Shared
- *  by the Collect chip and the plain "Record payment" button so both pre-fill. */
-function autoCalcFor(t: PayTenant, fallbackMonth: string): {
-  baseRent: number;
-  days: number;
-  deposit: number;
-  month: string;
-} {
-  const cr = currentMonthRent(t, { securityDeposit: t.security_deposit });
-  if (cr.proRata) {
-    return { baseRent: cr.rent, days: cr.days || 30, deposit: cr.deposit, month: t.checkin_date.slice(0, 7) };
-  }
-  return { baseRent: t.rent_amount, days: 30, deposit: 0, month: fallbackMonth };
-}
 
 export function RecordPaymentDialog({
   tenants,
@@ -115,16 +108,16 @@ function PaymentForm({
   const selected = tenants.find((t) => t.id === tenantId);
 
   const monthly = selected?.rent_amount ?? 0;
-  // initial fill: an explicit prefill (Collect) wins; otherwise auto-calculate
-  // the selected tenant's first month so the plain "Record payment" button is
-  // pre-filled too.
-  const init = prefill ?? (selected ? autoCalcFor(selected, month) : undefined);
+  // initial fill: an explicit prefill (Collect) wins; otherwise the server-
+  // computed suggestion (uncollected first month, else full month) so the plain
+  // "Record payment" button is pre-filled the same way.
+  const init = prefill ?? selected?.suggested;
   const [rent, setRent] = useState(init?.baseRent ?? monthly);
   const [days, setDays] = useState(init?.days ?? 30);
   // billing period: a whole calendar month, or a custom day range
   const [periodMode, setPeriodMode] = useState<"month" | "days">("month");
   const [monthInput, setMonthInput] = useState(
-    prefill ? month : selected ? autoCalcFor(selected, month).month : month,
+    prefill ? month : selected?.suggested.month ?? month,
   );
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -155,7 +148,7 @@ function PaymentForm({
       return;
     }
     if (!selected) return;
-    const c = autoCalcFor(selected, month);
+    const c = selected.suggested;
     setRent(c.baseRent);
     setDays(c.days);
     setDeposit(c.deposit);
