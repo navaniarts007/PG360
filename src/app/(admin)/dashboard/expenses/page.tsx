@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AddExpenseDialog } from "@/components/admin/add-expense-dialog";
 import { ExpenseCategoriesDialog } from "@/components/admin/expense-categories-dialog";
+import { ExpensesDashboard } from "@/components/admin/expenses-dashboard";
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteExpenseAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
-import { listExpenseCategories, listExpenses } from "@/lib/db";
+import { expenseAnalytics, listExpenseCategories, listExpenses } from "@/lib/db";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Expenses" };
@@ -39,9 +40,10 @@ export default async function ExpensesPage() {
   const month = currentMonth();
   // fetch expenses + categories once; derive the summary locally (avoids a
   // duplicate expenses query that expenseSummary would run).
-  const [expenses, categories] = await Promise.all([
+  const [expenses, categories, analytics] = await Promise.all([
     listExpenses(month),
     listExpenseCategories(),
+    expenseAnalytics(6),
   ]);
   const byCat = new Map<string, number>();
   for (const e of expenses) byCat.set(e.category, (byCat.get(e.category) ?? 0) + e.amount);
@@ -67,6 +69,9 @@ export default async function ExpensesPage() {
           </div>
         }
       />
+
+      {/* advanced dashboard — KPIs + spend trend + category charts */}
+      <ExpensesDashboard a={analytics} />
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* summary */}

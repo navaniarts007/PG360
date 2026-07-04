@@ -1207,6 +1207,91 @@ export async function expenseSummary(month: string) {
   };
 }
 
+export interface ExpenseAnalytics {
+  monthly: { month: string; label: string; total: number }[];
+  categories: { category: string; amount: number }[];
+  perMonthCategory: Array<Record<string, string | number>>;
+  topCats: string[];
+  thisMonth: number;
+  prevMonth: number;
+  avg: number;
+  windowTotal: number;
+  topCategory: { category: string; amount: number } | null;
+  count: number;
+}
+
+/** Rolling expense analytics for the active property over the last `monthsBack`
+ *  months: monthly totals, category totals, and a per-month category breakdown
+ *  (top 5 categories + "other"). Powers the expenses dashboard/charts. */
+export async function expenseAnalytics(monthsBack = 6): Promise<ExpenseAnalytics> {
+  const s = await sb();
+  const pid = await getActiveProperty();
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+  const startISO = start.toISOString().slice(0, 10);
+  const { data } = await s
+    .from("expenses")
+    .select("category, amount, date")
+    .eq("pg_id", pid)
+    .gte("date", startISO);
+  const exps = (data ?? []) as { category: string; amount: number; date: string }[];
+
+  const months: string[] = [];
+  for (let i = 0; i < monthsBack; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1) + i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  const shortLabel = (m: string) => {
+    const [y, mo] = m.split("-").map(Number);
+    return new Date(y!, (mo ?? 1) - 1, 1).toLocaleDateString("en-IN", { month: "short" });
+  };
+
+  const monthTotals = new Map(months.map((m) => [m, 0]));
+  const catTotals = new Map<string, number>();
+  const perMC = new Map(months.map((m) => [m, new Map<string, number>()]));
+  for (const e of exps) {
+    const m = e.date.slice(0, 7);
+    if (!monthTotals.has(m)) continue;
+    monthTotals.set(m, (monthTotals.get(m) ?? 0) + e.amount);
+    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.amount);
+    const mm = perMC.get(m)!;
+    mm.set(e.category, (mm.get(e.category) ?? 0) + e.amount);
+  }
+
+  const categories = [...catTotals.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const topCats = categories.slice(0, 5).map((c) => c.category);
+
+  const perMonthCategory = months.map((m) => {
+    const row: Record<string, string | number> = { label: shortLabel(m) };
+    const mm = perMC.get(m)!;
+    let other = 0;
+    for (const [c, v] of mm) {
+      if (topCats.includes(c)) row[c] = v;
+      else other += v;
+    }
+    if (other) row["other"] = (Number(row["other"] ?? 0)) + other;
+    for (const c of topCats) if (!(c in row)) row[c] = 0;
+    return row;
+  });
+
+  const monthly = months.map((m) => ({ month: m, label: shortLabel(m), total: monthTotals.get(m) ?? 0 }));
+  const windowTotal = monthly.reduce((s2, x) => s2 + x.total, 0);
+  return {
+    monthly,
+    categories,
+    perMonthCategory,
+    topCats,
+    thisMonth: monthTotals.get(months[monthsBack - 1]!) ?? 0,
+    prevMonth: monthTotals.get(months[monthsBack - 2]!) ?? 0,
+    avg: Math.round(windowTotal / monthsBack),
+    windowTotal,
+    topCategory: categories[0] ?? null,
+    count: exps.length,
+  };
+}
+
 export async function pnl(month: string) {
   const s = await sb();
   const pid = await getActiveProperty();
