@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { loginAction, type LoginState } from "@/lib/auth-actions";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,14 @@ export function LoginForm({
       </div>
 
       <div>
-        <Label htmlFor="password" hint="Forgot?">
+        <Label
+          htmlFor="password"
+          hint={
+            <Link href="/forgot-password" className="font-semibold text-clay-600 hover:text-clay-700">
+              Forgot?
+            </Link>
+          }
+        >
           Password
         </Label>
         <div className="relative">

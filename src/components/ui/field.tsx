@@ -8,7 +8,7 @@ export function Label({
   children,
   hint,
   ...props
-}: React.LabelHTMLAttributes<HTMLLabelElement> & { hint?: string }) {
+}: React.LabelHTMLAttributes<HTMLLabelElement> & { hint?: React.ReactNode }) {
   return (
     <label
       className={cn(
