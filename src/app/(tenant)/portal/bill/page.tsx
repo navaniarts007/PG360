@@ -45,6 +45,9 @@ export default async function MyBill() {
   const month = currentMonth();
   const current = payments.find((p) => p.month_for === month);
   const history = payments.filter((p) => p.month_for !== month);
+  // the tenant's check-in month carries the one-time deposit + joining fee
+  const firstMonth = tenant.stay_type !== "daily" && tenant.checkin_date.slice(0, 7) === month;
+  const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
 
   // Invoice is auto-derived the Bangalore way when the owner hasn't recorded one
   // yet: pro-rata first month + food included by default (opt-out deducts).
@@ -63,9 +66,13 @@ export default async function MyBill() {
   const food = isDaily ? 0 : current?.food_charge ?? 0;
   const foodDeduction = isDaily ? 0 : current?.food_opt_out_deduction ?? derived.foodDeduction;
   const other = isDaily ? 0 : current?.other_charges ?? 0;
-  const deposit = current?.security_deposit ?? 0;
-  const joining = current?.joining_fee ?? 0;
-  const total = isDaily ? current?.total_amount ?? dailyTotal : current?.total_amount ?? derived.total;
+  // deposit + joining come from a recorded bill; otherwise derive them for the
+  // first (check-in) month so the tenant sees the full first-month amount.
+  const deposit = current?.security_deposit ?? (firstMonth ? tenant.security_deposit : 0);
+  const joining = current?.joining_fee ?? (firstMonth ? joiningTotal : 0);
+  const total = isDaily
+    ? current?.total_amount ?? dailyTotal
+    : current?.total_amount ?? derived.total + deposit + joining;
   const isProRata = isDaily ? false : current?.is_pro_rata ?? derived.isProRata;
   const proRataDays = current?.pro_rata_days ?? derived.proRataDays;
   const paid = current?.amount_paid ?? 0;
@@ -85,7 +92,6 @@ export default async function MyBill() {
   const pendingVerify = !!current && !current.verified && paid > 0;
 
   // account money summary (mirrors the owner's profile "Money" card)
-  const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
   const onboardingTotal = (tenant.rent_amount ?? 0) + tenant.security_deposit + joiningTotal;
   const outstanding = payments
     .filter((p) => p.status !== "paid")
