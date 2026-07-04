@@ -12,7 +12,7 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
-import { getBedOptions, listTenantsWithRoom, recordedPaymentKeys } from "@/lib/db";
+import { getBedOptions, listTenantsWithRoom, paidTenantIds } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
 
@@ -20,11 +20,11 @@ export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, beds, client, paidKeys] = await Promise.all([
+  const [tenants, beds, client, paidIds] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
     getEdition(),
-    recordedPaymentKeys(),
+    paidTenantIds(),
   ]);
   // Custom editions register residents as records (no login + ID capture).
   const addTenant =
@@ -116,7 +116,7 @@ export default async function TenantsPage() {
                       {(() => {
                         const cr = currentMonthRent(t, {
                           securityDeposit: t.security_deposit,
-                          firstMonthPending: !paidKeys.has(`${t.id}|${t.checkin_date.slice(0, 7)}`),
+                          firstMonthPending: !paidIds.has(t.id),
                         });
                         const tip = cr.proRata
                           ? `1st month = rent ${inr(cr.rent)}` +

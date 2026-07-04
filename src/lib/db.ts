@@ -490,21 +490,20 @@ export async function getBedOptions(): Promise<BedOption[]> {
 
 type TenantRow = Tenant & { room: { room_number: string; floor: number } | null };
 
-/** Set of `${tenant_id}|${month_for}` for every fully-PAID bill in the active
- *  property — lets the roster tell whether a tenant's first month is still
- *  uncollected (an unpaid "due" bill does NOT count as collected). */
-export async function recordedPaymentKeys(): Promise<Set<string>> {
+/** Tenant ids that have paid anything at all (any month). Once a tenant has
+ *  paid, they're no longer treated as a "fresh first-month" partial — the
+ *  balance is tracked on the recorded bill instead. An unpaid "due" bill does
+ *  NOT count, so a never-collected first month still shows its full amount. */
+export async function paidTenantIds(): Promise<Set<string>> {
   const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return new Set();
   const { data } = await s
     .from("payments")
-    .select("tenant_id, month_for")
+    .select("tenant_id")
     .eq("pg_id", pid)
-    .eq("status", "paid");
-  return new Set(
-    ((data ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
-  );
+    .gt("amount_paid", 0);
+  return new Set(((data ?? []) as { tenant_id: string }[]).map((p) => p.tenant_id));
 }
 
 /** Total joining/admission fees per tenant for the active property. */
@@ -562,13 +561,13 @@ export interface PayTenant {
 export async function getPayTenants(): Promise<PayTenant[]> {
   const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data }, paidKeys] = await Promise.all([
+  const [{ data }, paidIds] = await Promise.all([
     s
       .from("tenants")
       .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, status, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
-    recordedPaymentKeys(),
+    paidTenantIds(),
   ]);
   const nowMonth = new Date().toISOString().slice(0, 10).slice(0, 7);
   type Row = {
@@ -583,7 +582,7 @@ export async function getPayTenants(): Promise<PayTenant[]> {
   };
   return ((data ?? []) as unknown as Row[]).map((t) => {
     const checkinMonth = t.checkin_date.slice(0, 7);
-    const pending = !paidKeys.has(`${t.id}|${checkinMonth}`);
+    const pending = !paidIds.has(t.id);
     const cr = currentMonthRent(t, { securityDeposit: t.security_deposit, firstMonthPending: pending });
     const suggested: BillSuggestion = cr.proRata
       ? { baseRent: cr.rent, days: cr.days || 30, deposit: cr.deposit, month: checkinMonth, proRata: true }
@@ -809,18 +808,16 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
   const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  const [{ data: tenants }, { data: pays }] = await Promise.all([
+  const [{ data: tenants }, paidIds] = await Promise.all([
     s
       .from("tenants")
       .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, room:rooms(room_number)")
       .eq("pg_id", pid)
       .eq("status", "active"),
-    // only fully-PAID bills count as collected — an unpaid "due" bill is still owed
-    s.from("payments").select("tenant_id, month_for").eq("pg_id", pid).eq("status", "paid").lt("month_for", currentMonth),
+    // a tenant who's paid ANY bill is being collected from — the balance lives on
+    // that bill, so don't also nag them here (avoids a duplicate entry).
+    paidTenantIds(),
   ]);
-  const recorded = new Set(
-    ((pays ?? []) as { tenant_id: string; month_for: string }[]).map((p) => `${p.tenant_id}|${p.month_for}`),
-  );
   type T = {
     id: string;
     name: string;
@@ -836,7 +833,7 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
     if (t.stay_type === "daily") continue;
     const checkinMonth = t.checkin_date.slice(0, 7);
     if (checkinMonth >= currentMonth) continue; // current month handled by getMonthBill
-    if (recorded.has(`${t.id}|${checkinMonth}`)) continue; // already billed
+    if (paidIds.has(t.id)) continue; // already being collected from (bill exists)
     const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map());
     if (!fp.isProRata) continue;
     const deposit = t.security_deposit ?? 0;
