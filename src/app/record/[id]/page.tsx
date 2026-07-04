@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/guards";
 import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl, listTenantDocumentsSigned } from "@/lib/db";
 import { DOC_LABELS } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, inr } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
 import { SignedAgreement } from "@/components/admin/signed-agreement";
 import type { TenantEventType } from "@/lib/types";
@@ -42,6 +42,35 @@ export default async function RecordPage({
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
       <p className="mt-1 font-medium text-ink">{value || "—"}</p>
     </div>
+  );
+
+  // Only prints when there's a value — empty/unknown fields are omitted entirely.
+  const Detail = ({ label, value }: { label: string; value?: string | number | null }) =>
+    value === null || value === undefined || value === "" ? null : (
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+        <p className="mt-1 font-medium text-ink">{value}</p>
+      </div>
+    );
+
+  const occupationText =
+    tenant.occupation === "student"
+      ? "Student"
+      : tenant.occupation === "working"
+        ? "Working professional"
+        : tenant.occupation
+          ? tenant.occupation[0]!.toUpperCase() + tenant.occupation.slice(1)
+          : "";
+
+  const hasDetails = !!(
+    tenant.parent_phone ||
+    tenant.guardian ||
+    tenant.address ||
+    occupationText ||
+    tenant.organization ||
+    tenant.email ||
+    tenant.rent_amount ||
+    tenant.security_deposit
   );
 
   return (
@@ -100,10 +129,29 @@ export default async function RecordPage({
             <div className="grid flex-1 grid-cols-2 gap-4 self-center">
               <Field label="Name" value={tenant.name} />
               <Field label="Phone" value={tenant.phone} />
-              <Field label="Aadhaar / ID" value={tenant.aadhaar_number} />
+              <Detail label="Aadhaar / ID" value={tenant.aadhaar_number} />
               <Field label="Status" value={tenant.status === "checked_out" ? "Vacated" : "Staying"} />
             </div>
           </section>
+
+          {/* personal details — each printed only when it has a value */}
+          {hasDetails && (
+            <section className="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-line bg-paper-2/40 p-5 sm:grid-cols-3">
+              <Detail label="Parent's phone" value={tenant.parent_phone} />
+              <Detail label="Other contact" value={tenant.guardian} />
+              <Detail label="Email" value={tenant.email} />
+              <Detail label="Occupation" value={occupationText} />
+              <Detail label="Institute / Company" value={tenant.organization} />
+              <Detail label="Monthly rent" value={tenant.rent_amount ? inr(tenant.rent_amount) : null} />
+              <Detail label="Security deposit" value={tenant.security_deposit ? inr(tenant.security_deposit) : null} />
+              {tenant.address && (
+                <div className="col-span-2 sm:col-span-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Address</p>
+                  <p className="mt-1 font-medium text-ink">{tenant.address}</p>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* ID document — the Aadhaar / proof card uploaded at check-in, shown
               large and uncropped so it is clearly legible on the printed page. */}
