@@ -143,8 +143,7 @@ export default async function TenantDetail({
           <dl className="mt-4 space-y-3 text-sm">
             <Row icon={Phone} label="Phone" value={tenant.phone} />
             {tenant.parent_phone && <Row icon={Phone} label="Parent's phone" value={tenant.parent_phone} />}
-            {tenant.father_name && <Row icon={IdCard} label="Father's name" value={tenant.father_name} />}
-            {tenant.mother_name && <Row icon={IdCard} label="Mother's name" value={tenant.mother_name} />}
+            {tenant.guardian && <Row icon={Phone} label="Other (guardian/friend)" value={tenant.guardian} />}
             {tenant.address && <Row icon={MapPin} label="Address" value={tenant.address} />}
             {tenant.occupation && (
               <Row
