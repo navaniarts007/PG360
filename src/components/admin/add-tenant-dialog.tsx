@@ -217,6 +217,12 @@ function TenantForm({
         <FieldRow label="Parent's phone" htmlFor="parent_phone" hint="optional">
           <Input id="parent_phone" name="parent_phone" defaultValue={tenant?.parent_phone ?? ""} placeholder="optional" />
         </FieldRow>
+        <FieldRow label="Father's name" htmlFor="father_name" hint="optional">
+          <Input id="father_name" name="father_name" defaultValue={tenant?.father_name ?? ""} placeholder="optional" />
+        </FieldRow>
+        <FieldRow label="Mother's name" htmlFor="mother_name" hint="optional">
+          <Input id="mother_name" name="mother_name" defaultValue={tenant?.mother_name ?? ""} placeholder="optional" />
+        </FieldRow>
         <FieldRow label="Address" htmlFor="address" hint="optional" className="col-span-2">
           <Input id="address" name="address" defaultValue={tenant?.address ?? ""} placeholder="Home / permanent address (optional)" />
         </FieldRow>

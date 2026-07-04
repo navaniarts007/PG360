@@ -264,6 +264,8 @@ export interface Tenant {
   name: string;
   phone: string;
   parent_phone: string | null;
+  father_name: string | null;
+  mother_name: string | null;
   address: string | null;
   occupation: string | null;
   organization: string | null;
