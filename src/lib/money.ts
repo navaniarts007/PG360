@@ -103,6 +103,7 @@ export interface SettlementInput {
   lockInEndISO: string | null;
   depositAmount: number;
   damages?: number;
+  advanceAmount?: number; // tenant-paid advance to refund / adjust at checkout
 }
 
 export interface SettlementBreakdown {
@@ -114,8 +115,11 @@ export interface SettlementBreakdown {
   lockInForfeiture: number;
   damages: number;
   depositAmount: number;
+  advanceAmount: number;
   totalDeductions: number;
-  refundableAmount: number;
+  totalCredits: number; // deposit + advance
+  refundableAmount: number; // owner returns this (dues fully covered)
+  amountDue: number; // tenant still pays this (dues exceed credits)
 }
 
 /** Final settlement when a tenant leaves: dues + short-notice penalty + lock-in
@@ -140,8 +144,14 @@ export function computeSettlement(input: SettlementInput): SettlementBreakdown {
       : 0;
 
   const damages = input.damages ?? 0;
+  const advanceAmount = input.advanceAmount ?? 0;
   const totalDeductions = proRataAmount + noticePenalty + lockInForfeiture + damages;
-  const refundableAmount = Math.max(0, input.depositAmount - totalDeductions);
+  // deposit + advance are both credits to the tenant. When dues are covered the
+  // surplus (incl. the advance) is refunded; when dues exceed the credits the
+  // advance is adjusted against them and the tenant pays the remainder.
+  const totalCredits = input.depositAmount + advanceAmount;
+  const refundableAmount = Math.max(0, totalCredits - totalDeductions);
+  const amountDue = Math.max(0, totalDeductions - totalCredits);
 
   return {
     dailyRate,
@@ -152,8 +162,11 @@ export function computeSettlement(input: SettlementInput): SettlementBreakdown {
     lockInForfeiture,
     damages,
     depositAmount: input.depositAmount,
+    advanceAmount,
     totalDeductions,
+    totalCredits,
     refundableAmount,
+    amountDue,
   };
 }
 

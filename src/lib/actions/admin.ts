@@ -230,6 +230,7 @@ export async function deleteRoomAction(formData: FormData): Promise<void> {
 const tenantSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
+  parent_phone: z.string().optional(),
   // login is optional — provide both email + password to give the tenant a portal login.
   email: z.string().email("Enter a valid email.").optional().or(z.literal("")),
   aadhaar_number: z.string().optional(),
@@ -325,6 +326,7 @@ export async function addTenantAction(
       user_id: userId,
       name: d.name,
       phone: d.phone,
+      parent_phone: d.parent_phone || null,
       email: d.email || null,
       reg_no: regNo,
       aadhaar_number: d.aadhaar_number || null,
@@ -506,6 +508,7 @@ export async function toggleJoiningFeePaidAction(formData: FormData): Promise<vo
 const tenantUpdateSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
+  parent_phone: z.string().optional(),
   email: z.string().email("Enter a valid email.").optional().or(z.literal("")),
   aadhaar_number: z.string().optional(),
   bed_id: z.string().optional(),
@@ -567,6 +570,7 @@ export async function updateTenantAction(
     .update({
       name: d.name,
       phone: d.phone,
+      parent_phone: d.parent_phone || null,
       email: d.email || null,
       aadhaar_number: d.aadhaar_number || null,
       ...(d.avatar_url ? { avatar_url: d.avatar_url } : {}),
@@ -641,6 +645,7 @@ const settlementSchema = z.object({
   last_paid_until: z.string().optional(),
   notice_given_date: z.string().optional(),
   damages: z.coerce.number().int().min(0).optional(),
+  advance_amount: z.coerce.number().int().min(0).optional(),
   notes: z.string().optional(),
 });
 
@@ -680,7 +685,17 @@ export async function saveSettlementAction(
     lockInEndISO: tenant.lock_in_end_date,
     depositAmount: tenant.security_deposit,
     damages: d.damages ?? 0,
+    advanceAmount: d.advance_amount ?? 0,
   });
+
+  // note the advance adjustment/refund so it's on the record
+  const advanceNote =
+    res.advanceAmount > 0
+      ? res.amountDue > 0
+        ? `₹${res.advanceAmount.toLocaleString("en-IN")} advance adjusted against dues.`
+        : `₹${res.advanceAmount.toLocaleString("en-IN")} advance refunded.`
+      : "";
+  const settlementNotes = [d.notes?.trim(), advanceNote].filter(Boolean).join(" ") || null;
 
   const { error: insErr } = await s.from("checkout_settlements").insert({
     pg_id: pid,
@@ -694,8 +709,9 @@ export async function saveSettlementAction(
     lock_in_forfeiture: res.lockInForfeiture,
     damages_deduction: res.damages,
     deposit_amount: res.depositAmount,
+    advance_amount: res.advanceAmount,
     refundable_amount: res.refundableAmount,
-    notes: d.notes || null,
+    notes: settlementNotes,
     status: "confirmed",
   });
   if (insErr) return { error: humanizeDbError(insErr) };
@@ -814,6 +830,7 @@ const paymentSchema = z.object({
   joining_fee: z.coerce.number().min(0).optional().default(0),
   amount_paid: z.coerce.number().min(0),
   payment_mode: z.enum(["cash", "upi", "bank"]),
+  payment_screenshot_url: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -856,6 +873,8 @@ export async function recordPaymentAction(
       payment_mode: d.payment_mode,
       payment_date: d.amount_paid > 0 ? new Date().toISOString().slice(0, 10) : null,
       verified: true, // admin-recorded payments are trusted
+      // only set the screenshot when one was uploaded (don't wipe an existing proof)
+      ...(d.payment_screenshot_url ? { payment_screenshot_url: d.payment_screenshot_url } : {}),
       notes: d.notes || null,
     },
     { onConflict: "tenant_id,month_for" },

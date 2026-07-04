@@ -53,6 +53,7 @@ function SettlementForm({
   const [lastPaid, setLastPaid] = useState("");
   const [noticeGiven, setNoticeGiven] = useState(tenant.notice_given_date ?? "");
   const [damages, setDamages] = useState("0");
+  const [advance, setAdvance] = useState("0");
 
   useEffect(() => {
     if (state.ok) onDone();
@@ -68,6 +69,7 @@ function SettlementForm({
     lockInEndISO: tenant.lock_in_end_date,
     depositAmount: tenant.security_deposit,
     damages: Number(damages) || 0,
+    advanceAmount: Number(advance) || 0,
   });
 
   return (
@@ -118,6 +120,16 @@ function SettlementForm({
             onChange={(e) => setDamages(e.target.value)}
           />
         </FieldRow>
+        <FieldRow label="Advance to refund/adjust (₹)" htmlFor="advance_amount" hint="paid-in-advance credit">
+          <Input
+            id="advance_amount"
+            name="advance_amount"
+            type="number"
+            min={0}
+            value={advance}
+            onChange={(e) => setAdvance(e.target.value)}
+          />
+        </FieldRow>
         <FieldRow label="Notes" htmlFor="notes" className="col-span-2">
           <Textarea id="notes" name="notes" placeholder="Anything to record about this settlement" />
         </FieldRow>
@@ -126,16 +138,28 @@ function SettlementForm({
       {/* Live breakdown */}
       <div className="rounded-xl border border-line bg-paper-2/40 p-4 text-sm">
         <Line label="Security deposit" value={preview.depositAmount} />
+        {preview.advanceAmount > 0 && <Line label="Advance credit" value={preview.advanceAmount} />}
         <Line label={`Unpaid rent (${preview.proRataDaysOwed}d × ₹${preview.dailyRate}/day)`} value={-preview.proRataAmount} muted />
         <Line label={`Short-notice penalty (${preview.noticeShortfallDays}d)`} value={-preview.noticePenalty} muted />
         <Line label="Lock-in forfeiture" value={-preview.lockInForfeiture} muted />
         <Line label="Damages" value={-preview.damages} muted />
         <div className="mt-2 flex items-center justify-between border-t border-line pt-3">
-          <span className="font-semibold text-ink">Refundable to tenant</span>
-          <span className="font-display text-xl font-semibold text-teal-700 tnum">
-            {inr(preview.refundableAmount)}
+          <span className="font-semibold text-ink">
+            {preview.amountDue > 0 ? "Tenant pays" : "Refundable to tenant"}
+          </span>
+          <span
+            className={`font-display text-xl font-semibold tnum ${preview.amountDue > 0 ? "text-rose-600" : "text-teal-700"}`}
+          >
+            {inr(preview.amountDue > 0 ? preview.amountDue : preview.refundableAmount)}
           </span>
         </div>
+        {preview.advanceAmount > 0 && (
+          <p className="mt-1.5 text-xs text-ink-muted">
+            {preview.amountDue > 0
+              ? `₹${preview.advanceAmount.toLocaleString("en-IN")} advance adjusted against dues.`
+              : `Includes ₹${preview.advanceAmount.toLocaleString("en-IN")} advance refunded.`}
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2 pt-1">

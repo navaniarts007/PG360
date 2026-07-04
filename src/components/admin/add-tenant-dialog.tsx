@@ -213,6 +213,9 @@ function TenantForm({
         <FieldRow label="Phone" htmlFor="phone">
           <Input id="phone" name="phone" defaultValue={tenant?.phone ?? ""} placeholder="+9198…" required />
         </FieldRow>
+        <FieldRow label="Parent's phone" htmlFor="parent_phone" hint="optional">
+          <Input id="parent_phone" name="parent_phone" defaultValue={tenant?.parent_phone ?? ""} placeholder="optional" />
+        </FieldRow>
         <FieldRow label="Aadhaar (last 4)" htmlFor="aadhaar_number">
           <Input id="aadhaar_number" name="aadhaar_number" defaultValue={tenant?.aadhaar_number ?? ""} placeholder="XXXX-XXXX-1234" />
         </FieldRow>

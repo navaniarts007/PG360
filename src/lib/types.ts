@@ -263,6 +263,7 @@ export interface Tenant {
   bed_id: string | null;
   name: string;
   phone: string;
+  parent_phone: string | null;
   email: string;
   reg_no: string | null;
   avatar_url: string | null;

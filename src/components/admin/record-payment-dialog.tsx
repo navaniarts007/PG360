@@ -2,11 +2,12 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, IndianRupee, Loader2, Receipt } from "lucide-react";
+import { AlertCircle, Camera, ImageUp, IndianRupee, Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
 import { recordPaymentAction, type ActionState } from "@/lib/actions/admin";
+import { getUploadSignatureAction } from "@/lib/actions/upload";
 import { inr } from "@/lib/utils";
 
 /** Pre-fill the dialog opens with for a tenant (mirrors db.ts BillSuggestion). */
@@ -127,7 +128,39 @@ function PaymentForm({
   const [deposit, setDeposit] = useState(init?.deposit ?? 0);
   const [joining, setJoining] = useState(prefill?.joining ?? 0);
   const [paid, setPaid] = useState(0);
+  // optional payment screenshot / proof (uploaded to Cloudinary)
+  const [shot, setShot] = useState<string | null>(null);
+  const [shotBusy, setShotBusy] = useState(false);
+  const [shotErr, setShotErr] = useState<string | null>(null);
+  const shotFileRef = useRef<HTMLInputElement>(null);
+  const shotCamRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  const uploadShot = async (file: File) => {
+    setShotBusy(true);
+    setShotErr(null);
+    try {
+      const sig = await getUploadSignatureAction("pg360/payments");
+      if (!sig.ok) throw new Error(sig.error);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("api_key", sig.apiKey);
+      fd.append("timestamp", String(sig.timestamp));
+      fd.append("signature", sig.signature);
+      fd.append("folder", sig.folder);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const json = (await res.json()) as { secure_url?: string };
+      if (!json.secure_url) throw new Error("Upload failed");
+      setShot(json.secure_url);
+    } catch (e) {
+      setShotErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setShotBusy(false);
+    }
+  };
 
   // per-day rate on a fixed 30-day basis (₹7,000/month → ₹233/day → 13 days = ₹3,033)
   const dailyRate = monthly > 0 ? monthly / 30 : 0;
@@ -356,11 +389,38 @@ function PaymentForm({
         <Input id="notes" name="notes" placeholder="Optional note" />
       </FieldRow>
 
+      {/* optional payment screenshot / proof */}
+      <input type="hidden" name="payment_screenshot_url" value={shot ?? ""} />
+      <div className="flex items-center gap-3 rounded-xl border border-line bg-paper-2/40 p-3">
+        {shot ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shot} alt="Proof" className="size-14 rounded-lg border border-line object-cover" />
+        ) : (
+          <div className="grid size-14 place-items-center rounded-lg border border-dashed border-line-strong text-ink-muted">
+            <ImageUp className="size-5" />
+          </div>
+        )}
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-ink">Payment screenshot <span className="font-normal text-ink-muted">— optional</span></p>
+          <input ref={shotFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadShot(f); }} />
+          <input ref={shotCamRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadShot(f); }} />
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <button type="button" onClick={() => shotCamRef.current?.click()} disabled={shotBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-clay-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-clay-700 disabled:opacity-60">
+              {shotBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />} Photo
+            </button>
+            <button type="button" onClick={() => shotFileRef.current?.click()} disabled={shotBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60">
+              <ImageUp className="size-3.5" /> {shot ? "Replace" : "Upload"}
+            </button>
+          </div>
+          {shotErr && <p className="mt-1 text-xs text-rose-600">{shotErr}</p>}
+        </div>
+      </div>
+
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" className="flex-1" disabled={pending}>
+        <Button type="submit" className="flex-1" disabled={pending || shotBusy}>
           {pending ? (
             <>
               <Loader2 className="size-4 animate-spin" /> Saving…
