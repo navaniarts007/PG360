@@ -69,6 +69,7 @@ function TenantForm({
   const [selfie, setSelfie] = useState<string | null>(tenant?.avatar_url ?? null); // check-in photo
   const [photo, setPhoto] = useState<string | null>(tenant?.aadhaar_photo_url ?? null); // ID doc (storage path or legacy URL)
   const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of a freshly picked ID
+  const [occupation, setOccupation] = useState(tenant?.occupation ?? "");
   const [stayType, setStayType] = useState<"monthly" | "daily">(tenant?.stay_type ?? "monthly");
   const [dRate, setDRate] = useState(tenant?.daily_rate ?? 0);
   const [dDays, setDDays] = useState(tenant?.stay_days ?? 0);
@@ -216,6 +217,31 @@ function TenantForm({
         <FieldRow label="Parent's phone" htmlFor="parent_phone" hint="optional">
           <Input id="parent_phone" name="parent_phone" defaultValue={tenant?.parent_phone ?? ""} placeholder="optional" />
         </FieldRow>
+        <FieldRow label="Address" htmlFor="address" hint="optional" className="col-span-2">
+          <Input id="address" name="address" defaultValue={tenant?.address ?? ""} placeholder="Home / permanent address (optional)" />
+        </FieldRow>
+        <FieldRow label="Occupation" htmlFor="occupation" hint="optional">
+          <Select id="occupation" name="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)}>
+            <option value="">—</option>
+            <option value="student">Student</option>
+            <option value="working">Working professional</option>
+            <option value="other">Other</option>
+          </Select>
+        </FieldRow>
+        {(occupation === "student" || occupation === "working") && (
+          <FieldRow
+            label={occupation === "student" ? "Institute name" : "Company name"}
+            htmlFor="organization"
+            hint="optional"
+          >
+            <Input
+              id="organization"
+              name="organization"
+              defaultValue={tenant?.organization ?? ""}
+              placeholder={occupation === "student" ? "School / college" : "Company"}
+            />
+          </FieldRow>
+        )}
         <FieldRow label="Aadhaar (last 4)" htmlFor="aadhaar_number">
           <Input id="aadhaar_number" name="aadhaar_number" defaultValue={tenant?.aadhaar_number ?? ""} placeholder="XXXX-XXXX-1234" />
         </FieldRow>
@@ -250,25 +276,29 @@ function TenantForm({
             </div>
           </>
         )}
+        <FieldRow label="Check-in date" htmlFor="checkin_date">
+          <Input
+            id="checkin_date"
+            name="checkin_date"
+            type="date"
+            defaultValue={tenant?.checkin_date?.slice(0, 10) ?? ""}
+            required
+          />
+        </FieldRow>
         {!tenant && (
-          <>
-            <FieldRow label="Check-in date" htmlFor="checkin_date">
-              <Input id="checkin_date" name="checkin_date" type="date" required />
-            </FieldRow>
-            <FieldRow
-              label="Joining fee (₹)"
-              htmlFor="joining_fee"
-              hint="one-time, optional"
-            >
-              <Input
-                id="joining_fee"
-                name="joining_fee"
-                type="number"
-                min={0}
-                placeholder="0"
-              />
-            </FieldRow>
-          </>
+          <FieldRow
+            label="Joining fee (₹)"
+            htmlFor="joining_fee"
+            hint="one-time, optional"
+          >
+            <Input
+              id="joining_fee"
+              name="joining_fee"
+              type="number"
+              min={0}
+              placeholder="0"
+            />
+          </FieldRow>
         )}
       </div>
 

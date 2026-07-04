@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import {
   ArrowLeft,
+  Briefcase,
   CalendarDays,
   FileText,
   IdCard,
+  MapPin,
   Phone,
   ShieldCheck,
   Wifi,
@@ -141,6 +143,14 @@ export default async function TenantDetail({
           <dl className="mt-4 space-y-3 text-sm">
             <Row icon={Phone} label="Phone" value={tenant.phone} />
             {tenant.parent_phone && <Row icon={Phone} label="Parent's phone" value={tenant.parent_phone} />}
+            {tenant.address && <Row icon={MapPin} label="Address" value={tenant.address} />}
+            {tenant.occupation && (
+              <Row
+                icon={Briefcase}
+                label={tenant.occupation === "student" ? "Student" : tenant.occupation === "working" ? "Working" : "Occupation"}
+                value={tenant.organization || (tenant.occupation === "student" ? "Student" : tenant.occupation === "working" ? "Working professional" : "Other")}
+              />
+            )}
             <Row icon={IdCard} label="Aadhaar" value={tenant.aadhaar_number ?? "—"} />
             <Row icon={CalendarDays} label="Check-in" value={formatDate(tenant.checkin_date)} />
             <Row icon={CalendarDays} label="Rent due day" value={`${ordinal(tenant.rent_due_day)} of each month`} />
