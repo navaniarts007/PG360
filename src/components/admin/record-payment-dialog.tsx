@@ -38,6 +38,7 @@ export interface PaymentPrefill {
   days?: number;
   deposit?: number;
   joining?: number;
+  amountPaid?: number;
 }
 
 
@@ -127,7 +128,7 @@ function PaymentForm({
   const [other, setOther] = useState(0);
   const [deposit, setDeposit] = useState(init?.deposit ?? 0);
   const [joining, setJoining] = useState(prefill?.joining ?? 0);
-  const [paid, setPaid] = useState(0);
+  const [paid, setPaid] = useState(prefill?.amountPaid ?? 0);
   // optional payment screenshot / proof (uploaded to Cloudinary)
   const [shot, setShot] = useState<string | null>(null);
   const [shotBusy, setShotBusy] = useState(false);

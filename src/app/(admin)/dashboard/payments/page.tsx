@@ -33,7 +33,7 @@ export default async function PaymentsPage() {
       <PageHeader
         eyebrow={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
         title="Payments"
-        subtitle="Every tenant's bill this month. Record a payment, or verify what tenants submit."
+        subtitle="Bill · paid · balance for every tenant this month. Collect a payment or verify what tenants submit."
         action={<RecordPaymentDialog tenants={payTenants} month={month} />}
       />
 
@@ -112,8 +112,9 @@ export default async function PaymentsPage() {
             <thead>
               <tr className="border-b border-line bg-paper-2/40 text-left text-xs uppercase tracking-wide text-ink-muted">
                 <th className="px-6 py-3.5 font-semibold">Tenant</th>
-                <th className="px-6 py-3.5 font-semibold">Monthly rent</th>
-                <th className="px-6 py-3.5 font-semibold">Paid this month</th>
+                <th className="px-6 py-3.5 text-right font-semibold">Bill</th>
+                <th className="px-6 py-3.5 text-right font-semibold">Paid</th>
+                <th className="px-6 py-3.5 text-right font-semibold">Balance</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 text-right font-semibold">Action</th>
               </tr>
@@ -130,6 +131,9 @@ export default async function PaymentsPage() {
                     (cr.deposit ? ` + deposit ${inr(cr.deposit)}` : "") +
                     ` = ${inr(cr.amount)}. Full rent ${inr(r.rent_amount)} from next month.`
                   : undefined;
+                // Bill / Paid / Balance — the deduction the owner wants to see.
+                const bill = showProRata ? cr.amount : r.total;
+                const balance = Math.max(bill - r.paid, 0);
                 return (
                   <tr
                     key={r.tenant_id}
@@ -145,37 +149,36 @@ export default async function PaymentsPage() {
                         <span className="font-semibold text-ink">{r.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-3.5 tnum">
-                      {(() => {
-                        return (
-                          <span className="flex flex-col">
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-ink-soft" title={tip}>{inr(showProRata ? cr.amount : r.total)}</span>
-                              {showProRata && (
-                                <span
-                                  className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-clay-700 ring-1 ring-clay-100"
-                                  title={tip}
-                                >
-                                  1st mo
-                                </span>
-                              )}
-                            </span>
-                            {showProRata && cr.deposit > 0 && (
-                              <span className="text-[0.7rem] text-ink-muted">to collect · incl. deposit</span>
-                            )}
+                    <td className="px-6 py-3.5 text-right tnum">
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {showProRata && (
+                          <span
+                            className="rounded-full bg-clay-50 px-1.5 py-0.5 text-[0.6rem] font-semibold text-clay-700 ring-1 ring-clay-100"
+                            title={tip}
+                          >
+                            1st mo
                           </span>
-                        );
-                      })()}
+                        )}
+                        <span className="font-semibold text-ink" title={tip}>{inr(bill)}</span>
+                      </span>
+                      {showProRata && cr.deposit > 0 && (
+                        <span className="block text-[0.7rem] text-ink-muted">incl. deposit</span>
+                      )}
                     </td>
-                    <td className="px-6 py-3.5 tnum">
+                    <td className="px-6 py-3.5 text-right tnum">
                       {r.paid > 0 ? (
-                        <span className="font-semibold text-ink">{inr(r.paid)}</span>
+                        <span className="font-medium text-teal-700">{inr(r.paid)}</span>
                       ) : (
                         <span className="text-ink-muted">—</span>
                       )}
                       {r.payment_mode && (
-                        <span className="ml-2 text-xs text-ink-muted">{MODE[r.payment_mode]}</span>
+                        <span className="block text-[0.7rem] text-ink-muted">{MODE[r.payment_mode]}</span>
                       )}
+                    </td>
+                    <td className="px-6 py-3.5 text-right tnum">
+                      <span className={balance > 0 ? "font-semibold text-rose-600" : "font-medium text-teal-600"}>
+                        {balance > 0 ? inr(balance) : "✓ Nil"}
+                      </span>
                     </td>
                     <td className="px-6 py-3.5">
                       {r.paid <= 0 ? (
@@ -205,20 +208,23 @@ export default async function PaymentsPage() {
                         )}
                         {awaiting ? (
                           <VerifyRejectButtons paymentId={r.paymentId!} />
-                        ) : r.paid > 0 && r.verified ? (
-                          <span className="text-xs font-semibold text-teal-600">✓ Verified</span>
+                        ) : r.status === "paid" ? (
+                          <span className="text-xs font-semibold text-teal-600">✓ Paid</span>
                         ) : (
                           <RecordPaymentDialog
                             tenants={payTenants}
                             month={month}
                             preselectId={r.tenant_id}
                             variant="collect"
-                            // this table is month-scoped: always bill the current
-                            // month (pro-rata for a current first month, else full)
+                            // this table is month-scoped: bill the current month.
+                            // when a partial bill exists, keep its total so the owner
+                            // just tops up the amount paid to clear the balance.
                             prefill={
-                              showProRata
-                                ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit }
-                                : { baseRent: r.rent_amount, days: 30, deposit: 0 }
+                              r.paymentId
+                                ? { baseRent: r.total, days: 30, deposit: 0, amountPaid: r.paid }
+                                : showProRata
+                                  ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit }
+                                  : { baseRent: r.rent_amount, days: 30, deposit: 0 }
                             }
                           />
                         )}
