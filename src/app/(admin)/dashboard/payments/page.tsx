@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Clock, ExternalLink, IndianRupee } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, IndianRupee } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
@@ -8,16 +9,28 @@ import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
 import { adminKpis, getMonthBill, getPayTenants, pendingFirstMonthPartials } from "@/lib/db";
-import { currentMonthRent } from "@/lib/rent";
+import { addMonths, currentMonthRent } from "@/lib/rent";
 import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Payments" };
 
 const MODE: Record<string, string> = { upi: "UPI", cash: "Cash", bank: "Bank" };
 
-export default async function PaymentsPage() {
+function monthName(m: string) {
+  const [y, mo] = m.split("-").map(Number);
+  return new Date(y!, (mo ?? 1) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
   await requireRole(["admin", "staff"]);
-  const month = currentMonth();
+  const now = currentMonth();
+  const { m } = await searchParams;
+  // view any month via ?m=YYYY-MM; defaults to the current month
+  const month = m && /^\d{4}-\d{2}$/.test(m) ? m : now;
   const [kpis, rows, payTenants, earlyDues] = await Promise.all([
     adminKpis(month),
     getMonthBill(month),
@@ -31,11 +44,37 @@ export default async function PaymentsPage() {
   return (
     <div className="space-y-7">
       <PageHeader
-        eyebrow={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
+        eyebrow="Collections"
         title="Payments"
-        subtitle="Bill · paid · balance for every tenant this month. Collect a payment or verify what tenants submit."
+        subtitle="Bill · paid · balance for every tenant. Use the month arrows to view any month."
         action={<RecordPaymentDialog tenants={payTenants} month={month} />}
       />
+
+      {/* month navigation */}
+      <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-2.5 shadow-soft">
+        <Link
+          href={`/dashboard/payments?m=${addMonths(month, -1)}`}
+          className="grid size-9 place-items-center rounded-lg border border-line text-ink-soft hover:text-clay-600"
+          aria-label="Previous month"
+        >
+          <ChevronLeft className="size-4" />
+        </Link>
+        <div className="text-center">
+          <p className="font-display text-lg font-semibold text-ink">{monthName(month)}</p>
+          {month !== now && (
+            <Link href="/dashboard/payments" className="text-xs font-semibold text-clay-600 hover:text-clay-700">
+              Jump to {monthName(now)}
+            </Link>
+          )}
+        </div>
+        <Link
+          href={`/dashboard/payments?m=${addMonths(month, 1)}`}
+          className="grid size-9 place-items-center rounded-lg border border-line text-ink-soft hover:text-clay-600"
+          aria-label="Next month"
+        >
+          <ChevronRight className="size-4" />
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryStat icon={IndianRupee} accent="teal" label="Collected" value={inrCompact(kpis.collected)} sub={`of ${inrCompact(kpis.billed)} billed`} />
