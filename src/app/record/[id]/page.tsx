@@ -65,6 +65,7 @@ export default async function RecordPage({
   const hasDetails = !!(
     tenant.parent_phone ||
     tenant.guardian ||
+    tenant.vehicle_number ||
     tenant.address ||
     occupationText ||
     tenant.organization ||
@@ -139,6 +140,7 @@ export default async function RecordPage({
             <section className="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-line bg-paper-2/40 p-5 sm:grid-cols-3">
               <Detail label="Parent's phone" value={tenant.parent_phone} />
               <Detail label="Other contact" value={tenant.guardian} />
+              <Detail label="Vehicle number" value={tenant.vehicle_number} />
               <Detail label="Email" value={tenant.email} />
               <Detail label="Occupation" value={occupationText} />
               <Detail label="Institute / Company" value={tenant.organization} />

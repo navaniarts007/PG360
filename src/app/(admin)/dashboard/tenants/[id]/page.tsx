@@ -144,6 +144,7 @@ export default async function TenantDetail({
             <Row icon={Phone} label="Phone" value={tenant.phone} />
             {tenant.parent_phone && <Row icon={Phone} label="Parent's phone" value={tenant.parent_phone} />}
             {tenant.guardian && <Row icon={Phone} label="Other (guardian/friend)" value={tenant.guardian} />}
+            {tenant.vehicle_number && <Row icon={IdCard} label="Vehicle number" value={tenant.vehicle_number} />}
             {tenant.address && <Row icon={MapPin} label="Address" value={tenant.address} />}
             {tenant.occupation && (
               <Row

@@ -220,6 +220,9 @@ function TenantForm({
         <FieldRow label="Other (guardian / friend)" htmlFor="guardian" hint="optional — name & number" className="col-span-2">
           <Input id="guardian" name="guardian" defaultValue={tenant?.guardian ?? ""} placeholder="e.g. Ravi (friend) +9198…" />
         </FieldRow>
+        <FieldRow label="Vehicle number" htmlFor="vehicle_number" hint="optional">
+          <Input id="vehicle_number" name="vehicle_number" defaultValue={tenant?.vehicle_number ?? ""} placeholder="e.g. TN 01 AB 1234" />
+        </FieldRow>
         <FieldRow label="Address" htmlFor="address" hint="optional" className="col-span-2">
           <Input id="address" name="address" defaultValue={tenant?.address ?? ""} placeholder="Home / permanent address (optional)" />
         </FieldRow>
