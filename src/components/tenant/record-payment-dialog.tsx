@@ -43,6 +43,7 @@ function PayForm({
   const router = useRouter();
   const [mode, setMode] = useState<"upi" | "cash" | "bank">("upi");
   const [amount, setAmount] = useState(balance > 0 ? balance : 0);
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -77,6 +78,7 @@ function PayForm({
         body.set("month_for", month);
         body.set("amount_paid", String(amount));
         body.set("payment_mode", mode);
+        body.set("payment_date", payDate);
         if (screenshotUrl) body.set("screenshot_url", screenshotUrl);
         const result = await tenantRecordPaymentAction({}, body);
         if (result.error) {
@@ -119,6 +121,9 @@ function PayForm({
             <option value="cash">Cash</option>
             <option value="bank">Bank transfer</option>
           </Select>
+        </FieldRow>
+        <FieldRow label="Payment date" htmlFor="pay_date" className="col-span-2">
+          <Input id="pay_date" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
         </FieldRow>
       </div>
 

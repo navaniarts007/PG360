@@ -852,6 +852,7 @@ const paymentSchema = z.object({
   joining_fee: z.coerce.number().min(0).optional().default(0),
   amount_paid: z.coerce.number().min(0),
   payment_mode: z.enum(["cash", "upi", "bank"]),
+  payment_date: z.string().optional(),
   payment_screenshot_url: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -893,7 +894,7 @@ export async function recordPaymentAction(
       joining_fee: d.joining_fee,
       amount_paid: d.amount_paid,
       payment_mode: d.payment_mode,
-      payment_date: d.amount_paid > 0 ? new Date().toISOString().slice(0, 10) : null,
+      payment_date: d.amount_paid > 0 ? (d.payment_date || new Date().toISOString().slice(0, 10)) : null,
       verified: true, // admin-recorded payments are trusted
       // only set the screenshot when one was uploaded (don't wipe an existing proof)
       ...(d.payment_screenshot_url ? { payment_screenshot_url: d.payment_screenshot_url } : {}),

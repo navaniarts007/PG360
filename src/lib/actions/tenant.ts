@@ -58,6 +58,7 @@ const paySchema = z.object({
   month_for: z.string().min(1),
   amount_paid: z.coerce.number().min(1, "Enter the amount you paid."),
   payment_mode: z.enum(["cash", "upi", "bank"]),
+  payment_date: z.string().optional(),
   screenshot_url: z.string().optional(),
 });
 
@@ -120,7 +121,7 @@ export async function tenantRecordPaymentAction(
       amount_paid: d.amount_paid,
       payment_mode: d.payment_mode,
       payment_screenshot_url: d.screenshot_url ?? existing?.payment_screenshot_url ?? null,
-      payment_date: new Date().toISOString().slice(0, 10),
+      payment_date: d.payment_date || new Date().toISOString().slice(0, 10),
       verified: false, // tenant-submitted — owner must confirm
     },
     { onConflict: "tenant_id,month_for" },

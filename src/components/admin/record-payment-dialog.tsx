@@ -377,6 +377,9 @@ function PaymentForm({
             <option value="bank">Bank transfer</option>
           </Select>
         </FieldRow>
+        <FieldRow label="Payment date" htmlFor="payment_date" className="col-span-2">
+          <Input id="payment_date" name="payment_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+        </FieldRow>
       </div>
 
       <div className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm">
