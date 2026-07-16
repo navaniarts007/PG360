@@ -6,9 +6,24 @@ import type { BillRow } from "@/lib/db";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+export interface RenewalMark {
+  tenant_id: string;
+  name: string;
+  /** the tenant's 30-day cycle completion date falling in this month */
+  date: string;
+}
+
 /** A month grid placing each tenant on their rent-due day, coloured by whether
  *  the rent for that month is paid / partial / overdue. Month nav via ?m=. */
-export function CollectionCalendar({ month, rows }: { month: string; rows: BillRow[] }) {
+export function CollectionCalendar({
+  month,
+  rows,
+  renewals = [],
+}: {
+  month: string;
+  rows: BillRow[];
+  renewals?: RenewalMark[];
+}) {
   const todayISO = new Date().toISOString().slice(0, 10);
   const [y, m] = month.split("-").map(Number);
   const firstWeekday = new Date(y!, m! - 1, 1).getDay();
@@ -19,6 +34,13 @@ export function CollectionCalendar({ month, rows }: { month: string; rows: BillR
   for (const r of rows) {
     const day = Number(r.due_date.slice(8, 10));
     (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(r);
+  }
+
+  // 30-day cycle completions by day-of-month (renewal follow-up markers)
+  const renewByDay = new Map<number, RenewalMark[]>();
+  for (const r of renewals) {
+    const day = Number(r.date.slice(8, 10));
+    (renewByDay.get(day) ?? renewByDay.set(day, []).get(day)!).push(r);
   }
 
   const cells: (number | null)[] = [
@@ -81,6 +103,21 @@ export function CollectionCalendar({ month, rows }: { month: string; rows: BillR
                 {dueHere.length > 3 && (
                   <span className="block px-1.5 text-[0.65rem] text-ink-muted">+{dueHere.length - 3} more</span>
                 )}
+                {(renewByDay.get(day) ?? []).slice(0, 2).map((r) => (
+                  <Link
+                    key={`rn-${r.tenant_id}-${r.date}`}
+                    href={`/dashboard/tenants/${r.tenant_id}`}
+                    className="block truncate rounded bg-violet-50 px-1.5 py-0.5 text-[0.68rem] font-medium text-violet-700 ring-1 ring-violet-100"
+                    title={`${r.name} · 30-day stay completes — confirm extend or vacate`}
+                  >
+                    ↻ {r.name}
+                  </Link>
+                ))}
+                {(renewByDay.get(day)?.length ?? 0) > 2 && (
+                  <span className="block px-1.5 text-[0.65rem] text-violet-600">
+                    +{renewByDay.get(day)!.length - 2} renewals
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -92,6 +129,7 @@ export function CollectionCalendar({ month, rows }: { month: string; rows: BillR
         <Legend cls="bg-clay-100" label="Due (upcoming)" />
         <Legend cls="bg-gold-100" label="Partial" />
         <Legend cls="bg-teal-100" label="Paid" />
+        <Legend cls="bg-violet-100" label="↻ 30-day renewal check" />
       </div>
     </div>
   );

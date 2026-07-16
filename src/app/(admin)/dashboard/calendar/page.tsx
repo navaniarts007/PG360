@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
-import { CollectionCalendar } from "@/components/admin/collection-calendar";
+import { CollectionCalendar, type RenewalMark } from "@/components/admin/collection-calendar";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
+import { RenewalAlertsCard } from "@/components/admin/renewal-alerts-card";
 import { requireRole } from "@/lib/guards";
 import { getMonthBill, getPayTenants } from "@/lib/db";
+import { cycleEndsInMonth, sweepRenewalAlerts } from "@/lib/renewals";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Calendar" };
@@ -21,8 +23,25 @@ export default async function CalendarPage({
   const { m } = await searchParams;
   const month = m && MONTH_RE.test(m) ? m : currentMonth();
 
-  const [rows, payTenants] = await Promise.all([getMonthBill(month), getPayTenants()]);
+  const [rows, payTenants, renewalAlerts] = await Promise.all([
+    getMonthBill(month),
+    getPayTenants(),
+    // computes who's inside the 3-days-before-cycle-end window and fires the
+    // once-per-cycle staff notifications
+    sweepRenewalAlerts(),
+  ]);
   const todayISO = new Date().toISOString().slice(0, 10);
+
+  // every 30-day cycle completion landing in the viewed month → calendar marks
+  const renewals: RenewalMark[] = rows
+    .filter((r) => r.stay_type === "monthly")
+    .flatMap((r) =>
+      cycleEndsInMonth(r.checkin_date.slice(0, 10), month).map((date) => ({
+        tenant_id: r.tenant_id,
+        name: r.name,
+        date,
+      })),
+    );
 
   const pending = rows
     .filter((r) => r.status !== "paid")
@@ -37,8 +56,9 @@ export default async function CalendarPage({
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <CollectionCalendar month={month} rows={rows} />
+        <div className="space-y-5 lg:col-span-2">
+          <CollectionCalendar month={month} rows={rows} renewals={renewals} />
+          <RenewalAlertsCard alerts={renewalAlerts} />
         </div>
 
         <Card>

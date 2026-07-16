@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { IssueStatusPill } from "@/components/ui/status";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { GvmHome } from "@/components/admin/gvm-home";
+import { RenewalAlertsCard } from "@/components/admin/renewal-alerts-card";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
 import {
@@ -26,6 +27,7 @@ import {
   getPayTenants,
   listIssuesWithTenant,
 } from "@/lib/db";
+import { sweepRenewalAlerts } from "@/lib/renewals";
 import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -57,11 +59,14 @@ export default async function AdminDashboard() {
 
   const month = currentMonth();
 
-  const [kpis, payTenants, bill, allIssues] = await Promise.all([
+  const [kpis, payTenants, bill, allIssues, renewals] = await Promise.all([
     adminKpis(month),
     getPayTenants(),
     getMonthBill(month),
     listIssuesWithTenant(),
+    // also fires the once-per-cycle staff notifications for anyone entering
+    // the 3-days-before-cycle-end window
+    sweepRenewalAlerts(),
   ]);
   const todayISO = new Date().toISOString().slice(0, 10);
   const dueRows = bill
@@ -100,6 +105,9 @@ export default async function AdminDashboard() {
         <StatCard label="Collected (month)" value={inrCompact(kpis.collected)} icon={IndianRupee} accent="gold" hint={`of ${inrCompact(kpis.billed)} billed`} />
         <StatCard label="Amount due (month)" value={inrCompact(kpis.due)} icon={TrendingDown} accent="rose" hint={`${dueRows.length} tenants pending`} />
       </div>
+
+      {/* shift-out / renewal follow-ups — surfaced only when action is needed */}
+      {renewals.length > 0 && <RenewalAlertsCard alerts={renewals} />}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
