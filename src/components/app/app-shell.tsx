@@ -106,6 +106,7 @@ const NAVS: Record<"super" | "admin" | "tenant" | "gvm", NavItem[]> = {
     { href: "/portal/food", label: "Food menu", icon: UtensilsCrossed, module: "food" },
     { href: "/portal/issues", label: "Complaints", icon: MessagesSquare, module: "complaints" },
     { href: "/portal/contact", label: "Contact", icon: MessageCircle },
+    { href: "/portal/account", label: "Account", icon: Settings },
   ],
 };
 

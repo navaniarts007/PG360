@@ -39,6 +39,7 @@ export async function logoutAction(): Promise<void> {
 /* --------------------------- password reset ---------------------------- */
 
 export type ResetState = { error?: string; sent?: boolean };
+export type ChangePasswordState = { error?: string; done?: boolean };
 
 /** Step 1: email a password-reset link. Always reports success so we never
  *  reveal whether an email is registered. */
@@ -84,4 +85,40 @@ export async function updatePasswordAction(
 
   await signOut();
   redirect("/login?reset=1");
+}
+
+/** Change password while signed in — requires the current password. Unlike the
+ *  email flow this keeps the session, so the user isn't kicked out mid-task. */
+export async function changePasswordAction(
+  _prev: ChangePasswordState,
+  formData: FormData,
+): Promise<ChangePasswordState> {
+  const current = String(formData.get("current") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  if (!current) return { error: "Enter your current password." };
+  if (password.length < 8) return { error: "New password must be at least 8 characters." };
+  if (password !== confirm) return { error: "The two new passwords don't match." };
+  if (password === current) {
+    return { error: "The new password must be different from the current one." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "You're signed out — sign in and try again." };
+
+  // Re-authenticate so a walk-up attacker on an open session can't take it over.
+  const { error: authError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: current,
+  });
+  if (authError) return { error: "Your current password is incorrect." };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+
+  return { done: true };
 }
