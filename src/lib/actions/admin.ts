@@ -227,6 +227,10 @@ export async function deleteRoomAction(formData: FormData): Promise<void> {
 /* -------------------------------- tenants -------------------------------- */
 // A tenant occupies a BED; rent derives from the bed's price.
 
+// empty form fields arrive as "" — coerce those to undefined so optional numbers
+// (and defaulted ones like rent_due_day) don't turn into 0 and trip a min() check.
+const blankToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
+
 const tenantSchema = z.object({
   name: z.string().min(2, "Name is required."),
   phone: z.string().min(8, "Enter a valid phone."),
@@ -237,20 +241,28 @@ const tenantSchema = z.object({
   occupation: z.string().optional(),
   organization: z.string().optional(),
   // login is optional — provide both email + password to give the tenant a portal login.
-  email: z.string().email("Enter a valid email.").optional().or(z.literal("")),
+  email: z.string().email("Enter a valid login email, or leave it blank.").optional().or(z.literal("")),
   aadhaar_number: z.string().optional(),
   bed_id: z.string().optional(),
-  security_deposit: z.coerce.number().min(0),
+  security_deposit: z.preprocess(
+    blankToUndef,
+    z.coerce.number({ invalid_type_error: "Enter the security deposit (0 if none)." }).min(0, "Security deposit can't be negative.").default(0),
+  ),
   checkin_date: z.string().min(1, "Check-in date is required."),
-  rent_due_day: z.coerce.number().int().min(1).max(28),
-  login_password: z.string().min(8, "Password must be 8+ characters.").optional().or(z.literal("")),
-  joining_fee: z.coerce.number().int().min(0).optional(),
+  rent_due_day: z.preprocess(
+    blankToUndef,
+    z.coerce.number({ invalid_type_error: "Rent due day must be a day between 1 and 28." })
+      .int().min(1, "Rent due day must be between 1 and 28.").max(28, "Rent due day must be between 1 and 28.")
+      .default(5),
+  ),
+  login_password: z.string().min(8, "The login password must be at least 8 characters.").optional().or(z.literal("")),
+  joining_fee: z.preprocess(blankToUndef, z.coerce.number().int().min(0).optional()),
   avatar_url: z.string().optional(),
   aadhaar_photo_url: z.string().optional(),
-  rent_amount: z.coerce.number().min(0).optional(),
+  rent_amount: z.preprocess(blankToUndef, z.coerce.number().min(0, "Monthly rent can't be negative.").optional()),
   stay_type: z.enum(["monthly", "daily"]).default("monthly"),
-  daily_rate: z.coerce.number().min(0).optional(),
-  stay_days: z.coerce.number().int().min(1).optional(),
+  daily_rate: z.preprocess(blankToUndef, z.coerce.number().min(0, "Enter a valid daily rate.").optional()),
+  stay_days: z.preprocess(blankToUndef, z.coerce.number().int().min(1, "Enter the number of days.").optional()),
 });
 
 export async function addTenantAction(
@@ -263,6 +275,20 @@ export async function addTenantAction(
   const parsed = tenantSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
+
+  // A portal login needs BOTH email and password. If only one is filled it was
+  // almost certainly an oversight — fail loudly instead of silently saving a
+  // record with no login (the tenant then "can't log in").
+  const hasEmail = !!d.email;
+  const hasPassword = !!d.login_password;
+  if (hasEmail !== hasPassword) {
+    return {
+      error: hasEmail
+        ? "Add a login password too (8+ characters), or clear the email — a portal login needs both."
+        : "Add the login email too, or clear the password — a portal login needs both.",
+    };
+  }
+
   const admin = createAdminClient();
 
   const bedId = d.bed_id && d.bed_id !== "none" ? d.bed_id : null;
