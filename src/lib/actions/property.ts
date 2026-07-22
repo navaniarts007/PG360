@@ -148,7 +148,7 @@ export async function createPropertyAction(
       location: d.location,
       pg_type: d.pg_type,
       category: d.category,
-      subscription_plan: existing?.subscription_plan ?? "pro",
+      subscription_plan: existing?.subscription_plan ?? "yearly",
       subscription_expiry: existing?.subscription_expiry ?? fallbackExpiry.toISOString().slice(0, 10),
       is_demo: existing?.is_demo ?? false,
       created_by: me.id,

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Camera, ImageUp, IndianRupee, Loader2, Receipt } from "lucide-react";
+import { AlertCircle, Camera, ChevronDown, ChevronUp, ImageUp, IndianRupee, Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
@@ -81,6 +81,7 @@ export function RecordPaymentDialog({
           month={month}
           preselectId={preselectId}
           prefill={prefill}
+          variant={variant}
           onDone={close}
         />
       )}
@@ -99,6 +100,7 @@ function PaymentForm({
   month: string;
   preselectId?: string;
   prefill?: PaymentPrefill;
+  variant?: "primary" | "collect";
   onDone: () => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -128,7 +130,57 @@ function PaymentForm({
   const [other, setOther] = useState(0);
   const [deposit, setDeposit] = useState(init?.deposit ?? 0);
   const [joining, setJoining] = useState(prefill?.joining ?? 0);
-  const [paid, setPaid] = useState(prefill?.amountPaid ?? 0);
+
+  // State for revealing/collapsing the collection item picker
+  const [showCollectPicker, setShowCollectPicker] = useState(false);
+
+  // State for which items are selected for collection right now
+  const [collectRent, setCollectRent] = useState(true);
+  const [collectPower, setCollectPower] = useState(false);
+  const [collectFood, setCollectFood] = useState(false);
+  const [collectOther, setCollectOther] = useState(false);
+  const [collectDeposit, setCollectDeposit] = useState((init?.deposit ?? 0) > 0);
+  const [collectJoining, setCollectJoining] = useState((prefill?.joining ?? 0) > 0);
+
+  // Amount paid state
+  const initialPaid = prefill?.amountPaid ?? (init?.baseRent ?? monthly) + (init?.deposit ?? 0);
+  const [paid, setPaid] = useState(initialPaid);
+
+  // Auto-calculate paid amount when collection toggles change
+  const toggleCollect = (itemKey: string) => {
+    let nextRent = collectRent;
+    let nextPower = collectPower;
+    let nextFood = collectFood;
+    let nextOther = collectOther;
+    let nextDeposit = collectDeposit;
+    let nextJoining = collectJoining;
+
+    if (itemKey === "rent") { nextRent = !collectRent; setCollectRent(nextRent); }
+    if (itemKey === "power") { nextPower = !collectPower; setCollectPower(nextPower); }
+    if (itemKey === "food") { nextFood = !collectFood; setCollectFood(nextFood); }
+    if (itemKey === "other") { nextOther = !collectOther; setCollectOther(nextOther); }
+    if (itemKey === "deposit") { nextDeposit = !collectDeposit; setCollectDeposit(nextDeposit); }
+    if (itemKey === "joining") { nextJoining = !collectJoining; setCollectJoining(nextJoining); }
+
+    const newPaidSum =
+      (nextRent ? rent : 0) +
+      (nextPower ? power : 0) +
+      (nextFood ? food : 0) +
+      (nextOther ? other : 0) +
+      (nextDeposit ? deposit : 0) +
+      (nextJoining ? joining : 0);
+
+    setPaid(newPaidSum);
+  };
+
+  const selectedCollectTotal =
+    (collectRent ? rent : 0) +
+    (collectPower ? power : 0) +
+    (collectFood ? food : 0) +
+    (collectOther ? other : 0) +
+    (collectDeposit ? deposit : 0) +
+    (collectJoining ? joining : 0);
+
   // optional payment screenshot / proof (uploaded to Cloudinary)
   const [shot, setShot] = useState<string | null>(null);
   const [shotBusy, setShotBusy] = useState(false);
@@ -189,6 +241,13 @@ function PaymentForm({
     setJoining(0);
     setMonthInput(c.month);
     setPeriodMode("month");
+    setCollectRent(true);
+    setCollectPower(false);
+    setCollectFood(false);
+    setCollectOther(false);
+    setCollectDeposit(c.deposit > 0);
+    setCollectJoining(false);
+    setPaid(c.baseRent + (c.deposit > 0 ? c.deposit : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -228,13 +287,6 @@ function PaymentForm({
     [rent, power, food, other, deposit, joining],
   );
   const balance = Math.max(total - paid, 0);
-  const status = paid >= total && total > 0 ? "paid" : paid > 0 ? "partial" : "due";
-  const statusColor =
-    status === "paid"
-      ? "text-teal-600"
-      : status === "partial"
-        ? "text-gold-600"
-        : "text-rose-600";
 
   return (
     <form action={action} className="space-y-4">
@@ -382,11 +434,93 @@ function PaymentForm({
         </FieldRow>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm">
-        <span className="text-ink-soft">
-          Balance <span className="font-semibold text-ink tnum">{inr(balance)}</span>
-        </span>
-        <span className={`font-semibold capitalize ${statusColor}`}>{status}</span>
+      {/* ── Choose payment items to collect (Collapsible Reveal after Payment Date) ── */}
+      <div className="overflow-hidden rounded-xl border border-line bg-surface transition-all">
+        {/* Clickable Header Button to Reveal/Hide */}
+        <button
+          type="button"
+          onClick={() => setShowCollectPicker(!showCollectPicker)}
+          className="flex w-full items-center justify-between border-b border-line bg-paper-2/70 px-4 py-3 text-left transition-colors hover:bg-paper-2"
+        >
+          <div className="flex items-center gap-2">
+            {showCollectPicker ? (
+              <ChevronUp className="size-4 text-clay-600" />
+            ) : (
+              <ChevronDown className="size-4 text-clay-600" />
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink">
+              Choose payment items to collect
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-100/80 tnum">
+              Selected: {inr(selectedCollectTotal)}
+            </span>
+            <span className="text-xs text-ink-muted">
+              {showCollectPicker ? "Hide items" : "Click to select"}
+            </span>
+          </div>
+        </button>
+
+        {/* Revealed checklist content */}
+        {showCollectPicker && (
+          <>
+            <div className="bg-clay-50/50 px-4 py-2 border-b border-line text-[0.75rem] font-medium text-clay-700">
+              Check items below to include them in this payment & auto-fill Amount Paid:
+            </div>
+            <ul className="divide-y divide-line">
+              {[
+                { key: "rent", label: "Base rent", value: rent, on: collectRent },
+                { key: "power", label: "Electricity", value: power, on: collectPower },
+                { key: "food", label: "Food", value: food, on: collectFood },
+                { key: "other", label: "Other", value: other, on: collectOther },
+                { key: "deposit", label: "Security deposit", value: deposit, on: collectDeposit },
+                { key: "joining", label: "Joining / admission fee", value: joining, on: collectJoining },
+              ].map((item) => (
+                <li
+                  key={item.key}
+                  onClick={() => toggleCollect(item.key)}
+                  className={`flex cursor-pointer items-center justify-between px-4 py-3 transition-colors ${
+                    item.on ? "bg-teal-50/60" : "bg-surface hover:bg-paper-2/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex size-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                        item.on
+                          ? "border-teal-600 bg-teal-600 text-white"
+                          : "border-line bg-white text-transparent"
+                      }`}
+                    >
+                      <svg viewBox="0 0 12 12" className="size-3" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                        <polyline points="1.5,6 4.5,9 10.5,3" />
+                      </svg>
+                    </div>
+                    <span className={`text-sm font-medium ${item.on ? "font-semibold text-ink" : "text-ink-soft"}`}>
+                      {item.label}
+                    </span>
+                  </div>
+                  <span className={`tnum text-sm font-semibold ${item.on ? "text-teal-700" : "text-ink-muted"}`}>
+                    {item.value > 0 ? inr(item.value) : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex flex-wrap items-center justify-between border-t border-line bg-paper-2/80 px-4 py-3 text-sm gap-2">
+              <div>
+                <span className="text-ink-soft">Selected Collection: </span>
+                <span className="font-bold text-teal-700 tnum">{inr(selectedCollectTotal)}</span>
+              </div>
+              <div>
+                <span className="text-ink-soft">Balance Remaining: </span>
+                <span className={`font-bold tnum ${balance > 0 ? "text-rose-600" : "text-teal-600"}`}>
+                  {balance > 0 ? inr(balance) : "✓ Nil"}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <FieldRow label="Notes" htmlFor="notes">

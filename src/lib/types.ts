@@ -7,7 +7,7 @@ export type Role = "super_admin" | "admin" | "staff" | "tenant";
 export type PgType = "boys" | "girls" | "coliving";
 export type PgCategory = "budget" | "standard" | "premium";
 export type PgStatus = "active" | "suspended";
-export type SubscriptionPlan = "starter" | "pro" | "lifetime";
+export type SubscriptionPlan = "monthly" | "yearly" | "lifetime";
 
 /** Areas a staff member can be granted access to. */
 export const STAFF_MODULES = [

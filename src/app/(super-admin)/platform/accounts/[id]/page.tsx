@@ -51,8 +51,8 @@ const EVENT_LABEL: Record<TenantEventType, string> = {
 };
 
 const PLAN_LABEL: Record<string, string> = {
-  starter: "Starter",
-  pro: "Pro",
+  monthly: "Monthly",
+  yearly: "Yearly",
   lifetime: "Lifetime",
 };
 

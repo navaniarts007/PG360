@@ -36,6 +36,3 @@ tmp-*.log
 .idea
 .vscode/*
 !.vscode/extensions.json
-
-# local DB rollback snapshots (contain tenant financial data)
-.backups/

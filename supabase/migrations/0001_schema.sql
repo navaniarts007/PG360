@@ -29,7 +29,7 @@ create table if not exists public.pg_accounts (
   pg_type             text not null check (pg_type in ('boys', 'girls', 'coliving')),
   category            text not null check (category in ('budget', 'standard', 'premium')),
   status              text not null default 'active' check (status in ('active', 'suspended')),
-  subscription_plan   text not null check (subscription_plan in ('starter', 'pro', 'lifetime')),
+  subscription_plan   text not null check (subscription_plan in ('monthly', 'yearly', 'lifetime')),
   subscription_expiry date,
   created_by          uuid references public.profiles (id),
   created_at          timestamptz not null default now()

@@ -14,7 +14,7 @@ export default function RefundPage() {
           {
             h: "1. Subscriptions",
             p: [
-              "PG360 plans are billed in advance (yearly, or once for Lifetime). You can start free and only pay when you're ready.",
+              "PG360 plans are billed in advance (monthly, yearly, or once for Lifetime). You can start free and only pay when you're ready.",
             ],
           },
           {

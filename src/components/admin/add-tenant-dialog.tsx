@@ -254,8 +254,8 @@ function TenantForm({
         <FieldRow label="Security deposit (₹)" htmlFor="security_deposit">
           <Input id="security_deposit" name="security_deposit" type="number" min={0} defaultValue={tenant?.security_deposit ?? ""} placeholder="24000" required />
         </FieldRow>
-        <FieldRow label="Rent due day" htmlFor="rent_due_day" hint="1–28">
-          <Input id="rent_due_day" name="rent_due_day" type="number" min={1} max={28} defaultValue={tenant?.rent_due_day ?? 5} required />
+        <FieldRow label="Rent due day" htmlFor="rent_due_day">
+          <Input id="rent_due_day" name="rent_due_day" type="number" min={1} max={28} defaultValue={tenant?.rent_due_day ?? 5} />
         </FieldRow>
         <FieldRow label="Stay type" htmlFor="stay_type" className="col-span-2">
           <Select

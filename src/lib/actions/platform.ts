@@ -12,6 +12,14 @@ import { createAdminClient } from "../supabase/admin";
 
 export type ActionState = { ok?: boolean; error?: string };
 
+function expiryForPlan(plan: "monthly" | "yearly" | "lifetime"): string {
+  const expiry = new Date();
+  if (plan === "monthly") expiry.setMonth(expiry.getMonth() + 1);
+  else if (plan === "yearly") expiry.setFullYear(expiry.getFullYear() + 1);
+  else expiry.setFullYear(expiry.getFullYear() + 100);
+  return expiry.toISOString().slice(0, 10);
+}
+
 const pgSchema = z.object({
   pg_name: z.string().min(2, "PG name is required."),
   owner_name: z.string().min(2, "Owner name is required."),
@@ -19,7 +27,7 @@ const pgSchema = z.object({
   location: z.string().min(2, "Location is required."),
   pg_type: z.enum(["boys", "girls", "coliving"]),
   category: z.enum(["budget", "standard", "premium"]),
-  subscription_plan: z.enum(["starter", "pro", "lifetime"]),
+  subscription_plan: z.enum(["monthly", "yearly", "lifetime"]),
   owner_email: z.string().email("Enter a valid owner email."),
   owner_password: z.string().min(8, "Password must be at least 8 characters."),
   edition: z.enum(["full", "gvm"]).default("full"),
@@ -58,7 +66,9 @@ export async function createPgAction(
   const trialDays = Math.min(365, Math.max(1, Number(formData.get("trial_days")) || 3));
   const expiry = new Date();
   if (isDemo) expiry.setDate(expiry.getDate() + trialDays);
-  else expiry.setFullYear(expiry.getFullYear() + 1);
+  else if (d.subscription_plan === "monthly") expiry.setMonth(expiry.getMonth() + 1);
+  else if (d.subscription_plan === "yearly") expiry.setFullYear(expiry.getFullYear() + 1);
+  else expiry.setFullYear(expiry.getFullYear() + 100);
   const { data: pg, error: pgErr } = await admin
     .from("pg_accounts")
     .insert({
@@ -109,7 +119,7 @@ const editSchema = z.object({
   owner_name: z.string().min(2, "Owner name is required."),
   mobile: z.string().min(8, "Enter a valid mobile number."),
   location: z.string().min(2, "Location is required."),
-  subscription_plan: z.enum(["starter", "pro", "lifetime"]),
+  subscription_plan: z.enum(["monthly", "yearly", "lifetime"]),
   edition: z.enum(["full", "gvm"]),
   reg_prefix: z.string().max(12).optional(),
 });
@@ -129,7 +139,13 @@ export async function updateAccountAction(
   const portalEnabled = formData.get("portal_enabled") === "on";
   const isDemo = formData.get("is_demo") === "on";
   const prefix = d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null;
+  const admin = createAdminClient();
   // optionally (re)set the trial/expiry window when days are provided
+  const { data: current } = await admin
+    .from("pg_accounts")
+    .select("subscription_plan")
+    .eq("id", d.id)
+    .maybeSingle();
   const patch: Record<string, unknown> = {
     owner_name: d.owner_name,
     mobile: d.mobile,
@@ -145,9 +161,10 @@ export async function updateAccountAction(
     const exp = new Date();
     exp.setDate(exp.getDate() + Math.min(365, trialDays));
     patch.subscription_expiry = exp.toISOString().slice(0, 10);
+  } else if (current?.subscription_plan !== d.subscription_plan) {
+    patch.subscription_expiry = expiryForPlan(d.subscription_plan);
   }
 
-  const admin = createAdminClient();
   const { error } = await admin
     .from("pg_accounts")
     .update(patch)

@@ -38,6 +38,7 @@ import {
   listTenantEvents,
 } from "@/lib/db";
 import { currentMonth, formatDate, initials, inr } from "@/lib/utils";
+import type { Payment } from "@/lib/types";
 import { ordinal } from "@/lib/rent";
 
 const EVENT_LABEL: Record<string, string> = {
@@ -48,6 +49,19 @@ const EVENT_LABEL: Record<string, string> = {
   note: "Note",
   checked_out: "Checked out",
 };
+
+function paymentTypes(p: Payment) {
+  const labels = [
+    p.base_rent > 0 ? "Base rent" : null,
+    p.electricity_charge > 0 ? "Electricity" : null,
+    p.food_charge > 0 ? "Food" : null,
+    p.other_charges > 0 ? "Other" : null,
+    p.security_deposit > 0 ? "Security deposit" : null,
+    p.joining_fee > 0 ? "Joining / admission" : null,
+  ].filter(Boolean);
+
+  return labels.length > 0 ? labels.join(" · ") : "Not recorded";
+}
 
 export const metadata: Metadata = { title: "Tenant" };
 
@@ -233,9 +247,8 @@ export default async function TenantDetail({
               <div key={p.id} className="flex items-center justify-between px-6 py-3">
                 <div>
                   <p className="text-sm font-semibold text-ink">{monthLabel(p.month_for)}</p>
-                  <p className="text-xs text-ink-muted tnum">
-                    {inr(p.amount_paid)} / {inr(p.total_amount)}
-                  </p>
+                  <p className="text-xs text-ink-muted tnum">{inr(p.amount_paid)} / {inr(p.total_amount)}</p>
+                  <p className="text-xs text-ink">Type: {paymentTypes(p)}</p>
                 </div>
                 <PaymentStatusPill status={p.status} />
               </div>

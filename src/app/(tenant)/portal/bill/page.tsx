@@ -19,6 +19,7 @@ import { requireRole } from "@/lib/guards";
 import { getMyJoiningFees, getMyPayments, getMyPg, getMyTenant } from "@/lib/db";
 import { computeBill } from "@/lib/money";
 import { currentMonth, formatDate, inr } from "@/lib/utils";
+import type { Payment } from "@/lib/types";
 
 export const metadata: Metadata = { title: "My Bill" };
 
@@ -28,6 +29,19 @@ function monthLabel(m: string) {
     month: "long",
     year: "numeric",
   });
+}
+
+function paymentTypes(p: Payment) {
+  const labels = [
+    p.base_rent > 0 ? "Base rent" : null,
+    p.electricity_charge > 0 ? "Electricity" : null,
+    p.food_charge > 0 ? "Food" : null,
+    p.other_charges > 0 ? "Other" : null,
+    p.security_deposit > 0 ? "Security deposit" : null,
+    p.joining_fee > 0 ? "Joining / admission" : null,
+  ].filter(Boolean);
+
+  return labels.length > 0 ? labels.join(" · ") : "Not recorded";
 }
 
 export default async function MyBill() {
@@ -44,7 +58,7 @@ export default async function MyBill() {
   ]);
   const month = currentMonth();
   const current = payments.find((p) => p.month_for === month);
-  const history = payments.filter((p) => p.month_for !== month);
+  const history = payments;
   // the tenant's check-in month carries the one-time deposit + joining fee
   const firstMonth = tenant.stay_type !== "daily" && tenant.checkin_date.slice(0, 7) === month;
   const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
@@ -367,6 +381,7 @@ export default async function MyBill() {
                   <div>
                     <p className="text-sm font-semibold text-ink">{monthLabel(p.month_for)}</p>
                     <p className="text-xs text-ink-muted tnum">{inr(p.amount_paid)}</p>
+                    <p className="text-xs text-ink">Type: {paymentTypes(p)}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     {p.amount_paid > 0 && (

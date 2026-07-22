@@ -69,9 +69,9 @@ function CreatePgForm({ onDone }: { onDone: () => void }) {
           </Select>
         </FieldRow>
         <FieldRow label="Plan" htmlFor="subscription_plan" className="col-span-2">
-          <Select id="subscription_plan" name="subscription_plan" defaultValue="pro">
-            <option value="starter">Starter — ₹5,000/yr</option>
-            <option value="pro">Pro — ₹8,000/yr</option>
+          <Select id="subscription_plan" name="subscription_plan" defaultValue="yearly">
+            <option value="monthly">Monthly — ₹5,000/mo</option>
+            <option value="yearly">Yearly — ₹8,000/yr</option>
             <option value="lifetime">Lifetime — ₹10,000</option>
           </Select>
         </FieldRow>

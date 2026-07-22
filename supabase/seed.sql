@@ -8,9 +8,9 @@
 
 insert into public.pg_accounts (id, owner_name, pg_name, mobile, location, pg_type, category, status, subscription_plan, subscription_expiry)
 values
-  ('11111111-1111-1111-1111-111111111111', 'Ravi Kumar',  'Sunrise Stay',      '+919845012345', 'Koramangala, Bengaluru', 'coliving', 'premium',  'active',    'pro',     '2027-04-01'),
-  ('22222222-2222-2222-2222-222222222222', 'Meena Iyer',  'Green Nest Hostel', '+919812233445', 'HSR Layout, Bengaluru',  'girls',    'standard', 'active',    'starter', '2026-12-01'),
-  ('33333333-3333-3333-3333-333333333333', 'Imran Shaikh','Metro Boys PG',     '+919900110022', 'Andheri East, Mumbai',   'boys',     'budget',   'suspended', 'starter', '2026-02-01')
+  ('11111111-1111-1111-1111-111111111111', 'Ravi Kumar',  'Sunrise Stay',      '+919845012345', 'Koramangala, Bengaluru', 'coliving', 'premium',  'active',    'yearly',  '2027-04-01'),
+  ('22222222-2222-2222-2222-222222222222', 'Meena Iyer',  'Green Nest Hostel', '+919812233445', 'HSR Layout, Bengaluru',  'girls',    'standard', 'active',    'monthly', '2026-12-01'),
+  ('33333333-3333-3333-3333-333333333333', 'Imran Shaikh','Metro Boys PG',     '+919900110022', 'Andheri East, Mumbai',   'boys',     'budget',   'suspended', 'monthly', '2026-02-01')
 on conflict (id) do nothing;
 
 insert into public.rooms (id, pg_id, room_number, floor, type, total_beds, occupied_beds, rent_amount, wifi_password, amenities)

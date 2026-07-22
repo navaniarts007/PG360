@@ -237,15 +237,15 @@ function HowItWorks() {
 function Pricing() {
   const plans = [
     {
-      name: "Starter",
+      name: "Monthly",
       price: "₹5,000",
-      cadence: "/year",
+      cadence: "/month",
       tagline: "For a single PG getting organised.",
       features: ["1 PG", "Up to 30 beds", "Rooms, tenants & rent", "Tenant portal", "Email support"],
       highlight: false,
     },
     {
-      name: "Pro",
+      name: "Yearly",
       price: "₹8,000",
       cadence: "/year",
       tagline: "For growing PGs that want it all.",
@@ -264,7 +264,7 @@ function Pricing() {
       price: "₹10,000",
       cadence: "once",
       tagline: "Pay once. Yours forever.",
-      features: ["Everything in Pro", "One-time payment", "Free updates", "Onboarding call", "WhatsApp support"],
+      features: ["Everything in Yearly", "One-time payment", "Free updates", "Onboarding call", "WhatsApp support"],
       highlight: false,
     },
   ];
