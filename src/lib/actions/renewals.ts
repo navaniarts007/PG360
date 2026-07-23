@@ -7,6 +7,8 @@ import { createClient } from "../supabase/server";
 import { logActivity } from "../activity";
 import { formatDate } from "../utils";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Record the outcome of a 30-day renewal check: the tenant confirmed they are
  *  extending another cycle, or that they will vacate on the cycle end date.
  *  Upserts the (tenant, cycle_end) row so the alert clears everywhere. */
@@ -30,33 +32,43 @@ export async function recordRenewalDecisionAction(formData: FormData): Promise<v
     .maybeSingle();
   if (!tenant) return;
 
-  await s.from("renewal_checks").upsert(
+  const decidedBy = UUID_REGEX.test(user.id) ? user.id : null;
+
+  const { error: upsertErr } = await s.from("renewal_checks").upsert(
     {
       pg_id: pid,
       tenant_id: tenantId,
       cycle_end: cycleEnd,
       decision,
       decided_at: new Date().toISOString(),
-      decided_by: user.id,
+      decided_by: decidedBy,
     },
     { onConflict: "tenant_id,cycle_end" },
   );
+
+  if (upsertErr) {
+    console.error("renewal_checks upsert error:", upsertErr);
+  }
 
   const outcome =
     decision === "extend"
       ? `confirmed extending past ${formatDate(cycleEnd)}`
       : `confirmed vacating on ${formatDate(cycleEnd)}`;
-  await Promise.all([
-    logActivity("Renewal check", `${(tenant as { name: string }).name} ${outcome}.`),
-    // keep the tenant's own record timeline in the loop (best-effort)
-    s.from("tenant_events").insert({
-      pg_id: pid,
-      tenant_id: tenantId,
-      type: "note",
-      detail: `Renewal check: ${outcome}`,
-      created_by: user.id,
-    }),
-  ]);
+
+  try {
+    await Promise.all([
+      logActivity("Renewal check", `${(tenant as { name: string }).name} ${outcome}.`),
+      s.from("tenant_events").insert({
+        pg_id: pid,
+        tenant_id: tenantId,
+        type: "note",
+        detail: `Renewal check: ${outcome}`,
+        created_by: decidedBy,
+      }),
+    ]);
+  } catch (err) {
+    console.error("Renewal decision activity insert error:", err);
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/calendar");

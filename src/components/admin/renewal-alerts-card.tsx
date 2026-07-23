@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarClock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { recordRenewalDecisionAction } from "@/lib/actions/renewals";
+import { RenewalButtons } from "./renewal-buttons";
 import type { RenewalAlert } from "@/lib/renewals";
 import { formatDate } from "@/lib/utils";
 
@@ -74,30 +74,7 @@ export function RenewalAlertsCard({ alerts }: { alerts: RenewalAlert[] }) {
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <form action={recordRenewalDecisionAction}>
-                    <input type="hidden" name="tenant_id" value={a.tenant_id} />
-                    <input type="hidden" name="cycle_end" value={a.cycle_end} />
-                    <input type="hidden" name="decision" value="extend" />
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-700 ring-1 ring-inset ring-teal-100 hover:bg-teal-100"
-                    >
-                      Staying
-                    </button>
-                  </form>
-                  <form action={recordRenewalDecisionAction}>
-                    <input type="hidden" name="tenant_id" value={a.tenant_id} />
-                    <input type="hidden" name="cycle_end" value={a.cycle_end} />
-                    <input type="hidden" name="decision" value="vacate" />
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-100 hover:bg-rose-100"
-                    >
-                      Leaving
-                    </button>
-                  </form>
-                </div>
+                <RenewalButtons tenantId={a.tenant_id} cycleEnd={a.cycle_end} />
               </div>
             );
           })}

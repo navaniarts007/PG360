@@ -8,11 +8,16 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata: Metadata = { title: "Set a new password" };
 
 export default async function ResetPasswordPage() {
-  // the recovery link routes through /auth/callback which sets the session
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data?.user) {
+      user = data.user;
+    }
+  } catch {
+    user = null;
+  }
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center px-5 py-10">

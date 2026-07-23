@@ -48,103 +48,106 @@ async function resolveActiveProperty(
 }
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data?.user) return null;
+    const user = data.user;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, role, pg_id, full_name, terms_accepted_at, permissions")
-    .eq("id", user.id)
-    .single();
-  if (!profile) return null;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role, pg_id, full_name, terms_accepted_at, permissions")
+      .eq("id", user.id)
+      .single();
+    if (!profile) return null;
 
-  const role = profile.role as Role;
-  const termsAcceptedAt = (profile as { terms_accepted_at: string | null }).terms_accepted_at ?? null;
-  const permissions = (profile as { permissions: SessionUser["permissions"] }).permissions ?? null;
+    const role = profile.role as Role;
+    const termsAcceptedAt = (profile as { terms_accepted_at: string | null }).terms_accepted_at ?? null;
+    const permissions = (profile as { permissions: SessionUser["permissions"] }).permissions ?? null;
 
-  // Super-admin "open / view as": when impersonating a PG, present an effective
-  // admin session scoped to it. RLS still sees the real super_admin role (via
-  // current_role()), so reads/writes are permitted by the super_admin policies.
-  if (role === "super_admin") {
-    const store = await cookies();
-    const pgId = store.get(IMPERSONATE_COOKIE)?.value;
-    if (pgId) {
-      const { data: pg } = await supabase
-        .from("pg_accounts")
-        .select("pg_name")
-        .eq("id", pgId)
-        .maybeSingle();
-      if (pg) {
-        return {
-          id: profile.id,
-          role: "admin",
-          pg_id: pgId,
-          tenant_id: null,
-          full_name: profile.full_name,
-          email: user.email ?? "",
-          properties: [{ id: pgId, name: pg.pg_name }],
-          activePropertyId: pgId,
-          suspended: false,
-          impersonating: { pgId, pgName: pg.pg_name },
-          termsAcceptedAt: new Date().toISOString(), // never gate an impersonating super-admin
-        };
+    // Super-admin "open / view as": when impersonating a PG, present an effective
+    // admin session scoped to it. RLS still sees the real super_admin role (via
+    // current_role()), so reads/writes are permitted by the super_admin policies.
+    if (role === "super_admin") {
+      const store = await cookies();
+      const pgId = store.get(IMPERSONATE_COOKIE)?.value;
+      if (pgId) {
+        const { data: pg } = await supabase
+          .from("pg_accounts")
+          .select("pg_name")
+          .eq("id", pgId)
+          .maybeSingle();
+        if (pg) {
+          return {
+            id: profile.id,
+            role: "admin",
+            pg_id: pgId,
+            tenant_id: null,
+            full_name: profile.full_name,
+            email: user.email ?? "",
+            properties: [{ id: pgId, name: pg.pg_name }],
+            activePropertyId: pgId,
+            suspended: false,
+            impersonating: { pgId, pgName: pg.pg_name },
+            termsAcceptedAt: new Date().toISOString(), // never gate an impersonating super-admin
+          };
+        }
       }
     }
+
+    // Role-dependent lookups in parallel. The pg `status` is fetched here too, so
+    // the per-page suspension check costs no extra round-trip (see requireRole).
+    const [tenantRes, membersRes] = await Promise.all([
+      role === "tenant"
+        ? supabase
+            .from("tenants")
+            .select("id, pg:pg_accounts(status)")
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      role === "admin" || role === "staff"
+        ? supabase
+            .from("property_members")
+            .select("property_id, pg:pg_accounts(pg_name, status)")
+            .eq("user_id", user.id)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const tenantRow = tenantRes.data as { id: string; pg: { status: string } | null } | null;
+    const tenant_id = role === "tenant" ? tenantRow?.id ?? null : null;
+
+    type MRow = { property_id: string; pg: { pg_name: string; status: string } | null };
+    const memberRows = (membersRes.data ?? []) as unknown as MRow[];
+    const properties: PropertyRef[] = memberRows
+      .map((m) => ({ id: m.property_id, name: m.pg?.pg_name ?? "Property" }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const statusById = new Map(memberRows.map((m) => [m.property_id, m.pg?.status]));
+
+    const activePropertyId = await resolveActiveProperty(role, profile.pg_id, properties);
+
+    let suspended = false;
+    if (role === "tenant") {
+      suspended = tenantRow?.pg?.status === "suspended";
+    } else if (role === "admin" || role === "staff") {
+      suspended = activePropertyId ? statusById.get(activePropertyId) === "suspended" : false;
+    }
+
+    return {
+      id: profile.id,
+      role,
+      pg_id: profile.pg_id,
+      tenant_id,
+      full_name: profile.full_name,
+      email: user.email ?? "",
+      properties,
+      activePropertyId,
+      suspended,
+      termsAcceptedAt,
+      permissions,
+    };
+  } catch {
+    return null;
   }
-
-  // Role-dependent lookups in parallel. The pg `status` is fetched here too, so
-  // the per-page suspension check costs no extra round-trip (see requireRole).
-  const [tenantRes, membersRes] = await Promise.all([
-    role === "tenant"
-      ? supabase
-          .from("tenants")
-          .select("id, pg:pg_accounts(status)")
-          .eq("user_id", user.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    role === "admin" || role === "staff"
-      ? supabase
-          .from("property_members")
-          .select("property_id, pg:pg_accounts(pg_name, status)")
-          .eq("user_id", user.id)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const tenantRow = tenantRes.data as { id: string; pg: { status: string } | null } | null;
-  const tenant_id = role === "tenant" ? tenantRow?.id ?? null : null;
-
-  type MRow = { property_id: string; pg: { pg_name: string; status: string } | null };
-  const memberRows = (membersRes.data ?? []) as unknown as MRow[];
-  const properties: PropertyRef[] = memberRows
-    .map((m) => ({ id: m.property_id, name: m.pg?.pg_name ?? "Property" }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const statusById = new Map(memberRows.map((m) => [m.property_id, m.pg?.status]));
-
-  const activePropertyId = await resolveActiveProperty(role, profile.pg_id, properties);
-
-  let suspended = false;
-  if (role === "tenant") {
-    suspended = tenantRow?.pg?.status === "suspended";
-  } else if (role === "admin" || role === "staff") {
-    suspended = activePropertyId ? statusById.get(activePropertyId) === "suspended" : false;
-  }
-
-  return {
-    id: profile.id,
-    role,
-    pg_id: profile.pg_id,
-    tenant_id,
-    full_name: profile.full_name,
-    email: user.email ?? "",
-    properties,
-    activePropertyId,
-    suspended,
-    termsAcceptedAt,
-    permissions,
-  };
 });
 
 /** The property an admin/staff is currently scoped to (for queries/writes). */

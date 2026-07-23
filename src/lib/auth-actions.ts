@@ -74,17 +74,19 @@ export async function updatePasswordAction(
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
   if (password !== confirm) return { error: "The two passwords don't match." };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Your reset link has expired — request a new one." };
+  try {
+    const supabase = await createClient();
+    const { data, error: userError } = await supabase.auth.getUser();
+    if (userError || !data?.user) return { error: "Your reset link has expired — request a new one." };
 
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: error.message };
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: error.message };
 
-  await signOut();
-  redirect("/login?reset=1");
+    await signOut();
+    redirect("/login?reset=1");
+  } catch {
+    return { error: "Your reset link has expired — request a new one." };
+  }
 }
 
 /** Change password while signed in — requires the current password. Unlike the
@@ -104,21 +106,24 @@ export async function changePasswordAction(
     return { error: "The new password must be different from the current one." };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email) return { error: "You're signed out — sign in and try again." };
+  try {
+    const supabase = await createClient();
+    const { data, error: userError } = await supabase.auth.getUser();
+    const email = data?.user?.email;
+    if (userError || !email) return { error: "You're signed out — sign in and try again." };
 
-  // Re-authenticate so a walk-up attacker on an open session can't take it over.
-  const { error: authError } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: current,
-  });
-  if (authError) return { error: "Your current password is incorrect." };
+    // Re-authenticate so a walk-up attacker on an open session can't take it over.
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password: current,
+    });
+    if (authError) return { error: "Your current password is incorrect." };
 
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: error.message };
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: error.message };
 
-  return { done: true };
+    return { done: true };
+  } catch {
+    return { error: "You're signed out — sign in and try again." };
+  }
 }

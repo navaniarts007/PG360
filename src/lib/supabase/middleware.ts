@@ -31,9 +31,13 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { response, user };
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data?.user) {
+      return { response, user: null };
+    }
+    return { response, user: data.user };
+  } catch {
+    return { response, user: null };
+  }
 }
