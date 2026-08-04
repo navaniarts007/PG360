@@ -123,9 +123,10 @@ export function firstProRataPeriod(
   const amount = isProRata ? Math.round((monthlyRent / 30) * days) : monthlyRent;
 
   const recorded = paidStatus.get(from.slice(0, 7));
-  const todayISO = today.toISOString().slice(0, 10);
+  const checkinMonth = from.slice(0, 7);
+  const curMonth = today.toISOString().slice(0, 7);
   const status: DueStatus =
-    recorded === "paid" ? "paid" : recorded === "partial" ? "partial" : from < todayISO ? "overdue" : "upcoming";
+    recorded === "paid" ? "paid" : recorded === "partial" ? "partial" : checkinMonth < curMonth ? "overdue" : "upcoming";
 
   return { fromISO: from, toISO: to, days, isProRata, dailyRate, amount, status };
 }
@@ -208,21 +209,30 @@ export function tenantSchedule(
   const lastMonth = curMonth >= startMonth ? curMonth : startMonth;
   const months = monthsFromTo(startMonth, lastMonth);
 
-  const timeline: MonthDue[] = months.map((month) => {
+  // Build the full month list (including upcoming) for next-due-date computation.
+  const allMonths: MonthDue[] = months.map((month) => {
     const dueDate = dueDateFor(month, rentDueDay);
     const recorded = paidStatus.get(month);
     let status: DueStatus;
     if (recorded === "paid") status = "paid";
     else if (recorded === "partial") status = "partial";
-    else status = dueDate < todayISO ? "overdue" : "upcoming";
+    // A month is "overdue" only when we've completely moved past it (i.e.
+    // today is in a later month). The CURRENT month always stays "Upcoming"
+    // even when its due date has already passed — the owner is still in August
+    // and can still collect without it being shown as overdue.
+    else status = month < curMonth ? "overdue" : "upcoming";
     return { month, dueDate, status };
   });
 
-  const pendingMonths = timeline.filter((t) => t.status === "overdue" || t.status === "partial").length;
+  const pendingMonths = allMonths.filter((t) => t.status === "overdue" || t.status === "partial").length;
 
-  // next collection date: the earliest still-owed month, else next month's due day
-  const owed = timeline.find((t) => t.status !== "paid");
+  // next collection date: the earliest still-owed month (upcoming counts), else next month's due day
+  const owed = allMonths.find((t) => t.status !== "paid");
   const nextDueDate = owed ? owed.dueDate : dueDateFor(addMonths(lastMonth, 1), rentDueDay);
+
+  // Include all months in the timeline so current month (e.g. August) shows as "Upcoming"
+  // and past unpaid months (e.g. July) show as "Overdue".
+  const timeline = allMonths;
 
   return { timeline, nextDueDate, pendingMonths };
 }

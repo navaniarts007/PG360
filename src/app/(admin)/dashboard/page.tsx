@@ -134,8 +134,8 @@ export default async function AdminDashboard() {
                     </span>
                     <div>
                       <p className="text-sm font-semibold text-ink">{row.name}</p>
-                      <p className={`text-xs ${row.due_date < todayISO ? "font-semibold text-rose-600" : "text-ink-muted"}`}>
-                        Due {formatDate(row.due_date)}{row.due_date < todayISO ? " · overdue" : ""}
+                      <p className={`text-xs ${!row.is_upcoming && row.due_date < todayISO ? "font-semibold text-rose-600" : "text-ink-muted"}`}>
+                        Due {formatDate(row.due_date)}{!row.is_upcoming && row.due_date < todayISO ? " · overdue" : ""}
                       </p>
                     </div>
                   </div>

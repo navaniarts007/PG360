@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, IndianRupee } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, IndianRupee, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { VerifyRejectButtons } from "@/components/admin/verify-reject-buttons";
 import { RecordPaymentDialog } from "@/components/admin/record-payment-dialog";
 import { requireRole } from "@/lib/guards";
 import { adminKpis, getMonthBill, getPayTenants, pendingFirstMonthPartials } from "@/lib/db";
+import { deletePaymentRecordAction } from "@/lib/actions/admin";
 import { addMonths, currentMonthRent } from "@/lib/rent";
 import { currentMonth, formatDate, inr, inrCompact } from "@/lib/utils";
 
@@ -40,6 +41,8 @@ export default async function PaymentsPage({
 
   const paidCount = rows.filter((r) => r.status === "paid").length;
   const pendingVerify = rows.filter((r) => r.paymentId && !r.verified && r.paid > 0).length;
+  // upcoming = due date still in the future & nothing recorded — not truly pending
+  const pendingCount = rows.filter((r) => !r.is_upcoming && r.status !== "paid").length;
 
   return (
     <div className="space-y-7">
@@ -78,7 +81,7 @@ export default async function PaymentsPage({
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryStat icon={IndianRupee} accent="teal" label="Collected" value={inrCompact(kpis.collected)} sub={`of ${inrCompact(kpis.billed)} billed`} />
-        <SummaryStat icon={Clock} accent="rose" label="Outstanding" value={inrCompact(kpis.due)} sub={`${rows.length - paidCount} tenants pending`} />
+        <SummaryStat icon={Clock} accent="rose" label="Outstanding" value={inrCompact(kpis.due)} sub={`${pendingCount} tenants pending`} />
         <SummaryStat icon={CheckCircle2} accent="gold" label="To verify" value={String(pendingVerify)} sub="tenant-submitted payments" />
       </div>
 
@@ -140,6 +143,7 @@ export default async function PaymentsPage({
               { label: "All", value: "" },
               { label: "Paid", value: "paid" },
               { label: "Pending", value: "pending" },
+              { label: "Upcoming", value: "upcoming" },
               { label: "To verify", value: "awaiting" },
             ],
           },
@@ -161,7 +165,7 @@ export default async function PaymentsPage({
             <tbody>
               {rows.map((r) => {
                 const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
-                const pstatus = awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
+                const pstatus = r.is_upcoming ? "upcoming" : awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
                 const cr = currentMonthRent(r, { securityDeposit: r.security_deposit });
                 // show the first-month total only when nothing's been recorded yet
                 const showProRata = cr.proRata && !r.paymentId;
@@ -220,7 +224,11 @@ export default async function PaymentsPage({
                       </span>
                     </td>
                     <td className="px-6 py-3.5">
-                      {r.paid <= 0 ? (
+                      {r.is_upcoming ? (
+                        <span className="inline-flex rounded-full bg-paper-2 px-2.5 py-0.5 text-xs font-semibold text-ink-muted ring-1 ring-line">
+                          Upcoming
+                        </span>
+                      ) : r.paid <= 0 ? (
                         <span className="inline-flex rounded-full bg-paper-2 px-2.5 py-0.5 text-xs font-semibold text-ink-muted ring-1 ring-line">
                           Unpaid
                         </span>
@@ -245,19 +253,32 @@ export default async function PaymentsPage({
                             <ExternalLink className="size-4" />
                           </a>
                         )}
-                        {awaiting ? (
+                        {r.is_upcoming ? (
+                          <span className="text-xs text-ink-muted">Due {r.due_date.slice(8, 10)}/{r.due_date.slice(5, 7)}</span>
+                        ) : awaiting ? (
                           <VerifyRejectButtons paymentId={r.paymentId!} />
                         ) : r.status === "paid" ? (
-                          <span className="text-xs font-semibold text-teal-600">✓ Paid</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-teal-600">✓ Paid</span>
+                            {r.paymentId && (
+                              <form action={deletePaymentRecordAction}>
+                                <input type="hidden" name="id" value={r.paymentId} />
+                                <button
+                                  type="submit"
+                                  title="Delete payment record"
+                                  className="grid size-7 place-items-center rounded-lg text-ink-muted transition hover:bg-rose-50 hover:text-rose-600"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </form>
+                            )}
+                          </div>
                         ) : (
                           <RecordPaymentDialog
                             tenants={payTenants}
                             month={month}
                             preselectId={r.tenant_id}
                             variant="collect"
-                            // this table is month-scoped: bill the current month.
-                            // when a partial bill exists, keep its total so the owner
-                            // just tops up the amount paid to clear the balance.
                             prefill={
                               r.paymentId
                                 ? { baseRent: r.total, days: 30, deposit: 0, amountPaid: r.paid }

@@ -18,13 +18,18 @@ export function DocumentsManager({
   tenantId,
   docs,
   aadhaarUrl,
+  aadhaarUrls,
 }: {
   tenantId: string;
   docs: SignedDoc[];
-  /** signed URL of the Aadhaar captured during onboarding (tenants.aadhaar_photo_url) */
+  /** signed URL(s) of the Aadhaar/ID photo(s) captured during onboarding */
   aadhaarUrl?: string | null;
+  aadhaarUrls?: string[] | null;
 }) {
-  const isEmpty = docs.length === 0 && !aadhaarUrl;
+  const kycList: string[] = aadhaarUrls && aadhaarUrls.length > 0 
+    ? aadhaarUrls 
+    : (aadhaarUrl ? [aadhaarUrl] : []);
+  const isEmpty = docs.length === 0 && kycList.length === 0;
   return (
     <Card className="p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -38,16 +43,18 @@ export function DocumentsManager({
         <p className="mt-3 text-sm text-ink-muted">No documents added yet.</p>
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {/* Aadhaar captured at onboarding — shown here so it need not be re-uploaded */}
-          {aadhaarUrl && (
-            <div className="overflow-hidden rounded-xl border border-clay-200 ring-1 ring-clay-100">
+          {/* ID photos captured at onboarding — shown here so they need not be re-uploaded */}
+          {kycList.map((url, idx) => (
+            <div key={idx} className="overflow-hidden rounded-xl border border-clay-200 ring-1 ring-clay-100">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={aadhaarUrl} alt="Aadhaar" className="h-28 w-full bg-paper-2 object-contain" />
+              <img src={url} alt={`ID photo ${idx + 1}`} className="h-28 w-full bg-paper-2 object-contain" />
               <div className="flex items-center justify-between gap-1 px-2.5 py-2">
-                <span className="truncate text-xs font-semibold text-ink">Aadhaar (on file)</span>
+                <span className="truncate text-xs font-semibold text-ink">
+                  ID photo {kycList.length > 1 ? `#${idx + 1}` : "(on file)"}
+                </span>
               </div>
             </div>
-          )}
+          ))}
           {docs.map((d) => (
             <div key={d.id} className="overflow-hidden rounded-xl border border-line">
               {d.url ? (

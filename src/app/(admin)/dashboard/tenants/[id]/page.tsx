@@ -18,6 +18,7 @@ import {
   PaymentStatusPill,
   TenantStatusPill,
 } from "@/components/ui/status";
+import { ChangeBedDialog } from "@/components/admin/change-bed-dialog";
 import { CheckoutSettlementDialog } from "@/components/admin/checkout-settlement-dialog";
 import { JoiningFeesCard } from "@/components/admin/joining-fees-card";
 import { RentCalendarCard } from "@/components/admin/rent-calendar-card";
@@ -31,6 +32,7 @@ import {
   getBedOptions,
   getJoiningFees,
   getKycSignedUrl,
+  getKycSignedUrls,
   getPayTenants,
   getPgPolicy,
   getTenantDetail,
@@ -81,16 +83,17 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrl, documents] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
     getPgPolicy(tenant.pg_id),
     listTenantEvents(id),
-    getKycSignedUrl(tenant.aadhaar_photo_url),
+    getKycSignedUrls(tenant.aadhaar_photo_url),
     listTenantDocumentsSigned(id),
   ]);
 
+  const aadhaarUrl = aadhaarUrls[0] ?? null;
   const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
   const onboardingTotal = tenant.rent_amount + tenant.security_deposit + joiningTotal;
 
@@ -131,6 +134,7 @@ export default async function TenantDetail({
           >
             <FileText className="size-3.5" /> Print record
           </Link>
+          <ChangeBedDialog tenant={tenant} beds={beds} />
           <AddTenantDialog beds={beds} tenant={tenant} />
           {tenant.status === "active" && (
             <>
@@ -257,7 +261,7 @@ export default async function TenantDetail({
         </Card>
 
         <div className="lg:col-span-3">
-          <DocumentsManager tenantId={tenant.id} docs={documents} aadhaarUrl={aadhaarUrl} />
+          <DocumentsManager tenantId={tenant.id} docs={documents} aadhaarUrl={aadhaarUrl} aadhaarUrls={aadhaarUrls} />
         </div>
 
         <div className="lg:col-span-3">

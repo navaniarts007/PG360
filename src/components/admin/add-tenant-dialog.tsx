@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Camera, ImageUp, Loader2, Pencil, UserPlus } from "lucide-react";
+import { AlertCircle, Camera, ImageUp, Loader2, Pencil, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
@@ -67,8 +67,11 @@ function TenantForm({
     {},
   );
   const [selfie, setSelfie] = useState<string | null>(tenant?.avatar_url ?? null); // check-in photo
-  const [photo, setPhoto] = useState<string | null>(tenant?.aadhaar_photo_url ?? null); // ID doc (storage path or legacy URL)
-  const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of a freshly picked ID
+  const initialPhotos = tenant?.aadhaar_photo_url
+    ? tenant.aadhaar_photo_url.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  const [idPhotos, setIdPhotos] = useState<string[]>(initialPhotos); // ID doc keys/urls (up to 4)
+  const [idPreviews, setIdPreviews] = useState<string[]>([]); // local previews for fresh picked files
   const [occupation, setOccupation] = useState(tenant?.occupation ?? "");
   const [stayType, setStayType] = useState<"monthly" | "daily">(tenant?.stay_type ?? "monthly");
   const [dRate, setDRate] = useState(tenant?.daily_rate ?? 0);
@@ -100,8 +103,13 @@ function TenantForm({
     try {
       // ID/Aadhaar → PRIVATE Supabase Storage (returns a storage path).
       if (which === "id") {
-        setIdPreview(URL.createObjectURL(file));
-        setPhoto(await uploadKyc(file));
+        if (idPhotos.length >= 4) {
+          throw new Error("Maximum 4 ID photos allowed.");
+        }
+        const blobUrl = URL.createObjectURL(file);
+        const key = await uploadKyc(file);
+        setIdPreviews((prev) => [...prev, blobUrl]);
+        setIdPhotos((prev) => [...prev, key]);
         return;
       }
       // Check-in selfie (not PII) stays on Cloudinary.
@@ -131,7 +139,7 @@ function TenantForm({
     <form action={action} className="space-y-4">
       {tenant && <input type="hidden" name="id" value={tenant.id} />}
       <input type="hidden" name="avatar_url" value={selfie ?? ""} />
-      <input type="hidden" name="aadhaar_photo_url" value={photo ?? ""} />
+      <input type="hidden" name="aadhaar_photo_url" value={idPhotos.join(",")} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
@@ -308,70 +316,90 @@ function TenantForm({
         )}
       </div>
 
-      {/* Aadhaar / ID photo */}
+      {/* Aadhaar / ID photo — up to 4 photos */}
       <div className="rounded-xl border border-line bg-paper-2/50 p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          ID photo (Aadhaar / proof)
-        </p>
-        <div className="flex items-center gap-3">
-          {idPreview ?? (photo && /^https?:/.test(photo) ? photo : null) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={idPreview ?? photo ?? ""}
-              alt="ID"
-              className="size-16 rounded-lg border border-line object-cover"
-            />
-          ) : photo ? (
-            <div className="grid size-16 place-items-center rounded-lg border border-line text-[0.6rem] font-semibold text-teal-600">
-              Saved
-            </div>
-          ) : (
-            <div className="grid size-16 place-items-center rounded-lg border border-dashed border-line-strong text-ink-muted">
-              <ImageUp className="size-5" />
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            ID photos (Aadhaar / proof)
+          </p>
+          <span className="text-xs text-ink-muted font-medium">
+            {idPhotos.length}/4 added
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 items-center">
+          {idPhotos.map((p, idx) => {
+            const preview = idPreviews[idx] || (/^https?:/.test(p) ? p : null);
+            return (
+              <div key={idx} className="relative group size-16 rounded-lg border border-line overflow-hidden bg-paper shadow-sm">
+                {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={preview} alt={`ID ${idx + 1}`} className="size-full object-cover" />
+                ) : (
+                  <div className="grid size-full place-items-center text-[0.6rem] font-semibold text-teal-600 bg-teal-50">
+                    Photo #{idx + 1}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdPhotos((prev) => prev.filter((_, i) => i !== idx));
+                    setIdPreviews((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  className="absolute top-1 right-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700 transition-colors"
+                  title="Remove photo"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            );
+          })}
+
+          {idPhotos.length < 4 && (
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void upload(f, "id");
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={idCameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void upload(f, "id");
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => idCameraRef.current?.click()}
+                disabled={busy === "id"}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-clay-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-clay-700 disabled:opacity-60"
+              >
+                {busy === "id" ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+                Take photo
+              </button>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={busy === "id"}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
+              >
+                <ImageUp className="size-3.5" />
+                Upload
+              </button>
             </div>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f, "id");
-            }}
-          />
-          {/* camera capture — opens the rear camera on phones */}
-          <input
-            ref={idCameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f, "id");
-            }}
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => idCameraRef.current?.click()}
-              disabled={busy === "id"}
-              className="inline-flex items-center gap-2 rounded-lg bg-clay-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-clay-700 disabled:opacity-60"
-            >
-              {busy === "id" ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
-              Take photo
-            </button>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy === "id"}
-              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-clay-600 disabled:opacity-60"
-            >
-              <ImageUp className="size-4" />
-              {photo ? "Replace" : "Upload"}
-            </button>
-          </div>
         </div>
         {uploadErr && <p className="mt-1.5 text-xs text-rose-600">{uploadErr}</p>}
       </div>

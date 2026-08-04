@@ -73,7 +73,7 @@ export default async function CalendarPage({
           ) : (
             <div className="max-h-[28rem] divide-y divide-line overflow-y-auto">
               {pending.map((r) => {
-                const overdue = r.due_date < todayISO;
+                const overdue = !r.is_upcoming && r.due_date < todayISO;
                 return (
                   <div key={r.tenant_id} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
                     <div className="min-w-0">

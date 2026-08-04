@@ -119,8 +119,11 @@ export async function listAllInvoices(): Promise<
  *  are returned as-is; a leftover Supabase path is signed from storage. */
 export async function getKycSignedUrl(value: string | null): Promise<string | null> {
   if (!value) return null;
-  if (value.startsWith("cld:")) {
-    const rest = value.slice(4);
+  // If multiple comma-separated keys/URLs, grab the first one for single URL usage
+  const first = value.split(",")[0]?.trim();
+  if (!first) return null;
+  if (first.startsWith("cld:")) {
+    const rest = first.slice(4);
     const dot = rest.lastIndexOf(".");
     const publicId = dot > 0 ? rest.slice(0, dot) : rest;
     const format = dot > 0 ? rest.slice(dot + 1) : "jpg";
@@ -132,10 +135,18 @@ export async function getKycSignedUrl(value: string | null): Promise<string | nu
       secure: true,
     });
   }
-  if (/^https?:\/\//i.test(value)) return value; // legacy public Cloudinary
+  if (/^https?:\/\//i.test(first)) return first; // legacy public Cloudinary
   const admin = createAdminClient(); // leftover private Supabase path
-  const { data } = await admin.storage.from("kyc").createSignedUrl(value, 60 * 10);
+  const { data } = await admin.storage.from("kyc").createSignedUrl(first, 60 * 10);
   return data?.signedUrl ?? null;
+}
+
+/** Get signed viewable URLs for multi-photo KYC fields (comma separated). */
+export async function getKycSignedUrls(value: string | null): Promise<string[]> {
+  if (!value) return [];
+  const parts = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const urls = await Promise.all(parts.map((p) => getKycSignedUrl(p)));
+  return urls.filter((u): u is string => u !== null);
 }
 
 /** Activity log for the active property (admin/staff view). */
@@ -691,6 +702,9 @@ export interface BillRow {
   rent_due_day: number;
   checkin_date: string;
   due_date: string;
+  /** True when the due date is still in the future and nothing has been recorded yet.
+   *  The owner should see these as "Upcoming" rather than overdue. */
+  is_upcoming: boolean;
 }
 
 /** Every active tenant's bill for the month — a real invoice row if recorded,
@@ -722,6 +736,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
     stay_days: number | null;
     room: { room_number: string } | null;
   };
+  const todayISO = new Date().toISOString().slice(0, 10);
   const order = { due: 0, partial: 1, paid: 2 } as const;
   return ((tenants ?? []) as unknown as T[])
     .map((t): BillRow | null => {
@@ -751,6 +766,7 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
           rent_due_day: t.rent_due_day,
           checkin_date: t.checkin_date,
           due_date: t.checkin_date, // collect on arrival
+          is_upcoming: false, // day-wise: collect on arrival, never upcoming
         };
       }
 
@@ -763,8 +779,14 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         foodOptOut: t.food_opt_out,
         foodOptOutDeduction: foodDeduction,
       });
+      const dueDate = dueDateFor(month, t.rent_due_day);
       const total = p?.total_amount ?? derived.total;
       const paid = p?.amount_paid ?? 0;
+      // Upcoming: nothing recorded AND we're still in this billing month (or it's
+      // a future month). The due date having passed within the same month does NOT
+      // make it overdue — only when we've moved to a later month is it overdue.
+      const todayMonth = todayISO.slice(0, 7);
+      const isUpcoming = !p && month >= todayMonth;
       return {
         tenant_id: t.id,
         name: t.name,
@@ -782,11 +804,16 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         stay_type: t.stay_type,
         rent_due_day: t.rent_due_day,
         checkin_date: t.checkin_date,
-        due_date: dueDateFor(month, t.rent_due_day),
+        due_date: dueDate,
+        is_upcoming: isUpcoming,
       };
     })
     .filter((r): r is BillRow => r !== null)
-    .sort((a, b) => order[a.status] - order[b.status] || b.balance - a.balance);
+    // upcoming rows go last (after paid), overdue first
+    .sort((a, b) => {
+      if (a.is_upcoming !== b.is_upcoming) return a.is_upcoming ? 1 : -1;
+      return order[a.status] - order[b.status] || b.balance - a.balance;
+    });
 }
 
 export interface EarlyPartialDue {
@@ -990,8 +1017,8 @@ export async function myRentReminder(): Promise<{
   }
   const paid = cur?.amount_paid ?? 0;
   const balance = Math.max(total - paid, 0);
-  if (balance <= 0) return null;
-  const overdue = new Date().toISOString().slice(0, 10) > dueDate;
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const overdue = month < curMonth;
   return { balance, total, dueDate, overdue };
 }
 

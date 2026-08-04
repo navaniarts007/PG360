@@ -1162,6 +1162,19 @@ export async function rejectPaymentAction(formData: FormData): Promise<void> {
   revalidatePath("/portal/bill");
 }
 
+/** Owner deletes a payment record so the month becomes unpaid/upcoming again. */
+export async function deletePaymentRecordAction(formData: FormData): Promise<void> {
+  await requireRole(["admin", "staff"]);
+  const id = String(formData.get("id"));
+  if (!id) return;
+  const s = await createClient();
+  await s.from("payments").delete().eq("id", id);
+  revalidatePath("/dashboard/payments");
+  revalidatePath("/dashboard");
+  revalidatePath("/portal/bill");
+}
+
+
 /** Nudge a tenant about a pending bill via an in-app notification. (Groundwork
  *  for WhatsApp reminders later — same trigger, different channel.) */
 export async function remindTenantAction(formData: FormData): Promise<void> {
