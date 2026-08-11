@@ -18,7 +18,7 @@ export type SignResult =
     }
   | { ok: false; error: string };
 
-const FOLDERS = ["pg360/payments", "pg360/qr", "pg360/avatars", "pg360/kyc"] as const;
+const FOLDERS = ["pg360/payments", "pg360/qr", "pg360/avatars", "pg360/kyc", "pg360/docs"] as const;
 type Folder = (typeof FOLDERS)[number];
 
 /** Returns a short-lived signature so the browser can upload directly to
@@ -146,3 +146,26 @@ export async function savePaymentScreenshotAction(
   revalidatePath("/dashboard/payments");
   return { ok: true };
 }
+
+/** Save or update the Rules & Regulations document URL for the current PG property. */
+export async function saveRulesDocumentAction(
+  _prev: { ok?: boolean; error?: string },
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const docUrl = String(formData.get("rules_doc_url") ?? "").trim();
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("pg_accounts")
+    .update({ rules_doc_url: docUrl || null })
+    .eq("id", pid);
+
+  if (error) return { error: humanizeDbError(error) };
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/portal");
+  return { ok: true };
+}
+

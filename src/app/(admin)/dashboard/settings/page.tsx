@@ -6,6 +6,7 @@ import { MoneySettingsForm } from "@/components/admin/money-settings-form";
 import { WifiNetworksCard } from "@/components/admin/wifi-networks-card";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { AgreementSectionsCard } from "@/components/admin/agreement-sections-card";
+import { RulesRegulationsCard } from "@/components/admin/rules-regulations-card";
 import { ChangePasswordCard } from "@/components/app/change-password-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
@@ -76,6 +77,15 @@ export default async function SettingsPage() {
         </h2>
         <div className="max-w-2xl">
           <AgreementSectionsCard sections={sections} ownerSignatureUrl={ownerSignatureUrl} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
+          Rules &amp; Regulations
+        </h2>
+        <div className="max-w-2xl">
+          <RulesRegulationsCard rulesDocUrl={pg.rules_doc_url ?? null} />
         </div>
       </section>
 
