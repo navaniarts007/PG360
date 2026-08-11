@@ -75,7 +75,10 @@ export async function listMyProperties(): Promise<PgAccount[]> {
 export async function getPgAccount(id: string): Promise<PgAccount | null> {
   const s = await sb();
   const { data } = await s.from("pg_accounts").select("*").eq("id", id).maybeSingle();
-  return (data as PgAccount) ?? null;
+  if (!data) return null;
+  const acct = data as PgAccount & { settings?: Record<string, any> };
+  acct.rules_doc_url = acct.rules_doc_url || acct.settings?.rules_doc_url || null;
+  return acct;
 }
 
 /** Recent tenant activity for one PG (super-admin account view). */

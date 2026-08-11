@@ -158,14 +158,27 @@ export async function saveRulesDocumentAction(
   const docUrl = String(formData.get("rules_doc_url") ?? "").trim();
 
   const admin = createAdminClient();
-  const { error } = await admin
+  // Try direct column update first
+  let { error } = await admin
     .from("pg_accounts")
     .update({ rules_doc_url: docUrl || null })
     .eq("id", pid);
 
-  if (error) return { error: humanizeDbError(error) };
+  // If column rules_doc_url doesn't exist in Supabase DB schema yet, fallback to settings JSONB
+  if (error) {
+    const { data: pg } = await admin.from("pg_accounts").select("settings").eq("id", pid).single();
+    const currentSettings = (pg?.settings as Record<string, any>) ?? {};
+    const updatedSettings = { ...currentSettings, rules_doc_url: docUrl || null };
+    const { error: settingsErr } = await admin
+      .from("pg_accounts")
+      .update({ settings: updatedSettings })
+      .eq("id", pid);
+    if (settingsErr) return { error: humanizeDbError(settingsErr) };
+  }
+
   revalidatePath("/dashboard/settings");
   revalidatePath("/portal");
+  revalidatePath("/portal/account");
   return { ok: true };
 }
 
