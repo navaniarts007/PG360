@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/guards";
-import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl, listTenantDocumentsSigned } from "@/lib/db";
+import { getTenantDetail, getPgAccount, listTenantEvents, getKycSignedUrl, listTenantDocumentsSigned, getTenantAgreement } from "@/lib/db";
 import { DOC_LABELS } from "@/lib/types";
 import { formatDate, inr } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
@@ -30,14 +30,20 @@ export default async function RecordPage({
   const detail = await getTenantDetail(id);
   if (!detail) notFound();
   const { tenant, room } = detail;
-  const [pg, events, aadhaarUrl, documents] = await Promise.all([
+  const [pg, events, aadhaarUrl, documents, agreement] = await Promise.all([
     getPgAccount(tenant.pg_id),
     listTenantEvents(id),
     getKycSignedUrl(tenant.aadhaar_photo_url),
     listTenantDocumentsSigned(id),
+    getTenantAgreement(id),
   ]);
 
   const rulesDocUrl = pg?.rules_doc_url ?? ((pg?.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
+
+  const [ownerSig, tenantSig] = await Promise.all([
+    getKycSignedUrl(pg?.owner_signature_url ?? null),
+    getKycSignedUrl(agreement?.signature_url ?? null),
+  ]);
 
   const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
@@ -229,25 +235,64 @@ export default async function RecordPage({
             </section>
           )}
 
-          {/* Rules & Regulations document */}
+          {/* Rules & Regulations document — A4 with signatures */}
           {rulesDocUrl && (
             <section className="mt-6 break-inside-avoid">
               <h2 className="font-display text-lg text-ink">Rules &amp; Regulations</h2>
-              <div className="mt-2 overflow-hidden rounded-xl border border-line p-3 bg-paper-2/20">
+
+              {/* A4 paper preview */}
+              <div
+                className="mt-3 mx-auto w-full overflow-hidden rounded-lg bg-white border border-line shadow-sm"
+                style={{ aspectRatio: "1 / 1.414" }}
+              >
                 {/\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={rulesDocUrl}
                     alt="Rules & Regulations"
                     loading="eager"
-                    className="max-h-80 w-full object-contain bg-white rounded-lg border border-line"
+                    className="h-full w-full object-contain"
                     style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
                   />
                 ) : (
-                  <p className="text-xs text-ink-soft">
-                    Rules &amp; Regulations Document: <a href={rulesDocUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-clay-600 underline">{rulesDocUrl}</a>
+                  <p className="flex h-full items-center justify-center text-xs text-ink-muted">
+                    <a href={rulesDocUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-clay-600 underline">View Document</a>
                   </p>
                 )}
+              </div>
+
+              {/* Signatures */}
+              <div className="mt-5 grid grid-cols-2 gap-6 border-t border-line pt-5">
+                {/* Owner */}
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Owner / Manager</p>
+                  <div className="flex h-20 items-center justify-center rounded-lg border border-line bg-paper-2/30">
+                    {ownerSig ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={ownerSig} alt="Owner signature" className="max-h-16 object-contain"
+                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />
+                    ) : (
+                      <span className="text-xs text-ink-muted">—</span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-xs text-ink-soft">{pg?.owner_name ?? "Owner"}{pg?.pg_name ? ` · ${pg.pg_name}` : ""}</p>
+                  {pg?.property_address && <p className="text-xs text-ink-muted">{pg.property_address}</p>}
+                </div>
+
+                {/* Tenant */}
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Resident</p>
+                  <div className="flex h-20 items-center justify-center rounded-lg border border-line bg-paper-2/30">
+                    {tenantSig ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={tenantSig} alt="Tenant signature" className="max-h-16 object-contain"
+                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />
+                    ) : (
+                      <span className="text-xs text-ink-muted">—</span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-xs text-ink-soft">{tenant.name}</p>
+                </div>
               </div>
             </section>
           )}
@@ -262,10 +307,7 @@ export default async function RecordPage({
               {pg?.pg_name}
               {pg?.property_address ? ` · ${pg.property_address}` : ""}
             </p>
-            <div className="text-center">
-              <div className="h-12 w-40 border-b border-ink/40" />
-              <p className="mt-1 text-xs text-ink-muted">Owner signature</p>
-            </div>
+            <p className="text-xs text-ink-muted">Printed from PG360</p>
           </footer>
         </article>
       </div>

@@ -33,10 +33,12 @@ import { requireRole } from "@/lib/guards";
 import {
   getBedOptions,
   getJoiningFees,
+  getKycSignedUrl,
   getKycSignedUrls,
   getPayTenants,
   getPgAccount,
   getPgPolicy,
+  getTenantAgreement,
   getTenantDetail,
   listTenantDocumentsSigned,
   listTenantEvents,
@@ -85,7 +87,7 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount, agreement] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
@@ -94,6 +96,12 @@ export default async function TenantDetail({
     getKycSignedUrls(tenant.aadhaar_photo_url),
     listTenantDocumentsSigned(id),
     getPgAccount(tenant.pg_id),
+    getTenantAgreement(id),
+  ]);
+
+  const [ownerSig, tenantSig] = await Promise.all([
+    getKycSignedUrl(pgAccount?.owner_signature_url ?? null),
+    getKycSignedUrl(agreement?.signature_url ?? null),
   ]);
 
   const rulesDocUrl = pgAccount?.rules_doc_url ?? ((pgAccount?.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
@@ -265,7 +273,15 @@ export default async function TenantDetail({
         </Card>
 
         <div className="lg:col-span-3">
-          <TenantRulesCard rulesDocUrl={rulesDocUrl} />
+          <TenantRulesCard
+            rulesDocUrl={rulesDocUrl}
+            ownerSig={ownerSig}
+            tenantSig={tenantSig}
+            tenantName={tenant.name}
+            ownerName={pgAccount?.owner_name ?? "Owner"}
+            pgName={pgAccount?.pg_name ?? ""}
+            pgAddress={pgAccount?.property_address ?? null}
+          />
         </div>
 
         <div className="lg:col-span-3">
@@ -280,18 +296,37 @@ export default async function TenantDetail({
   );
 }
 
-function TenantRulesCard({ rulesDocUrl }: { rulesDocUrl: string | null }) {
-  const isImage = rulesDocUrl ? /\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/") : false;
+function TenantRulesCard({
+  rulesDocUrl,
+  ownerSig,
+  tenantSig,
+  tenantName,
+  ownerName,
+  pgName,
+  pgAddress,
+}: {
+  rulesDocUrl: string | null;
+  ownerSig: string | null;
+  tenantSig: string | null;
+  tenantName: string;
+  ownerName: string;
+  pgName: string;
+  pgAddress: string | null;
+}) {
+  const isImage = rulesDocUrl
+    ? /\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/")
+    : false;
 
   return (
-    <Card className="p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
+    <Card className="overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-clay-50 text-clay-600 ring-1 ring-clay-100">
             <ScrollText className="size-5" />
           </span>
           <div>
-            <h3 className="text-lg text-ink font-semibold">Rules &amp; Regulations</h3>
+            <h3 className="text-lg font-semibold text-ink">Rules &amp; Regulations</h3>
             <p className="text-xs text-ink-muted">Official house rules document for this resident</p>
           </div>
         </div>
@@ -308,34 +343,75 @@ function TenantRulesCard({ rulesDocUrl }: { rulesDocUrl: string | null }) {
       </div>
 
       {rulesDocUrl ? (
-        <div className="mt-4 overflow-hidden rounded-xl border border-line bg-paper-2/40 p-4">
-          {isImage ? (
-            <div className="relative group overflow-hidden rounded-lg bg-white border border-line p-2 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={rulesDocUrl}
-                alt="Rules & Regulations"
-                className="mx-auto max-h-72 w-auto object-contain rounded-md"
-              />
+        <>
+          {/* A4 document area */}
+          <div className="border-t border-line bg-[#f5f5f0] px-4 py-5 sm:px-8">
+            {/* A4 paper: 210mm × 297mm ≈ aspect ratio 1:√2 ≈ 1:1.414 */}
+            <div
+              className="mx-auto w-full max-w-[794px] overflow-hidden rounded-lg bg-white shadow-[0_4px_24px_rgba(0,0,0,0.12)] ring-1 ring-black/5"
+              style={{ aspectRatio: "1 / 1.414" }}
+            >
+              {isImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={rulesDocUrl}
+                  alt="Rules & Regulations"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <iframe
+                  src={rulesDocUrl}
+                  title="Rules & Regulations"
+                  className="h-full w-full border-0"
+                />
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-3 p-2">
-              <FileText className="size-6 text-clay-600 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink truncate">Rules &amp; Regulations Document</p>
-                <p className="text-xs text-ink-muted truncate">{rulesDocUrl}</p>
+          </div>
+
+          {/* Signatures row */}
+          <div className="border-t border-line px-5 py-5 sm:px-8">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-ink-muted">Signatures</p>
+            <div className="grid grid-cols-2 gap-6">
+              {/* Owner */}
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Owner / Manager</p>
+                <div className="flex h-24 items-center justify-center rounded-xl border border-line bg-paper-2/40">
+                  {ownerSig ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={ownerSig} alt="Owner signature" className="max-h-20 object-contain" />
+                  ) : (
+                    <span className="text-xs text-ink-muted">No signature yet</span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">{ownerName}{pgName ? ` · ${pgName}` : ""}</p>
+                {pgAddress && <p className="text-xs text-ink-muted">{pgAddress}</p>}
+              </div>
+
+              {/* Tenant */}
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Resident</p>
+                <div className="flex h-24 items-center justify-center rounded-xl border border-line bg-paper-2/40">
+                  {tenantSig ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={tenantSig} alt="Tenant signature" className="max-h-20 object-contain" />
+                  ) : (
+                    <span className="text-xs text-ink-muted">No signature yet</span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">{tenantName}</p>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        </>
       ) : (
-        <div className="mt-4 rounded-xl border border-dashed border-line p-4 text-center">
-          <p className="text-xs text-ink-muted">No Rules &amp; Regulations document uploaded yet.</p>
+        <div className="border-t border-line px-5 py-8 text-center">
+          <ScrollText className="mx-auto size-9 text-ink-muted" />
+          <p className="mt-2 text-sm text-ink-muted">No Rules &amp; Regulations document uploaded yet.</p>
           <Link
             href="/dashboard/settings"
-            className="mt-1.5 inline-block text-xs font-semibold text-clay-600 hover:underline"
+            className="mt-2 inline-block text-xs font-semibold text-clay-600 hover:underline"
           >
-            Upload Rules &amp; Regulations in Settings →
+            Upload in Settings →
           </Link>
         </div>
       )}
