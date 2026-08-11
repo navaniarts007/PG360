@@ -39,7 +39,6 @@ export default async function PaymentsPage({
     pendingFirstMonthPartials(month),
   ]);
 
-  const paidCount = rows.filter((r) => r.status === "paid").length;
   const pendingVerify = rows.filter((r) => r.paymentId && !r.verified && r.paid > 0).length;
   // upcoming = due date still in the future & nothing recorded — not truly pending
   const pendingCount = rows.filter((r) => !r.is_upcoming && r.status !== "paid").length;

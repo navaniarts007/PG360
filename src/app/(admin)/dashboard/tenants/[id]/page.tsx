@@ -31,7 +31,6 @@ import { requireRole } from "@/lib/guards";
 import {
   getBedOptions,
   getJoiningFees,
-  getKycSignedUrl,
   getKycSignedUrls,
   getPayTenants,
   getPgPolicy,
