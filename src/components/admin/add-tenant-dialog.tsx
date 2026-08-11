@@ -566,6 +566,7 @@ function InlineSigPad({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const drawing = useRef(false);
   const dirty = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -680,6 +681,22 @@ function InlineSigPad({
               <Eraser className="size-3.5" /> Clear
             </button>
             <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }}
+            />
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
+            >
+              <Camera className="size-3.5" /> Take photo
+            </button>
+            <input
               ref={fileRef}
               type="file"
               accept="image/*"
@@ -692,7 +709,7 @@ function InlineSigPad({
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
             >
-              <ImageUp className="size-3.5" /> Upload image
+              <ImageUp className="size-3.5" /> Upload file
             </button>
           </div>
         </>

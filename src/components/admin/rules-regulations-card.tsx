@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   ExternalLink,
   FileText,
@@ -37,6 +38,7 @@ export function RulesRegulationsCard({
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
@@ -146,6 +148,18 @@ export function RulesRegulationsCard({
             </p>
 
             <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleFileUpload(f);
+                e.target.value = "";
+              }}
+            />
+            <input
               ref={fileRef}
               type="file"
               accept=".pdf,.doc,.docx,image/*"
@@ -153,10 +167,27 @@ export function RulesRegulationsCard({
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void handleFileUpload(f);
+                e.target.value = "";
               }}
             />
 
             <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={uploading}
+                onClick={() => cameraRef.current?.click()}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Camera className="size-4" /> Take Photo
+                  </>
+                )}
+              </Button>
               <Button
                 type="button"
                 variant="outline"

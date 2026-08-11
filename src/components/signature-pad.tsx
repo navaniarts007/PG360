@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Check, Eraser, ImageUp, Loader2, PenLine } from "lucide-react";
+import { Camera, Check, Eraser, ImageUp, Loader2, PenLine } from "lucide-react";
 import { uploadSignature } from "@/lib/upload-client";
 
 /** Capture a signature by drawing on a canvas OR uploading an image. On save it
@@ -15,6 +15,7 @@ export function SignaturePad({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const drawing = useRef(false);
   const dirty = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -141,6 +142,26 @@ export function SignaturePad({
           <Eraser className="size-4" /> Clear
         </button>
         <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onFile(f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => cameraRef.current?.click()}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
+        >
+          <Camera className="size-4" /> Take photo
+        </button>
+        <input
           ref={fileRef}
           type="file"
           accept="image/*"
@@ -148,6 +169,7 @@ export function SignaturePad({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onFile(f);
+            e.target.value = "";
           }}
         />
         <button
@@ -156,7 +178,7 @@ export function SignaturePad({
           disabled={busy}
           className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
         >
-          <ImageUp className="size-4" /> Upload instead
+          <ImageUp className="size-4" /> Upload file
         </button>
       </div>
     </div>
