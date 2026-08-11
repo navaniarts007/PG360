@@ -86,9 +86,11 @@ export default async function RecordPage({
     <main className="min-h-screen bg-paper-2 px-4 py-8 print:bg-white print:p-0">
       <style>{`@media print {
         .no-print { display:none !important; }
-        @page { margin: 14mm; }
+        @page { margin: 14mm; size: A4; }
         img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         section { break-inside: avoid; }
+        .rules-doc-wrapper { max-height: 60vh !important; }
+        .sigs-grid { break-inside: avoid; page-break-inside: avoid; }
       }`}</style>
       <div className="mx-auto max-w-2xl">
         <div className="no-print mb-5 flex items-center justify-between">
@@ -237,12 +239,12 @@ export default async function RecordPage({
 
           {/* Rules & Regulations document — A4 with signatures */}
           {rulesDocUrl && (
-            <section className="mt-6 break-inside-avoid">
+            <section className="mt-6">
               <h2 className="font-display text-lg text-ink">Rules &amp; Regulations</h2>
 
-              {/* A4 paper preview */}
+              {/* A4 paper preview — capped in print so signatures fit on same sheet */}
               <div
-                className="mt-3 mx-auto w-full overflow-hidden rounded-lg bg-white border border-line shadow-sm"
+                className="rules-doc-wrapper mt-3 mx-auto w-full overflow-hidden rounded-lg bg-white border border-line shadow-sm"
                 style={{ aspectRatio: "1 / 1.414" }}
               >
                 {/\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/") ? (
@@ -261,37 +263,51 @@ export default async function RecordPage({
                 )}
               </div>
 
-              {/* Signatures */}
-              <div className="mt-5 grid grid-cols-2 gap-6 border-t border-line pt-5">
+              {/* Signatures — break-inside-avoid so they never split across pages */}
+              <div className="sigs-grid mt-5 grid grid-cols-2 gap-6 border-t border-line pt-5">
                 {/* Owner */}
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Owner / Manager</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Owner / Manager</p>
                   <div className="flex h-20 items-center justify-center rounded-lg border border-line bg-paper-2/30">
                     {ownerSig ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ownerSig} alt="Owner signature" className="max-h-16 object-contain"
-                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />
+                      <img
+                        src={ownerSig}
+                        alt="Owner signature"
+                        className="max-h-16 object-contain"
+                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+                      />
                     ) : (
                       <span className="text-xs text-ink-muted">—</span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-xs text-ink-soft">{pg?.owner_name ?? "Owner"}{pg?.pg_name ? ` · ${pg.pg_name}` : ""}</p>
-                  {pg?.property_address && <p className="text-xs text-ink-muted">{pg.property_address}</p>}
+                  <p className="mt-2 border-t border-ink/20 pt-1.5 text-xs font-medium text-ink">
+                    {pg?.owner_name ?? "Owner"}{pg?.pg_name ? ` · ${pg.pg_name}` : ""}
+                  </p>
+                  {pg?.property_address && (
+                    <p className="text-xs text-ink-muted">{pg.property_address}</p>
+                  )}
                 </div>
 
                 {/* Tenant */}
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Resident</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Resident</p>
                   <div className="flex h-20 items-center justify-center rounded-lg border border-line bg-paper-2/30">
                     {tenantSig ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={tenantSig} alt="Tenant signature" className="max-h-16 object-contain"
-                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />
+                      <img
+                        src={tenantSig}
+                        alt="Tenant signature"
+                        className="max-h-16 object-contain"
+                        style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+                      />
                     ) : (
                       <span className="text-xs text-ink-muted">—</span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-xs text-ink-soft">{tenant.name}</p>
+                  <p className="mt-2 border-t border-ink/20 pt-1.5 text-xs font-medium text-ink">
+                    {tenant.name}
+                  </p>
                 </div>
               </div>
             </section>
