@@ -85,7 +85,7 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents] = await Promise.all([
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount] = await Promise.all([
     getPayTenants(),
     getBedOptions(),
     getJoiningFees(id),
@@ -93,8 +93,10 @@ export default async function TenantDetail({
     listTenantEvents(id),
     getKycSignedUrls(tenant.aadhaar_photo_url),
     listTenantDocumentsSigned(id),
+    getPgAccount(tenant.pg_id),
   ]);
 
+  const rulesDocUrl = pgAccount?.rules_doc_url ?? ((pgAccount?.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
   const aadhaarUrl = aadhaarUrls[0] ?? null;
   const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
   const onboardingTotal = tenant.rent_amount + tenant.security_deposit + joiningTotal;
@@ -263,6 +265,10 @@ export default async function TenantDetail({
         </Card>
 
         <div className="lg:col-span-3">
+          <TenantRulesCard rulesDocUrl={rulesDocUrl} />
+        </div>
+
+        <div className="lg:col-span-3">
           <DocumentsManager tenantId={tenant.id} docs={documents} aadhaarUrl={aadhaarUrl} aadhaarUrls={aadhaarUrls} />
         </div>
 
@@ -271,6 +277,69 @@ export default async function TenantDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+function TenantRulesCard({ rulesDocUrl }: { rulesDocUrl: string | null }) {
+  const isImage = rulesDocUrl ? /\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/") : false;
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl bg-clay-50 text-clay-600 ring-1 ring-clay-100">
+            <ScrollText className="size-5" />
+          </span>
+          <div>
+            <h3 className="text-lg text-ink font-semibold">Rules &amp; Regulations</h3>
+            <p className="text-xs text-ink-muted">Official house rules document for this resident</p>
+          </div>
+        </div>
+        {rulesDocUrl && (
+          <a
+            href={rulesDocUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-clay-600 transition-colors hover:bg-paper-2"
+          >
+            <ExternalLink className="size-3.5" /> View / Download
+          </a>
+        )}
+      </div>
+
+      {rulesDocUrl ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-line bg-paper-2/40 p-4">
+          {isImage ? (
+            <div className="relative group overflow-hidden rounded-lg bg-white border border-line p-2 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={rulesDocUrl}
+                alt="Rules & Regulations"
+                className="mx-auto max-h-72 w-auto object-contain rounded-md"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-2">
+              <FileText className="size-6 text-clay-600 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ink truncate">Rules &amp; Regulations Document</p>
+                <p className="text-xs text-ink-muted truncate">{rulesDocUrl}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-line p-4 text-center">
+          <p className="text-xs text-ink-muted">No Rules &amp; Regulations document uploaded yet.</p>
+          <Link
+            href="/dashboard/settings"
+            className="mt-1.5 inline-block text-xs font-semibold text-clay-600 hover:underline"
+          >
+            Upload Rules &amp; Regulations in Settings →
+          </Link>
+        </div>
+      )}
+    </Card>
   );
 }
 

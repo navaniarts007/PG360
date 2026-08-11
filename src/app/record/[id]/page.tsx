@@ -37,6 +37,8 @@ export default async function RecordPage({
     listTenantDocumentsSigned(id),
   ]);
 
+  const rulesDocUrl = pg?.rules_doc_url ?? ((pg?.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
+
   const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
@@ -223,6 +225,29 @@ export default async function RecordPage({
                     </p>
                   </div>
                 ))}
+              </div>
+            </section>
+          )}
+
+          {/* Rules & Regulations document */}
+          {rulesDocUrl && (
+            <section className="mt-6 break-inside-avoid">
+              <h2 className="font-display text-lg text-ink">Rules &amp; Regulations</h2>
+              <div className="mt-2 overflow-hidden rounded-xl border border-line p-3 bg-paper-2/20">
+                {/\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={rulesDocUrl}
+                    alt="Rules & Regulations"
+                    loading="eager"
+                    className="max-h-80 w-full object-contain bg-white rounded-lg border border-line"
+                    style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+                  />
+                ) : (
+                  <p className="text-xs text-ink-soft">
+                    Rules &amp; Regulations Document: <a href={rulesDocUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-clay-600 underline">{rulesDocUrl}</a>
+                  </p>
+                )}
               </div>
             </section>
           )}
