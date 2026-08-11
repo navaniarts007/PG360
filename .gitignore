@@ -32,6 +32,9 @@ tmp-*.log
 # vercel
 .vercel
 
+# one-off data-fix / rollback SQL against live tenant data — keep local
+/.backups/
+
 # editor
 .idea
 .vscode/*
