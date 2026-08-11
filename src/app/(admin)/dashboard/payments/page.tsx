@@ -142,7 +142,6 @@ export default async function PaymentsPage({
               { label: "All", value: "" },
               { label: "Paid", value: "paid" },
               { label: "Pending", value: "pending" },
-              { label: "Upcoming", value: "upcoming" },
               { label: "To verify", value: "awaiting" },
             ],
           },
@@ -164,7 +163,7 @@ export default async function PaymentsPage({
             <tbody>
               {rows.map((r) => {
                 const awaiting = !!r.paymentId && !r.verified && r.paid > 0;
-                const pstatus = r.is_upcoming ? "upcoming" : awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
+                const pstatus = awaiting ? "awaiting" : r.status === "paid" ? "paid" : "pending";
                 const cr = currentMonthRent(r, { securityDeposit: r.security_deposit });
                 // show the first-month total only when nothing's been recorded yet
                 const showProRata = cr.proRata && !r.paymentId;
@@ -223,20 +222,23 @@ export default async function PaymentsPage({
                       </span>
                     </td>
                     <td className="px-6 py-3.5">
-                      {r.is_upcoming ? (
-                        <span className="inline-flex rounded-full bg-paper-2 px-2.5 py-0.5 text-xs font-semibold text-ink-muted ring-1 ring-line">
-                          Upcoming
-                        </span>
-                      ) : r.paid <= 0 ? (
-                        <span className="inline-flex rounded-full bg-paper-2 px-2.5 py-0.5 text-xs font-semibold text-ink-muted ring-1 ring-line">
-                          Unpaid
-                        </span>
-                      ) : awaiting ? (
+                      {awaiting ? (
                         <span className="inline-flex rounded-full bg-gold-50 px-2.5 py-0.5 text-xs font-semibold text-gold-600 ring-1 ring-gold-100">
                           Awaiting review
                         </span>
-                      ) : (
+                      ) : r.status === "paid" ? (
                         <PaymentStatusPill status={r.status} />
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex w-fit rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-600 ring-1 ring-rose-100">
+                            Pending
+                          </span>
+                          {r.is_upcoming && (
+                            <span className="text-[0.68rem] text-ink-muted">
+                              Due {r.due_date.slice(8, 10)}/{r.due_date.slice(5, 7)}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-3.5">
@@ -253,7 +255,17 @@ export default async function PaymentsPage({
                           </a>
                         )}
                         {r.is_upcoming ? (
-                          <span className="text-xs text-ink-muted">Due {r.due_date.slice(8, 10)}/{r.due_date.slice(5, 7)}</span>
+                          <RecordPaymentDialog
+                            tenants={payTenants}
+                            month={month}
+                            preselectId={r.tenant_id}
+                            variant="collect"
+                            prefill={
+                              showProRata
+                                ? { baseRent: cr.rent, days: cr.days, deposit: cr.deposit }
+                                : { baseRent: r.rent_amount, days: 30, deposit: 0 }
+                            }
+                          />
                         ) : awaiting ? (
                           <VerifyRejectButtons paymentId={r.paymentId!} />
                         ) : r.status === "paid" ? (
