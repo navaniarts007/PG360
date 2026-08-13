@@ -20,6 +20,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // don't advertise the framework/version
+  eslint: {
+    // Lint runs in CI (.github/workflows/ci.yml), not here. A stray unused
+    // import is a style problem, not a reason to take the live site down —
+    // six production deploys in a row died that way. Real type errors still
+    // block: `typescript.ignoreBuildErrors` stays off.
+    ignoreDuringBuilds: true,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co" },

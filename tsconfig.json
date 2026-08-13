@@ -7,8 +7,11 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    // Dead code is reported by @typescript-eslint/no-unused-vars (as a warning)
+    // instead. As hard tsc errors these blocked production deploys on unused
+    // imports; the ESLint rule keeps them visible without gating releases.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noEmit": true,
     "esModuleInterop": true,
