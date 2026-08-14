@@ -100,7 +100,7 @@ export function FeatureWeb() {
           >
             <div className="grid size-24 place-items-center rounded-full bg-ink text-paper shadow-pop">
               <span className="font-display text-xl font-semibold tracking-tight">
-                PG<span className="text-clay-400">360</span>
+                PG <span className="text-clay-400">300</span>
               </span>
             </div>
           </motion.div>

@@ -34,10 +34,22 @@ export async function updateSession(request: NextRequest) {
   try {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data?.user) {
+      if (error) {
+        request.cookies.getAll().forEach((c) => {
+          if (c.name.startsWith("sb-")) {
+            response.cookies.delete(c.name);
+          }
+        });
+      }
       return { response, user: null };
     }
     return { response, user: data.user };
   } catch {
+    request.cookies.getAll().forEach((c) => {
+      if (c.name.startsWith("sb-")) {
+        response.cookies.delete(c.name);
+      }
+    });
     return { response, user: null };
   }
 }

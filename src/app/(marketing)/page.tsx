@@ -341,7 +341,7 @@ function Downloads() {
       <div className="section-shell mx-auto max-w-6xl rounded-[2.1rem] px-6 py-10 sm:px-10 sm:py-14">
         <SectionIntro
           label="Get the app"
-          title="PG360, everywhere you work."
+          title="PG 300, everywhere you work."
           body="Use it in any browser, or install the native app on Android and Windows. Same login, same data — hosted in India 🇮🇳."
           align="center"
         />
