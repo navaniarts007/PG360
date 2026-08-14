@@ -4,11 +4,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "PG 300 — PG & Hostel Management, done right",
-    template: "%s · PG 300",
+    default: "PG 360 — PG & Hostel Management, done right",
+    template: "%s · PG 360",
   },
   description:
-    "PG 300 is the all-in-one operating system for PG and hostel owners in India — rooms, tenants, rent, food, complaints and P&L, with a login for every tenant.",
+    "PG 360 is the all-in-one operating system for PG and hostel owners in India — rooms, tenants, rent, food, complaints and P&L, with a login for every tenant.",
   keywords: [
     "PG management software",
     "hostel management",

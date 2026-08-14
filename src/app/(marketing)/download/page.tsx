@@ -13,7 +13,7 @@ export default function DownloadPage() {
     <>
       <PageHero
         eyebrow="Get the app"
-        title="PG 300, on every"
+        title="PG 360, on every"
         accent="screen"
         subtitle="Install the native app on Android and Windows, or sign in from any browser — same login, same data, hosted in India."
       />

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Security" };
 export default function SecurityPage() {
   return (
     <>
-      <PageHero eyebrow="Trust" title="Security at" accent="PG 300" />
+      <PageHero eyebrow="Trust" title="Security at" accent="PG 360" />
       <LegalDoc
         updated="21 June 2026"
         sections={[

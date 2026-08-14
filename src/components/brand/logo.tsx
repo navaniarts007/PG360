@@ -14,7 +14,7 @@ export function Mark({ className }: { className?: string }) {
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src="/pg360-logo.png"
-        alt="PG 300"
+        alt="PG 360"
         width={36}
         height={36}
         onError={() => setFailed(true)}
@@ -56,7 +56,7 @@ export function Logo({
   href?: string;
   invert?: boolean;
   wordmark?: boolean;
-  /** White-label brand name. Defaults to the PG 300 wordmark. */
+  /** White-label brand name. Defaults to the PG 360 wordmark. */
   label?: string;
 }) {
   return (
@@ -76,7 +76,7 @@ export function Logo({
             label
           ) : (
             <>
-              PG <span className="text-clay-500">300</span>
+              PG <span className="text-clay-500">360</span>
             </>
           )}
         </span>
