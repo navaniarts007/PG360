@@ -3,21 +3,17 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { ResetForm } from "./reset-form";
-import { createClient } from "@/lib/supabase/server";
+import { validateResetToken } from "@/lib/auth-actions";
 
 export const metadata: Metadata = { title: "Set a new password" };
 
-export default async function ResetPasswordPage() {
-  let user = null;
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.getUser();
-    if (!error && data?.user) {
-      user = data.user;
-    }
-  } catch {
-    user = null;
-  }
+export default async function ResetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string }>;
+}) {
+  const { token } = await searchParams;
+  const email = token ? await validateResetToken(token) : null;
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center px-5 py-10">
@@ -32,14 +28,14 @@ export default async function ResetPasswordPage() {
         <h1 className="mt-8 font-display text-3xl font-semibold tracking-tight text-ink">
           Set a new password
         </h1>
-        {user ? (
+        {email && token ? (
           <>
             <p className="mt-1.5 text-ink-muted">
-              For <span className="font-medium text-ink">{user.email}</span> — choose a new
+              For <span className="font-medium text-ink">{email}</span> — choose a new
               password (8+ characters).
             </p>
             <div className="mt-8">
-              <ResetForm />
+              <ResetForm token={token} />
             </div>
           </>
         ) : (

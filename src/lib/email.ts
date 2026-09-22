@@ -2,11 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 
 /**
- * Transactional email (renewal follow-ups, receipts).
- *
- * NOTE: Supabase auth mail (password recovery, invites) does NOT go through
- * here — Supabase sends those itself. Route those via custom SMTP in the
- * dashboard (smtp.resend.com:465, user "resend", pass = RESEND_API_KEY).
+ * Transactional email (renewal follow-ups, receipts, password resets).
  */
 const FROM = "PG360 <onboarding@resend.dev>"; // TODO: noreply@pg360.software once the domain is verified
 

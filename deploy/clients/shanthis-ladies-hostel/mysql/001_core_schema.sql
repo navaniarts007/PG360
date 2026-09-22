@@ -15,21 +15,32 @@
 -- users : replaces Supabase Auth's auth.users. Our own credential store.
 -- ---------------------------------------------------------------------------
 create table if not exists users (
-  id            char(36)     not null primary key default (uuid()),
-  email         varchar(255) not null unique,
-  password_hash varchar(255) not null,   -- bcrypt, see AUTH_DESIGN.md
-  created_at    datetime     not null default current_timestamp
+  id             char(36)     not null primary key default (uuid()),
+  email          varchar(255) not null unique,
+  password_hash  varchar(255) not null,   -- bcrypt, see AUTH_DESIGN.md
+  failed_attempts int         not null default 0,
+  locked_until   datetime     null,       -- brute-force lockout; see src/lib/auth.ts signIn()
+  created_at     datetime     not null default current_timestamp
 ) engine=InnoDB;
 
 -- ---------------------------------------------------------------------------
 -- sessions : replaces Supabase Auth's session/JWT handling.
+--
+-- token_hash, not `id`, is what a lookup keys on. `id` uses MySQL's UUID(),
+-- which is version-1 (timestamp + MAC-derived) and NOT cryptographically
+-- random — unsafe as a bearer token. The actual session cookie holds a
+-- separate CSPRNG-generated token (crypto.randomBytes in Node); only its
+-- SHA-256 hash is stored here, so a DB read alone can't produce a valid
+-- cookie value. See src/lib/auth.ts.
 -- ---------------------------------------------------------------------------
 create table if not exists sessions (
   id          char(36)     not null primary key default (uuid()),
   user_id     char(36)     not null,
+  token_hash  char(64)     not null,
   expires_at  datetime     not null,
   created_at  datetime     not null default current_timestamp,
-  constraint fk_sessions_user foreign key (user_id) references users (id) on delete cascade
+  constraint fk_sessions_user foreign key (user_id) references users (id) on delete cascade,
+  constraint uq_sessions_token unique (token_hash)
 ) engine=InnoDB;
 
 create index idx_sessions_user on sessions (user_id);
