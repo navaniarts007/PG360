@@ -8,21 +8,21 @@
 
 -- ------------------------------------------------------------- pg_accounts
 alter table pg_accounts
-  add column if not exists upi_id text null,
-  add column if not exists bank_details text null,
-  add column if not exists payment_qr_url text null,
-  add column if not exists owner_id char(36) null,
-  add column if not exists settings json not null default (json_object()),
-  add column if not exists owner_pan varchar(20) null,
-  add column if not exists property_address text null,
-  add column if not exists food_included_default tinyint(1) not null default 1,
-  add column if not exists food_opt_out_deduction int not null default 0,
-  add column if not exists edition varchar(20) not null default 'full',
-  add column if not exists portal_enabled tinyint(1) not null default 1,
-  add column if not exists reg_prefix varchar(20) null,
-  add column if not exists owner_signature_url text null,
-  add column if not exists is_demo tinyint(1) not null default 0,
-  add column if not exists rules_doc_url text null;
+  add column upi_id text null,
+  add column bank_details text null,
+  add column payment_qr_url text null,
+  add column owner_id char(36) null,
+  add column settings json not null default (json_object()),
+  add column owner_pan varchar(20) null,
+  add column property_address text null,
+  add column food_included_default tinyint(1) not null default 1,
+  add column food_opt_out_deduction int not null default 0,
+  add column edition varchar(20) not null default 'full',
+  add column portal_enabled tinyint(1) not null default 1,
+  add column reg_prefix varchar(20) null,
+  add column owner_signature_url text null,
+  add column is_demo tinyint(1) not null default 0,
+  add column rules_doc_url text null;
 
 alter table pg_accounts
   add constraint fk_pg_accounts_owner foreign key (owner_id) references users (id) on delete set null;
@@ -32,41 +32,41 @@ alter table pg_accounts
 
 -- --------------------------------------------------------------- tenants
 alter table tenants
-  add column if not exists food_opt_out tinyint(1) not null default 0,
-  add column if not exists joining_date date null,
-  add column if not exists notice_given_date date null,
-  add column if not exists lock_in_end_date date null,
-  add column if not exists avatar_url text null,
-  add column if not exists reg_no varchar(50) null,
-  add column if not exists stay_type varchar(20) not null default 'monthly',
-  add column if not exists daily_rate decimal(12,2) null,
-  add column if not exists stay_days int null,
-  add column if not exists parent_phone varchar(32) null,
-  add column if not exists address text null,
-  add column if not exists occupation varchar(100) null,
-  add column if not exists organization varchar(255) null,
-  add column if not exists father_name varchar(255) null,
-  add column if not exists mother_name varchar(255) null,
-  add column if not exists guardian text null,
-  add column if not exists vehicle_number varchar(32) null;
+  add column food_opt_out tinyint(1) not null default 0,
+  add column joining_date date null,
+  add column notice_given_date date null,
+  add column lock_in_end_date date null,
+  add column avatar_url text null,
+  add column reg_no varchar(50) null,
+  add column stay_type varchar(20) not null default 'monthly',
+  add column daily_rate decimal(12,2) null,
+  add column stay_days int null,
+  add column parent_phone varchar(32) null,
+  add column address text null,
+  add column occupation varchar(100) null,
+  add column organization varchar(255) null,
+  add column father_name varchar(255) null,
+  add column mother_name varchar(255) null,
+  add column guardian text null,
+  add column vehicle_number varchar(32) null;
 
 alter table tenants
   add constraint chk_tenants_stay_type check (stay_type in ('monthly', 'daily'));
 
 -- --------------------------------------------------------------- payments
 alter table payments
-  add column if not exists verified tinyint(1) not null default 0,
-  add column if not exists is_pro_rata tinyint(1) not null default 0,
-  add column if not exists pro_rata_days int null,
-  add column if not exists food_opt_out_deduction int not null default 0,
-  add column if not exists security_deposit int not null default 0,
-  add column if not exists joining_fee int not null default 0;
+  add column verified tinyint(1) not null default 0,
+  add column is_pro_rata tinyint(1) not null default 0,
+  add column pro_rata_days int null,
+  add column food_opt_out_deduction int not null default 0,
+  add column security_deposit int not null default 0,
+  add column joining_fee int not null default 0;
 
 -- --------------------------------------------------------------- profiles
 alter table profiles
-  add column if not exists terms_accepted_at datetime null,
-  add column if not exists terms_version varchar(20) null,
-  add column if not exists permissions json null;
+  add column terms_accepted_at datetime null,
+  add column terms_version varchar(20) null,
+  add column permissions json null;
 
 -- ------------------------------------------------------------------ rooms
 -- 0013: room type is free text now (rate-card-driven types include quad/dorm).

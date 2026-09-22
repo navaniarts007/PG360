@@ -187,7 +187,7 @@ create table if not exists beds (
 create index idx_beds_pg on beds (pg_id);
 create index idx_beds_room on beds (room_id);
 
-alter table tenants add column if not exists bed_id char(36) null;
+alter table tenants add column bed_id char(36) null;
 alter table tenants add constraint fk_tenants_bed foreign key (bed_id) references beds (id) on delete set null;
 
 delimiter //
@@ -233,7 +233,7 @@ create table if not exists floors (
 
 create index idx_floors_pg on floors (pg_id);
 
-alter table rooms add column if not exists floor_id char(36) null;
+alter table rooms add column floor_id char(36) null;
 alter table rooms add constraint fk_rooms_floor foreign key (floor_id) references floors (id) on delete set null;
 
 -- ---------------------------------------------------------------------------
@@ -314,8 +314,8 @@ create table if not exists wifi_networks (
 
 create index idx_wifi_networks_pg on wifi_networks (pg_id);
 
-alter table rooms add column if not exists wifi_network_id char(36) null;
-alter table rooms add column if not exists wifi_ssid varchar(255) null;
+alter table rooms add column wifi_network_id char(36) null;
+alter table rooms add column wifi_ssid varchar(255) null;
 alter table rooms add constraint fk_rooms_wifi foreign key (wifi_network_id) references wifi_networks (id) on delete set null;
 
 -- ---------------------------------------------------------------------------
