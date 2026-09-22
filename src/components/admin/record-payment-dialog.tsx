@@ -2,11 +2,11 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Camera, ChevronDown, ChevronUp, ImageUp, IndianRupee, Loader2, Receipt } from "lucide-react";
+import { AlertCircle, Camera, Check, ChevronDown, ChevronUp, ImageUp, IndianRupee, Loader2, Printer, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
-import { recordPaymentAction, type ActionState } from "@/lib/actions/admin";
+import { recordPaymentAction, type RecordPaymentState } from "@/lib/actions/admin";
 import { getUploadSignatureAction } from "@/lib/actions/upload";
 import { inr } from "@/lib/utils";
 
@@ -103,7 +103,7 @@ function PaymentForm({
   variant?: "primary" | "collect";
   onDone: () => void;
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(
+  const [state, action, pending] = useActionState<RecordPaymentState, FormData>(
     recordPaymentAction,
     {},
   );
@@ -218,12 +218,12 @@ function PaymentForm({
   // per-day rate on a fixed 30-day basis (₹7,000/month → ₹233/day → 13 days = ₹3,033)
   const dailyRate = monthly > 0 ? monthly / 30 : 0;
 
+  // On success, stay open and show the print prompt instead of closing
+  // immediately — refresh the background data now so it's current once the
+  // dialog does close, but let the admin choose when that happens.
   useEffect(() => {
-    if (state.ok) {
-      router.refresh();
-      onDone();
-    }
-  }, [state.ok, onDone, router]);
+    if (state.ok) router.refresh();
+  }, [state.ok, router]);
 
   // when the tenant changes, auto-calculate that tenant's first month (rent +
   // deposit + the right month) — but keep the initial fill on first open.
@@ -287,6 +287,41 @@ function PaymentForm({
     [rent, power, food, other, deposit, joining],
   );
   const balance = Math.max(total - paid, 0);
+
+  if (state.ok) {
+    return (
+      <div className="space-y-5 py-2 text-center">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-teal-50 text-teal-600">
+          <Check className="size-7" />
+        </div>
+        <div>
+          <p className="font-display text-lg font-semibold text-ink">Payment saved</p>
+          <p className="mt-1 text-sm text-ink-muted">
+            {paid > 0
+              ? `${inr(paid)} recorded for ${selected?.name ?? "the tenant"}.`
+              : "Bill saved."}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {state.paymentId ? (
+            <a
+              href={`/receipt/${state.paymentId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-clay-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-clay-700"
+            >
+              <Printer className="size-4" /> Print receipt
+            </a>
+          ) : (
+            <span className="flex-1" />
+          )}
+          <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
+            Done
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form action={action} className="space-y-4">

@@ -10,6 +10,7 @@ import {
   IdCard,
   MapPin,
   Phone,
+  Printer,
   ScrollText,
   ShieldCheck,
   Wifi,
@@ -266,7 +267,20 @@ export default async function TenantDetail({
                   <p className="text-xs text-ink-muted tnum">{inr(p.amount_paid)} / {inr(p.total_amount)}</p>
                   <p className="text-xs text-ink">Type: {paymentTypes(p)}</p>
                 </div>
-                <PaymentStatusPill status={p.status} />
+                <div className="flex items-center gap-2">
+                  {p.amount_paid > 0 && (
+                    <a
+                      href={`/receipt/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Print receipt"
+                      className="grid size-7 place-items-center rounded-lg text-ink-muted transition hover:bg-paper-2 hover:text-clay-600"
+                    >
+                      <Printer className="size-3.5" />
+                    </a>
+                  )}
+                  <PaymentStatusPill status={p.status} />
+                </div>
               </div>
             ))}
           </div>

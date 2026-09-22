@@ -1052,6 +1052,41 @@ export async function getMyPayment(id: string): Promise<Payment | null> {
   ]);
 }
 
+/** A payment + its tenant + its PG, scoped by the caller's actual access —
+ *  a tenant sees only their own, admin/staff only their active property's,
+ *  super_admin unrestricted (matches the global bypass elsewhere). Backs the
+ *  one shared /receipt/[paymentId] page both tenant and admin/staff print
+ *  from, so there's exactly one receipt format, not two. */
+export async function getPaymentForReceipt(
+  id: string,
+): Promise<{ payment: Payment; tenant: Tenant; pg: PgAccount } | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  let payment: Payment | null = null;
+  if (session.role === "tenant") {
+    if (!session.tenant_id) return null;
+    payment = await queryOne<Payment>(`select * from payments where id = ? and tenant_id = ?`, [
+      id,
+      session.tenant_id,
+    ]);
+  } else if (session.role === "admin" || session.role === "staff") {
+    const pid = await getActiveProperty();
+    if (!pid) return null;
+    payment = await queryOne<Payment>(`select * from payments where id = ? and pg_id = ?`, [id, pid]);
+  } else if (session.role === "super_admin") {
+    payment = await queryOne<Payment>(`select * from payments where id = ?`, [id]);
+  }
+  if (!payment) return null;
+
+  const [tenant, pg] = await Promise.all([
+    queryOne<Tenant>(`select * from tenants where id = ?`, [payment.tenant_id]),
+    queryOne<PgAccount>(`select * from pg_accounts where id = ?`, [payment.pg_id]),
+  ]);
+  if (!tenant || !pg) return null;
+  return { payment, tenant, pg };
+}
+
 /* -------------------------------------------------------- notifications */
 
 export async function getMyNotifications(limit = 20): Promise<AppNotification[]> {

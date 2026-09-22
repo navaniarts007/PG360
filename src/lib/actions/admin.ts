@@ -901,10 +901,12 @@ const paymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+export type RecordPaymentState = ActionState & { paymentId?: string };
+
 export async function recordPaymentAction(
-  _prev: ActionState,
+  _prev: RecordPaymentState,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<RecordPaymentState> {
   await requireRole(["admin", "staff"]);
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
@@ -995,7 +997,16 @@ export async function recordPaymentAction(
   ]);
   revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
-  return { ok: true };
+  // for the "print receipt right after saving" prompt — only offered when
+  // something was actually collected (nothing to receipt for a ₹0 record).
+  const saved =
+    d.amount_paid > 0
+      ? await queryOne<{ id: string }>(`select id from payments where tenant_id = ? and month_for = ?`, [
+          d.tenant_id,
+          d.month_for,
+        ])
+      : null;
+  return { ok: true, paymentId: saved?.id };
 }
 
 /* ------------------------------ electricity ------------------------------ */
