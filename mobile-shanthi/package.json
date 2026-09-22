@@ -1,0 +1,21 @@
+{
+  "name": "shanthi-ladies-hostel-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shanthi's Ladies Hostel Android app — Capacitor wrapper around the live web app, same pattern as ../capacitor.config.ts (PG360's own app)",
+  "scripts": {
+    "cap:sync": "cap sync android",
+    "cap:open": "cap open android",
+    "android:apk": "cd android && gradlew.bat assembleRelease",
+    "android:bundle": "cd android && gradlew.bat bundleRelease",
+    "icons": "capacitor-assets generate --android"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.4.0"
+  }
+}
