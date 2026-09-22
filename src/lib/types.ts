@@ -1,5 +1,6 @@
 /* =========================================================================
-   PG360 domain types — mirror the Supabase schema (see supabase/migrations).
+   PG360 domain types — mirror the MySQL schema for this branch (see
+   deploy/clients/shanthis-ladies-hostel/mysql/*.sql).
    ========================================================================= */
 
 export type Role = "super_admin" | "admin" | "staff" | "tenant";
@@ -45,7 +46,7 @@ export interface Profile {
   full_name: string;
   email: string;
   phone: string | null;
-  // demo-only: never store plaintext passwords in real Supabase auth
+  // demo-only: never store plaintext passwords for real (bcrypt-hashed in `users.password_hash`)
   password?: string;
   tenant_id?: string | null;
   created_at: string;

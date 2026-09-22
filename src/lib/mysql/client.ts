@@ -104,3 +104,40 @@ export async function queryOne<T = unknown>(
   const rows = await query<T>(sql, params);
   return rows[0] ?? null;
 }
+
+export interface Tx {
+  query<T = unknown>(sql: string, params?: ReadonlyArray<unknown>): Promise<T[]>;
+  queryOne<T = unknown>(sql: string, params?: ReadonlyArray<unknown>): Promise<T | null>;
+}
+
+/** Run several writes atomically. The original Supabase code did multi-step
+ *  creates (e.g. staff: auth user -> profile -> property_members) as separate
+ *  REST calls with manual compensating cleanup on failure (delete the auth
+ *  user if a later insert failed). MySQL supports real transactions, so
+ *  multi-step writes use this instead — strictly more correct than replaying
+ *  the manual-rollback pattern, not scope creep: a crash between steps under
+ *  the old pattern left an orphaned auth user with no profile; this can't. */
+export async function withTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const conn = await getPool().getConnection();
+  try {
+    await conn.beginTransaction();
+    const tx: Tx = {
+      async query<R>(sql: string, params: ReadonlyArray<unknown> = []) {
+        const [rows] = await conn.query(sql, [...params]);
+        return rows as R[];
+      },
+      async queryOne<R>(sql: string, params: ReadonlyArray<unknown> = []) {
+        const rows = await tx.query<R>(sql, params);
+        return rows[0] ?? null;
+      },
+    };
+    const result = await fn(tx);
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}

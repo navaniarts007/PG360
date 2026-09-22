@@ -5,8 +5,8 @@ import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { canDelete, canEdit } from "../perms";
-import { createClient } from "../supabase/server";
-import { createAdminClient } from "../supabase/admin";
+import { getActiveProperty } from "../auth";
+import { query, queryOne } from "../mysql/client";
 import { notifyStaff } from "../notify";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -20,8 +20,10 @@ const bookingSchema = z.object({
   notes: z.string().optional(),
 });
 
-/** PUBLIC: anyone can submit a room request. Inserted via the service client
- *  after validating the target PG exists and is active. */
+/** PUBLIC: anyone can submit a room request — no session required, matching
+ *  the original's "insert via the service client" design (there is no RLS
+ *  vs. service-client distinction in MySQL; this is just an unauthenticated
+ *  insert after validating the target PG exists and is active). */
 export async function createBookingAction(
   _prev: ActionState,
   formData: FormData,
@@ -30,23 +32,21 @@ export async function createBookingAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
 
-  const admin = createAdminClient();
-  const { data: pg } = await admin
-    .from("pg_accounts")
-    .select("id, status")
-    .eq("id", d.pg_id)
-    .maybeSingle();
+  const pg = await queryOne<{ id: string; status: string }>(
+    `select id, status from pg_accounts where id = ?`,
+    [d.pg_id],
+  );
   if (!pg || pg.status !== "active") return { error: "This PG isn't accepting requests." };
 
-  const { error } = await admin.from("bookings").insert({
-    pg_id: d.pg_id,
-    tenant_name: d.tenant_name,
-    phone: d.phone,
-    preferred_room_type: d.preferred_room_type,
-    requested_date: d.requested_date || null,
-    notes: d.notes || null,
-  });
-  if (error) return { error: humanizeDbError(error) };
+  try {
+    await query(
+      `insert into bookings (pg_id, tenant_name, phone, preferred_room_type, requested_date, notes)
+       values (?, ?, ?, ?, ?, ?)`,
+      [d.pg_id, d.tenant_name, d.phone, d.preferred_room_type, d.requested_date || null, d.notes || null],
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
+  }
 
   await notifyStaff(
     d.pg_id,
@@ -58,11 +58,12 @@ export async function createBookingAction(
 
 export async function setBookingStatusAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return;
   const id = String(formData.get("id"));
   const status = String(formData.get("status"));
   if (!["pending", "approved", "rejected"].includes(status)) return;
-  const s = await createClient();
-  await s.from("bookings").update({ status }).eq("id", id);
+  await query(`update bookings set status = ? where id = ? and pg_id = ?`, [status, id, pid]);
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard");
 }
@@ -81,22 +82,17 @@ export async function updateBookingAction(
 ): Promise<ActionState> {
   const me = await requireRole(["admin", "staff"]);
   if (!canEdit(me)) return { error: "You don't have permission to edit." };
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const id = String(formData.get("id"));
   const parsed = bookingUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
-  const s = await createClient();
-  const { error } = await s
-    .from("bookings")
-    .update({
-      tenant_name: d.tenant_name,
-      phone: d.phone,
-      preferred_room_type: d.preferred_room_type,
-      requested_date: d.requested_date || null,
-      notes: d.notes || null,
-    })
-    .eq("id", id);
-  if (error) return { error: humanizeDbError(error) };
+  await query(
+    `update bookings set tenant_name = ?, phone = ?, preferred_room_type = ?, requested_date = ?, notes = ?
+      where id = ? and pg_id = ?`,
+    [d.tenant_name, d.phone, d.preferred_room_type, d.requested_date || null, d.notes || null, id, pid],
+  );
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -105,9 +101,10 @@ export async function updateBookingAction(
 export async function deleteBookingAction(formData: FormData): Promise<void> {
   const me = await requireRole(["admin", "staff"]);
   if (!canDelete(me)) return;
+  const pid = await getActiveProperty();
+  if (!pid) return;
   const id = String(formData.get("id"));
-  const s = await createClient();
-  await s.from("bookings").delete().eq("id", id);
+  await query(`delete from bookings where id = ? and pg_id = ?`, [id, pid]);
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard");
 }

@@ -1,6 +1,5 @@
 import "server-only";
-import { createClient } from "./supabase/server";
-import { createAdminClient } from "./supabase/admin";
+import { query, getPool } from "./mysql/client";
 import { getActiveProperty } from "./auth";
 import { notify, pgStaffUserIds } from "./notify";
 import { formatDate } from "./utils";
@@ -25,7 +24,7 @@ function addDaysISO(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Whole days from a → b (negative when b is before a). */
+/** Whole days from a -> b (negative when b is before a). */
 function dayDiffISO(aISO: string, bISO: string): number {
   const a = new Date(aISO + "T00:00:00Z").getTime();
   const b = new Date(bISO + "T00:00:00Z").getTime();
@@ -33,15 +32,13 @@ function dayDiffISO(aISO: string, bISO: string): number {
 }
 
 export interface StayCycle {
-  /** current cycle completion date (anchor + 30·n) */
   end: string;
-  /** the previous cycle end, if one has already passed */
   prevEnd: string | null;
   cycleNumber: number;
 }
 
 /** The rolling 30-day cycle a monthly tenant is currently in. Check-in on the
- *  1st → cycle ends on the 31st, 60th day, … (alert fires from the 28th). */
+ *  1st -> cycle ends on the 31st, 60th day, ... (alert fires from the 28th). */
 export function currentStayCycle(anchorISO: string, todayISO: string): StayCycle {
   const d = dayDiffISO(anchorISO, todayISO);
   const n = Math.max(1, Math.ceil(d / CYCLE_DAYS));
@@ -58,7 +55,6 @@ export function cycleEndsInMonth(anchorISO: string, month: string): string[] {
   const monthStart = `${month}-01`;
   const gap = dayDiffISO(anchorISO, monthStart);
   const out: string[] = [];
-  // first multiple of 30 days landing on/after the 1st of the month
   for (let n = Math.max(1, Math.ceil(gap / CYCLE_DAYS)); ; n++) {
     const end = addDaysISO(anchorISO, CYCLE_DAYS * n);
     if (end.slice(0, 7) > month) break;
@@ -76,7 +72,6 @@ export interface RenewalAlert {
   room: string;
   phone: string;
   cycle_end: string;
-  /** days until the cycle completes (negative = days overstayed) */
   days_left: number;
   kind: RenewalKind;
   stay_type: "monthly" | "daily";
@@ -90,7 +85,7 @@ interface TenantLite {
   checkin_date: string;
   stay_type: "monthly" | "daily";
   stay_days: number | null;
-  room: { room_number: string } | null;
+  room_number: string | null;
 }
 
 /** Decide whether a tenant needs a renewal check right now. `resolved` holds
@@ -104,13 +99,12 @@ export function computeRenewalAlert(
     tenant_id: t.id,
     pg_id: t.pg_id,
     name: t.name,
-    room: t.room?.room_number ?? "—",
+    room: t.room_number ?? "—",
     phone: t.phone,
     cycle_end: cycleEnd,
     stay_type: t.stay_type,
   });
 
-  // Day-wise stay: one fixed end date (check-in + stay days), no recurrence.
   if (t.stay_type === "daily") {
     if (!t.stay_days) return null;
     const end = addDaysISO(t.checkin_date.slice(0, 10), t.stay_days);
@@ -124,8 +118,6 @@ export function computeRenewalAlert(
   const { end, prevEnd } = currentStayCycle(t.checkin_date.slice(0, 10), todayISO);
   const daysLeft = dayDiffISO(todayISO, end);
 
-  // last cycle completed without a recorded decision and the next check isn't
-  // due yet — the tenant may be overstaying unannounced.
   if (prevEnd && !resolved.has(prevEnd) && daysLeft > RENEWAL_LEAD_DAYS) {
     return { ...base(prevEnd), days_left: dayDiffISO(todayISO, prevEnd), kind: "overstay" };
   }
@@ -137,28 +129,26 @@ export function computeRenewalAlert(
 
 /* --------------------------------------------------------------- queries */
 
-type Client = Awaited<ReturnType<typeof createClient>>;
-
-async function alertsForPg(s: Client, pgId: string, todayISO: string): Promise<RenewalAlert[]> {
-  const [{ data: tenants }, { data: checks }] = await Promise.all([
-    s
-      .from("tenants")
-      .select("id, pg_id, name, phone, checkin_date, stay_type, stay_days, room:rooms(room_number)")
-      .eq("pg_id", pgId)
-      .eq("status", "active"),
-    s
-      .from("renewal_checks")
-      .select("tenant_id, cycle_end, decision")
-      .eq("pg_id", pgId)
-      .not("decision", "is", null),
+async function alertsForPg(pgId: string, todayISO: string): Promise<RenewalAlert[]> {
+  const [tenants, checks] = await Promise.all([
+    query<TenantLite>(
+      `select t.id, t.pg_id, t.name, t.phone, t.checkin_date, t.stay_type, t.stay_days,
+              r.room_number as room_number
+         from tenants t
+         left join rooms r on r.id = t.room_id
+        where t.pg_id = ? and t.status = 'active'`,
+      [pgId],
+    ),
+    query<{ tenant_id: string; cycle_end: string }>(
+      `select tenant_id, cycle_end from renewal_checks where pg_id = ? and decision is not null`,
+      [pgId],
+    ),
   ]);
   const resolvedBy = new Map<string, Set<string>>();
-  for (const c of (checks ?? []) as { tenant_id: string; cycle_end: string }[]) {
-    (resolvedBy.get(c.tenant_id) ?? resolvedBy.set(c.tenant_id, new Set()).get(c.tenant_id)!).add(
-      c.cycle_end,
-    );
+  for (const c of checks) {
+    (resolvedBy.get(c.tenant_id) ?? resolvedBy.set(c.tenant_id, new Set()).get(c.tenant_id)!).add(c.cycle_end);
   }
-  return ((tenants ?? []) as unknown as TenantLite[])
+  return tenants
     .map((t) => computeRenewalAlert(t, resolvedBy.get(t.id) ?? new Set(), todayISO))
     .filter((a): a is RenewalAlert => a !== null)
     .sort((a, b) => a.days_left - b.days_left);
@@ -166,10 +156,9 @@ async function alertsForPg(s: Client, pgId: string, todayISO: string): Promise<R
 
 /** Pending renewal checks for the active property (dashboard card). */
 export async function listRenewalAlerts(): Promise<RenewalAlert[]> {
-  const s = await createClient();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  return alertsForPg(s, pid, new Date().toISOString().slice(0, 10));
+  return alertsForPg(pid, new Date().toISOString().slice(0, 10));
 }
 
 /* ----------------------------------------------------------------- sweep */
@@ -184,28 +173,19 @@ function alertMessage(a: RenewalAlert): string {
 }
 
 /** Turn computed alerts into in-app notifications, exactly once per tenant per
- *  cycle end (the unique key dedupes). Best-effort — never blocks page render. */
+ *  cycle end. `INSERT IGNORE` (MySQL's no-conflict-error insert) + affectedRows
+ *  replaces Supabase's `ignoreDuplicates: true` + `.select()` — that pattern
+ *  returned only the rows that were actually new in one bulk call; MySQL's
+ *  bulk insert doesn't expose that per-row, so this inserts one at a time and
+ *  checks each affectedRows (1 = fresh, 0 = already existed) — alert lists
+ *  are small (a handful of near-renewal tenants), so the per-row round trip
+ *  cost here is negligible. Best-effort — never blocks page render. */
 async function notifyAlerts(alerts: RenewalAlert[]): Promise<number> {
   if (alerts.length === 0) return 0;
-  const admin = createAdminClient();
-  const { data: fresh } = await admin
-    .from("renewal_checks")
-    .upsert(
-      alerts.map((a) => ({
-        pg_id: a.pg_id,
-        tenant_id: a.tenant_id,
-        cycle_end: a.cycle_end,
-        notified_at: new Date().toISOString(),
-      })),
-      { onConflict: "tenant_id,cycle_end", ignoreDuplicates: true },
-    )
-    .select("tenant_id, cycle_end");
-  const freshKeys = new Set(
-    ((fresh ?? []) as { tenant_id: string; cycle_end: string }[]).map(
-      (r) => `${r.tenant_id}|${r.cycle_end}`,
-    ),
-  );
-  const toSend = alerts.filter((a) => freshKeys.has(`${a.tenant_id}|${a.cycle_end}`));
+  const toSend: RenewalAlert[] = [];
+  for (const a of alerts) {
+    if (await insertRenewalCheckIfNew(a)) toSend.push(a);
+  }
   if (toSend.length === 0) return 0;
 
   const byPg = new Map<string, RenewalAlert[]>();
@@ -227,6 +207,14 @@ async function notifyAlerts(alerts: RenewalAlert[]): Promise<number> {
   return toSend.length;
 }
 
+async function insertRenewalCheckIfNew(a: RenewalAlert): Promise<boolean> {
+  const [result] = await getPool().query(
+    `insert ignore into renewal_checks (pg_id, tenant_id, cycle_end, notified_at) values (?, ?, ?, now())`,
+    [a.pg_id, a.tenant_id, a.cycle_end],
+  );
+  return (result as { affectedRows: number }).affectedRows === 1;
+}
+
 /** Sweep the active property: compute alerts and fire any not-yet-sent
  *  notifications. Called on admin dashboard/calendar load (request-driven,
  *  like the rest of the app) — returns the alerts so pages render them. */
@@ -240,17 +228,15 @@ export async function sweepRenewalAlerts(): Promise<RenewalAlert[]> {
   return alerts;
 }
 
-/** Sweep EVERY active property (service role) — for the scheduled cron hit,
- *  so alerts fire even on days no admin opens the dashboard. */
+/** Sweep EVERY active property — for the scheduled cron hit, so alerts fire
+ *  even on days no admin opens the dashboard. */
 export async function sweepAllProperties(): Promise<{ pgs: number; notified: number }> {
-  const admin = createAdminClient();
   const todayISO = new Date().toISOString().slice(0, 10);
-  const { data: pgs } = await admin.from("pg_accounts").select("id").eq("status", "active");
-  const ids = ((pgs ?? []) as { id: string }[]).map((p) => p.id);
+  const pgs = await query<{ id: string }>(`select id from pg_accounts where status = 'active'`);
   let notified = 0;
-  for (const pgId of ids) {
-    const alerts = await alertsForPg(admin as unknown as Client, pgId, todayISO);
+  for (const pg of pgs) {
+    const alerts = await alertsForPg(pg.id, todayISO);
     notified += await notifyAlerts(alerts);
   }
-  return { pgs: ids.length, notified };
+  return { pgs: pgs.length, notified };
 }

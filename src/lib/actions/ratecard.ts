@@ -1,11 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
-import { createClient } from "../supabase/server";
+import { query, queryOne } from "../mysql/client";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -45,13 +44,27 @@ export async function createRateCardAction(
   if (!pid) return { error: "No active property selected." };
   const res = parseRow(formData);
   if ("error" in res) return { error: res.error };
-  const s = await createClient();
-  const { error } = await s.from("rate_cards").insert({ pg_id: pid, ...res.row });
-  if (error) {
+  try {
+    await query(
+      `insert into rate_cards (pg_id, name, room_type, ac, bath_type, price_per_month, food_included, food_opt_out_deduction)
+       values (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        pid,
+        res.row.name,
+        res.row.room_type,
+        res.row.ac,
+        res.row.bath_type,
+        res.row.price_per_month,
+        res.row.food_included,
+        res.row.food_opt_out_deduction,
+      ],
+    );
+  } catch (error) {
+    const msg = (error as { message?: string })?.message ?? "";
     return {
-      error: /duplicate|unique/i.test(error.message)
+      error: /duplicate|unique/i.test(msg)
         ? "A rate card with the same type, AC, bath and price already exists."
-        : error.message,
+        : msg,
     };
   }
   revalidatePath("/dashboard/pricing");
@@ -63,14 +76,35 @@ export async function updateRateCardAction(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const id = String(formData.get("id"));
   const res = parseRow(formData);
   if ("error" in res) return { error: res.error };
-  const s = await createClient();
-  const { error } = await s.from("rate_cards").update(res.row).eq("id", id);
-  if (error) return { error: humanizeDbError(error) };
+
+  // pg_id = ? fixes a cross-tenant write gap the original had.
+  await query(
+    `update rate_cards set name = ?, room_type = ?, ac = ?, bath_type = ?, price_per_month = ?,
+            food_included = ?, food_opt_out_deduction = ?
+      where id = ? and pg_id = ?`,
+    [
+      res.row.name,
+      res.row.room_type,
+      res.row.ac,
+      res.row.bath_type,
+      res.row.price_per_month,
+      res.row.food_included,
+      res.row.food_opt_out_deduction,
+      id,
+      pid,
+    ],
+  );
   // keep beds on this card in sync with the new price
-  await s.from("beds").update({ price_per_month: res.row.price_per_month }).eq("rate_card_id", id);
+  await query(`update beds set price_per_month = ? where rate_card_id = ? and pg_id = ?`, [
+    res.row.price_per_month,
+    id,
+    pid,
+  ]);
   revalidatePath("/dashboard/pricing");
   revalidatePath("/dashboard/rooms");
   return { ok: true };
@@ -78,13 +112,13 @@ export async function updateRateCardAction(
 
 export async function deleteRateCardAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return;
   const id = String(formData.get("id"));
-  const s = await createClient();
-  const { count } = await s
-    .from("beds")
-    .select("id", { count: "exact", head: true })
-    .eq("rate_card_id", id);
-  if ((count ?? 0) > 0) return; // in use by beds — block delete
-  await s.from("rate_cards").delete().eq("id", id);
+  const row = await queryOne<{ n: number }>(`select count(*) as n from beds where rate_card_id = ?`, [
+    id,
+  ]);
+  if ((row?.n ?? 0) > 0) return; // in use by beds — block delete
+  await query(`delete from rate_cards where id = ? and pg_id = ?`, [id, pid]);
   revalidatePath("/dashboard/pricing");
 }

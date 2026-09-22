@@ -5,7 +5,6 @@ import { ArrowLeft, Crown, ShieldCheck, Building2, UserRound } from "lucide-reac
 import { Logo } from "@/components/brand/logo";
 import { LoginForm } from "./login-form";
 import { getSession, homeForRole } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -24,7 +23,9 @@ export default async function LoginPage({
   if (session) redirect(homeForRole(session.role));
 
   const { as } = await searchParams;
-  const demoMode = !isSupabaseConfigured();
+  // No seeded demo accounts exist in this deployment's MySQL DB (those were
+  // Supabase-project-specific), so the "try the demo" panel never applies here.
+  const demoMode = false;
   const picked = as && as in DEMO ? DEMO[as as keyof typeof DEMO] : null;
 
   return (

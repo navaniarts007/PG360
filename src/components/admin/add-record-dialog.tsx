@@ -58,7 +58,7 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     setBusy(which);
     setUploadErr(null);
     try {
-      // ID/Aadhaar → PRIVATE Supabase Storage (returns a storage path).
+      // ID/Aadhaar → private authenticated Cloudinary asset (returns "cld:...").
       if (which === "id") {
         setIdPreview(URL.createObjectURL(file));
         setPhoto(await uploadKyc(file));

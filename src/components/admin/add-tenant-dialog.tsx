@@ -108,7 +108,7 @@ function TenantForm({
     setBusy(which);
     setUploadErr(null);
     try {
-      // ID/Aadhaar → PRIVATE Supabase Storage (returns a storage path).
+      // ID/Aadhaar → private authenticated Cloudinary asset (returns "cld:...").
       if (which === "id") {
         if (idPhotos.length >= 4) {
           throw new Error("Maximum 4 ID photos allowed.");
