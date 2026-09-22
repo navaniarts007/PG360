@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
-import { query, queryOne } from "./mysql/client";
+import { query, queryOne, parseJsonColumn } from "./mysql/client";
 import { generateSessionToken, hashToken } from "./mysql/session-token";
 import type { PropertyRef, Role, SessionUser, StaffPermissions } from "./types";
 
@@ -83,7 +83,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
 
     const role = row.role;
     const termsAcceptedAt = row.terms_accepted_at ? new Date(row.terms_accepted_at).toISOString() : null;
-    const permissions = row.permissions ?? null;
+    const permissions = parseJsonColumn<StaffPermissions | null>(row.permissions, null);
 
     // Super-admin "open / view as": present an effective admin session scoped
     // to the impersonated PG. Every write path must still check the REAL role
