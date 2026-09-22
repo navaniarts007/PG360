@@ -1,8 +1,22 @@
-# Shanthi Ladies Hostel — self-hosted DB/storage migration
+# Shanthi Ladies Hostel — DB/storage migration
 
 Scoped to this client only. Does not affect the main PG360 product, its Supabase
-project, or the `main` branch. Everything here lives under `deploy/clients/`
-and only matters if/when this VPS gets provisioned for real.
+project, or the `main` branch. Everything here lives under `deploy/clients/`.
+
+**Active plan: `mysql/`.** The OVI Panel account has no confirmed root/SSH
+(Terminal wouldn't connect), and only self-serves MySQL — not Postgres/Docker
+— so self-hosting Supabase (below) isn't achievable on this hosting as-is.
+`mysql/` translates the full schema to MySQL 8.0.36 (confirmed VPS version)
+with Supabase Auth/RLS replaced by application-layer equivalents — see
+`mysql/001_core_schema.sql`, `mysql/002_new_tables.sql`,
+`mysql/003_alter_core_tables.sql`, `mysql/004_counters_and_functions.sql` in
+that order, and read `mysql/RLS_TO_APP_LAYER.md` +
+`mysql/AUTH_DESIGN.md` before writing any server action against it.
+
+Everything below this point (`schema-clone.sql`) is the **fallback path** —
+kept in case root/Docker access ever becomes available on this VPS or a
+different one, since it needs far less rewriting (same Postgres dialect, RLS
+intact). Not the current direction.
 
 ## What's actually being cloned
 
