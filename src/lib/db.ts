@@ -1,23 +1,8 @@
 import "server-only";
 import { query, queryOne, parseJsonColumn } from "./mysql/client";
 import { getActiveProperty, getSession } from "./auth";
-import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
 import { currentMonthRent, dueDateFor, firstProRataPeriod } from "./rent";
-
-let cldReady = false;
-function cld() {
-  if (!cldReady) {
-    cloudinary.config({
-      cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
-      secure: true,
-    });
-    cldReady = true;
-  }
-  return cloudinary;
-}
 import type {
   ActivityEntry,
   AgreementSection,
@@ -120,29 +105,16 @@ export async function listAllInvoices(): Promise<Array<PlatformInvoice & { pg_na
   return rows.map((iv) => ({ ...iv, pg_name: iv.pg_name ?? "—" }));
 }
 
-/** Turn a stored KYC value into a viewable URL. New uploads store a private
- *  Cloudinary asset as "cld:<public_id>.<format>" → return a signed authenticated
- *  delivery URL (not openable without our secret). Legacy public Cloudinary URLs
- *  are returned as-is. (The old "leftover Supabase Storage path" branch is gone —
- *  this client never had Supabase Storage history.) */
+/** Turn a stored file value into a viewable URL. Uploads are stored as
+ *  "/api/storage/pg360/<folder>/<filename>" — already a stable, directly
+ *  usable path (see src/lib/storage/vps.ts and the upload route); this just
+ *  validates the stored value looks like one before handing it to a caller. */
 export async function getKycSignedUrl(value: string | null): Promise<string | null> {
   if (!value) return null;
   const first = value.split(",")[0]?.trim();
   if (!first) return null;
-  if (first.startsWith("cld:")) {
-    const rest = first.slice(4);
-    const dot = rest.lastIndexOf(".");
-    const publicId = dot > 0 ? rest.slice(0, dot) : rest;
-    const format = dot > 0 ? rest.slice(dot + 1) : "jpg";
-    return cld().url(publicId, {
-      type: "authenticated",
-      resource_type: "image",
-      format,
-      sign_url: true,
-      secure: true,
-    });
-  }
-  if (/^https?:\/\//i.test(first)) return first; // legacy public Cloudinary
+  if (first.startsWith("/api/storage/")) return first;
+  if (/^https?:\/\//i.test(first)) return first; // legacy public URL
   return null;
 }
 

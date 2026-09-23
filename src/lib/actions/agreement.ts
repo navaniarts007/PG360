@@ -7,10 +7,9 @@ import { humanizeDbError } from "../errors";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { query, queryOne } from "../mysql/client";
+import { VPS_MARKER } from "../storage/vps";
 
 export type ActionState = { ok?: boolean; error?: string };
-
-const cld = /^cld:/;
 
 /* -------- admin: build the policy sections + owner signature -------------- */
 
@@ -78,7 +77,7 @@ export async function saveOwnerSignatureAction(
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
   const url = String(formData.get("signature_url") ?? "");
-  if (!cld.test(url)) return { error: "Please add a signature image first." };
+  if (!VPS_MARKER.test(url)) return { error: "Please add a signature image first." };
   try {
     await query(`update pg_accounts set owner_signature_url = ? where id = ?`, [url, pid]);
   } catch (error) {
@@ -97,7 +96,7 @@ export async function acceptAgreementAction(
   const me = await requireRole(["tenant"]);
   if (!me.tenant_id || !me.pg_id) return { error: "No tenant record found." };
   const url = String(formData.get("signature_url") ?? "");
-  if (!cld.test(url)) return { error: "Please add your signature to continue." };
+  if (!VPS_MARKER.test(url)) return { error: "Please add your signature to continue." };
   try {
     await query(
       `insert into tenant_agreements (pg_id, tenant_id, signature_url, accepted_at) values (?, ?, ?, now())

@@ -1,90 +1,11 @@
 "use server";
 
-import { createHash } from "node:crypto";
 import { humanizeDbError } from "../errors";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { query, queryOne } from "../mysql/client";
-
-export type SignResult =
-  | {
-      ok: true;
-      cloudName: string;
-      apiKey: string;
-      timestamp: number;
-      signature: string;
-      folder: string;
-    }
-  | { ok: false; error: string };
-
-const FOLDERS = ["pg360/payments", "pg360/qr", "pg360/avatars", "pg360/kyc", "pg360/docs"] as const;
-type Folder = (typeof FOLDERS)[number];
-
-/** Returns a short-lived signature so the browser can upload directly to
- *  Cloudinary without ever seeing the API secret. */
-export async function getUploadSignatureAction(
-  folder: Folder = "pg360/payments",
-): Promise<SignResult> {
-  await requireRole(["tenant", "admin", "staff"]);
-  if (!FOLDERS.includes(folder)) return { ok: false, error: "Bad upload target." };
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloudName || !apiKey || !apiSecret) {
-    return { ok: false, error: "Uploads aren't configured." };
-  }
-  const timestamp = Math.floor(Date.now() / 1000);
-  const toSign = `folder=${folder}&timestamp=${timestamp}`;
-  const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
-  return { ok: true, cloudName, apiKey, timestamp, signature, folder };
-}
-
-export type KycSignResult =
-  | {
-      ok: true;
-      cloudName: string;
-      apiKey: string;
-      timestamp: number;
-      signature: string;
-      folder: string;
-    }
-  | { ok: false; error: string };
-
-/** Signature for uploading an Aadhaar/KYC document to Cloudinary as an
- *  AUTHENTICATED (private) asset — it can't be delivered without a signed URL,
- *  so the raw link can't be opened by just anyone. */
-export async function getKycUploadSignatureAction(): Promise<KycSignResult> {
-  await requireRole(["admin", "staff"]);
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloudName || !apiKey || !apiSecret) {
-    return { ok: false, error: "Uploads aren't configured." };
-  }
-  const folder = "pg360/kyc";
-  const timestamp = Math.floor(Date.now() / 1000);
-  const toSign = `folder=${folder}&timestamp=${timestamp}&type=authenticated`;
-  const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
-  return { ok: true, cloudName, apiKey, timestamp, signature, folder };
-}
-
-/** Signature for uploading a SIGNATURE (resident or owner) to Cloudinary as a
- *  private authenticated asset. Tenants may upload (their own signature). */
-export async function getSignatureUploadSignatureAction(): Promise<KycSignResult> {
-  await requireRole(["tenant", "admin", "staff"]);
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloudName || !apiKey || !apiSecret) {
-    return { ok: false, error: "Uploads aren't configured." };
-  }
-  const folder = "pg360/signatures";
-  const timestamp = Math.floor(Date.now() / 1000);
-  const toSign = `folder=${folder}&timestamp=${timestamp}&type=authenticated`;
-  const signature = createHash("sha1").update(toSign + apiSecret).digest("hex");
-  return { ok: true, cloudName, apiKey, timestamp, signature, folder };
-}
+import { VPS_MARKER } from "../storage/vps";
 
 /** Admin saves the PG's payment details (UPI + bank) and/or QR image URL,
  *  scoped to the caller's own active property. */
@@ -100,7 +21,7 @@ export async function savePaymentDetailsAction(
   const upi = String(formData.get("upi_id") ?? "").trim();
   const bank = String(formData.get("bank_details") ?? "").trim();
   const qr = String(formData.get("payment_qr_url") ?? "").trim();
-  if (qr && !/^https:\/\/res\.cloudinary\.com\//.test(qr)) return { error: "Invalid QR URL." };
+  if (qr && !VPS_MARKER.test(qr)) return { error: "Invalid QR URL." };
 
   try {
     if (qr) {

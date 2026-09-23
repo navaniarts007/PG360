@@ -8,6 +8,7 @@ import { query, queryOne } from "../mysql/client";
 import { notifyStaff } from "../notify";
 import { computeBill } from "../money";
 import { logTenantEvent } from "../events";
+import { VPS_MARKER } from "../storage/vps";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -79,7 +80,7 @@ export async function tenantRecordPaymentAction(
   if (d.payment_mode === "upi" && !d.screenshot_url) {
     return { error: "Please upload your UPI payment screenshot." };
   }
-  if (d.screenshot_url && !/^https:\/\/res\.cloudinary\.com\//.test(d.screenshot_url)) {
+  if (d.screenshot_url && !VPS_MARKER.test(d.screenshot_url)) {
     return { error: "Invalid screenshot URL." };
   }
 
@@ -164,15 +165,14 @@ export async function tenantRecordPaymentAction(
 
 /* ------------------------------- profile photo ------------------------------- */
 
-/** Tenant sets their portal profile photo (Cloudinary URL). Scoped to their
- *  own tenant_id. */
+/** Tenant sets their portal profile photo. Scoped to their own tenant_id. */
 export async function tenantUpdateAvatarAction(
   formData: FormData,
 ): Promise<{ ok?: boolean; error?: string }> {
   const me = await requireRole(["tenant"]);
   if (!me.tenant_id) return { error: "No tenant record linked to your login." };
   const url = String(formData.get("avatar_url") || "");
-  if (url && !/^https:\/\/res\.cloudinary\.com\//.test(url)) {
+  if (url && !VPS_MARKER.test(url)) {
     return { error: "Invalid image URL." };
   }
   try {

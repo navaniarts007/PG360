@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
     // the session cookie requires Secure.
     url: "https://pg360.shanthisladieshostel.com",
     cleartext: false,
-    allowNavigation: ["pg360.shanthisladieshostel.com", "*.cloudinary.com"],
+    allowNavigation: ["pg360.shanthisladieshostel.com"],
     // On a load failure (no network, DNS down, etc.) show the branded
     // offline screen in www/ instead of Android's default WebView error page.
     errorPath: "index.html",

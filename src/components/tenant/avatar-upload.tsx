@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2 } from "lucide-react";
-import { getUploadSignatureAction } from "@/lib/actions/upload";
+import { uploadToStorage } from "@/lib/upload-client";
 import { tenantUpdateAvatarAction } from "@/lib/actions/tenant";
 import { initials } from "@/lib/utils";
 
@@ -25,24 +25,11 @@ export function AvatarUpload({
   const onPick = async (file: File) => {
     setBusy(true);
     try {
-      const sig = await getUploadSignatureAction("pg360/avatars");
-      if (!sig.ok) throw new Error(sig.error);
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("api_key", sig.apiKey);
-      fd.append("timestamp", String(sig.timestamp));
-      fd.append("signature", sig.signature);
-      fd.append("folder", sig.folder);
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
-        { method: "POST", body: fd },
-      );
-      const json = (await res.json()) as { secure_url?: string };
-      if (!json.secure_url) throw new Error("Upload failed");
-      setCurrent(json.secure_url);
+      const url = await uploadToStorage(file, "pg360/avatars");
+      setCurrent(url);
       start(() => {
         const body = new FormData();
-        body.set("avatar_url", json.secure_url!);
+        body.set("avatar_url", url);
         void tenantUpdateAvatarAction(body).then(() => router.refresh());
       });
     } catch {

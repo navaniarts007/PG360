@@ -17,10 +17,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FieldRow, Input } from "@/components/ui/field";
 import { SignaturePad } from "@/components/signature-pad";
-import {
-  getUploadSignatureAction,
-  saveRulesDocumentAction,
-} from "@/lib/actions/upload";
+import { saveRulesDocumentAction } from "@/lib/actions/upload";
+import { uploadToStorage } from "@/lib/upload-client";
 import { saveOwnerSignatureAction } from "@/lib/actions/agreement";
 import type { ActionState } from "@/lib/actions/agreement";
 import { useRouter } from "next/navigation";
@@ -44,27 +42,7 @@ export function RulesRegulationsCard({
     setUploading(true);
     setUploadErr(null);
     try {
-      // 1. Try Cloudinary upload if configured
-      const sig = await getUploadSignatureAction("pg360/docs");
-      if (sig.ok) {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("api_key", sig.apiKey);
-        fd.append("timestamp", String(sig.timestamp));
-        fd.append("signature", sig.signature);
-        fd.append("folder", sig.folder);
-        // auto upload endpoint handles images, PDFs, docs
-        const res = await fetch(
-          `https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,
-          { method: "POST", body: fd },
-        );
-        const json = (await res.json()) as { secure_url?: string; error?: { message: string } };
-        if (!json.secure_url) throw new Error(json.error?.message ?? "Upload failed.");
-        setDocUrl(json.secure_url);
-      } else {
-        // Fallback: create object URL / prompt for manual link
-        throw new Error(sig.error || "Cloudinary upload not configured.");
-      }
+      setDocUrl(await uploadToStorage(file, "pg360/docs"));
     } catch (e) {
       setUploadErr(
         e instanceof Error
@@ -144,7 +122,7 @@ export function RulesRegulationsCard({
               Upload Rules &amp; Regulations Document
             </p>
             <p className="mt-0.5 text-xs text-ink-muted">
-              PDF, DOC, DOCX, PNG, JPG (max 10MB)
+              PDF, DOC, DOCX, PNG, JPG (max 4MB)
             </p>
 
             <input

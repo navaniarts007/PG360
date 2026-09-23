@@ -13,6 +13,7 @@ import { query, queryOne, withTransaction, type Tx } from "../mysql/client";
 import { notifyTenant } from "../notify";
 import { computeBill, computeSettlement } from "../money";
 import { getEdition } from "../get-client";
+import { VPS_MARKER } from "../storage/vps";
 import { logTenantEvent } from "../events";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -459,12 +460,8 @@ export async function addTenantRecordAction(
   const parsed = recordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
-  const cloud = /^https:\/\/res\.cloudinary\.com\//;
-  const kycPath = /^[\w-]+\/[\w-]+\.(png|jpe?g|webp)$/i;
-  const kyc = d.aadhaar_photo_url;
-  if (kyc && !kyc.startsWith("cld:") && !cloud.test(kyc) && !kycPath.test(kyc))
-    return { error: "Invalid ID photo." };
-  if (d.avatar_url && !cloud.test(d.avatar_url)) return { error: "Invalid tenant photo." };
+  if (d.aadhaar_photo_url && !VPS_MARKER.test(d.aadhaar_photo_url)) return { error: "Invalid ID photo." };
+  if (d.avatar_url && !VPS_MARKER.test(d.avatar_url)) return { error: "Invalid tenant photo." };
 
   const bedId = d.bed_id && d.bed_id !== "none" ? d.bed_id : null;
   let roomId: string | null = null;
@@ -835,7 +832,7 @@ export async function deleteTenantAction(formData: FormData): Promise<void> {
 const docSchema = z.object({
   tenant_id: z.string().uuid(),
   doc_type: z.enum(["aadhaar", "dl", "passport", "voter", "other"]),
-  file_url: z.string().regex(/^cld:/, "Upload a document first."),
+  file_url: z.string().regex(VPS_MARKER, "Upload a document first."),
   label: z.string().optional(),
 });
 

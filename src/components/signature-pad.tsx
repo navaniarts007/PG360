@@ -5,7 +5,7 @@ import { Camera, Check, Eraser, ImageUp, Loader2, PenLine } from "lucide-react";
 import { uploadSignature } from "@/lib/upload-client";
 
 /** Capture a signature by drawing on a canvas OR uploading an image. On save it
- *  uploads privately and reports a "cld:" marker via onChange. */
+ *  uploads to the client's VPS and reports the stored path via onChange. */
 export function SignaturePad({
   onChange,
   saved = false,
