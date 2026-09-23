@@ -2,29 +2,42 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadSignature } from "@/lib/upload-client";
-import { AlertCircle, Camera, Check, ChevronDown, ChevronUp, Eraser, ExternalLink, ImageUp, Loader2, Pencil, PenLine, ScrollText, UserPlus, X } from "lucide-react";
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  ImageUp,
+  Loader2,
+  Pencil,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
+import { SignaturePad } from "@/components/signature-pad";
 import {
   addTenantAction,
   updateTenantAction,
   type ActionState,
 } from "@/lib/actions/admin";
+import { signAgreementForTenantAction, type ActionState as AgreementActionState } from "@/lib/actions/agreement";
 import { uploadKyc, uploadToStorage } from "@/lib/upload-client";
 import { inr } from "@/lib/utils";
 import type { BedOption } from "@/lib/db";
-import type { Tenant } from "@/lib/types";
+import type { AgreementSection, Tenant } from "@/lib/types";
 
 export function AddTenantDialog({
   beds,
   tenant,
-  rulesDocUrl,
+  agreementSections,
+  ownerSignatureUrl,
 }: {
   beds: BedOption[];
   tenant?: Tenant;
-  rulesDocUrl?: string | null;
+  /** Only meaningful for the create flow — offers the optional step-2 signing. */
+  agreementSections?: AgreementSection[];
+  ownerSignatureUrl?: string | null;
 }) {
   const isEdit = !!tenant;
   return (
@@ -50,26 +63,77 @@ export function AddTenantDialog({
         )
       }
     >
-      {(close) => <TenantForm beds={beds} tenant={tenant} rulesDocUrl={rulesDocUrl} onDone={close} />}
+      {(close) => (
+        <TenantOnboarding
+          beds={beds}
+          tenant={tenant}
+          agreementSections={agreementSections ?? []}
+          ownerSignatureUrl={ownerSignatureUrl ?? null}
+          onDone={close}
+        />
+      )}
     </Modal>
+  );
+}
+
+/** Step 1 (mandatory) is always the registration form. Step 2 (optional) —
+ *  read & sign the resident agreement — only ever shows right after a new
+ *  tenant is created, and only when the owner has actually set up agreement
+ *  sections to read. Editing an existing tenant never shows step 2. */
+function TenantOnboarding({
+  beds,
+  tenant,
+  agreementSections,
+  ownerSignatureUrl,
+  onDone,
+}: {
+  beds: BedOption[];
+  tenant?: Tenant;
+  agreementSections: AgreementSection[];
+  ownerSignatureUrl: string | null;
+  onDone: () => void;
+}) {
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+
+  if (created) {
+    return (
+      <AgreementStep
+        tenantId={created.id}
+        tenantName={created.name}
+        sections={agreementSections}
+        ownerSignatureUrl={ownerSignatureUrl}
+        onDone={onDone}
+      />
+    );
+  }
+
+  return (
+    <TenantForm
+      beds={beds}
+      tenant={tenant}
+      onDone={onDone}
+      onCreated={!tenant && agreementSections.length > 0 ? (id, name) => setCreated({ id, name }) : undefined}
+    />
   );
 }
 
 function TenantForm({
   beds,
   tenant,
-  rulesDocUrl,
   onDone,
+  onCreated,
 }: {
   beds: BedOption[];
   tenant?: Tenant;
-  rulesDocUrl?: string | null;
   onDone: () => void;
+  /** When set, a successful create hands off to step 2 instead of closing. */
+  onCreated?: (tenantId: string, tenantName: string) => void;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     tenant ? updateTenantAction : addTenantAction,
     {},
   );
+  const [name, setName] = useState(tenant?.name ?? "");
   const [selfie, setSelfie] = useState<string | null>(tenant?.avatar_url ?? null); // check-in photo
   const initialPhotos = tenant?.aadhaar_photo_url
     ? tenant.aadhaar_photo_url.split(",").map((s) => s.trim()).filter(Boolean)
@@ -87,19 +151,20 @@ function TenantForm({
   );
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
-  const [ownerSig, setOwnerSig] = useState<string | null>(null);
-  const [tenantSig, setTenantSig] = useState<string | null>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const idCameraRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   useEffect(() => {
-    if (state.ok) {
-      router.refresh();
+    if (!state.ok) return;
+    router.refresh();
+    if (onCreated && state.tenantId) {
+      onCreated(state.tenantId, name);
+    } else {
       onDone();
     }
-  }, [state.ok, onDone, router]);
+  }, [state.ok, state.tenantId, onDone, onCreated, name, router]);
 
   const options = beds.filter((b) => b.status === "vacant" || b.id === tenant?.bed_id);
 
@@ -136,26 +201,6 @@ function TenantForm({
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}
-        </div>
-      )}
-
-      {rulesDocUrl && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-clay-100 bg-clay-50/60 p-3.5 text-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <ScrollText className="size-4 shrink-0 text-clay-600" />
-            <div className="min-w-0">
-              <p className="font-semibold text-ink">Rules &amp; Regulations Document</p>
-              <p className="text-ink-muted truncate">Property rules document attached for resident onboarding.</p>
-            </div>
-          </div>
-          <a
-            href={rulesDocUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 font-semibold text-clay-600 shadow-sm hover:bg-paper-2"
-          >
-            <ExternalLink className="size-3.5" /> View Rules
-          </a>
         </div>
       )}
 
@@ -197,7 +242,7 @@ function TenantForm({
 
       <div className="grid grid-cols-2 gap-3">
         <FieldRow label="Full name" htmlFor="name" className="col-span-2">
-          <Input id="name" name="name" defaultValue={tenant?.name ?? ""} placeholder="Arjun Nair" required />
+          <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Arjun Nair" required />
         </FieldRow>
         <FieldRow label="Bed" htmlFor="bed_id" hint="rent auto-fills" className="col-span-2">
           <Select
@@ -440,16 +485,6 @@ function TenantForm({
         </FieldRow>
       )}
 
-      {/* ── Signatures ── */}
-      <input type="hidden" name="owner_signature_url" value={ownerSig ?? ""} />
-      <input type="hidden" name="tenant_signature_url" value={tenantSig ?? ""} />
-      <SignaturesSection
-        ownerSig={ownerSig}
-        tenantSig={tenantSig}
-        onOwnerSig={setOwnerSig}
-        onTenantSig={setTenantSig}
-      />
-
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
           Cancel
@@ -468,238 +503,98 @@ function TenantForm({
   );
 }
 
-/* ── Signatures section ─────────────────────────────────────────────────── */
+/* ── Step 2: optional read & sign, shown right after a new tenant is added ── */
 
-function SignaturesSection({
-  ownerSig,
-  tenantSig,
-  onOwnerSig,
-  onTenantSig,
+function AgreementStep({
+  tenantId,
+  tenantName,
+  sections,
+  ownerSignatureUrl,
+  onDone,
 }: {
-  ownerSig: string | null;
-  tenantSig: string | null;
-  onOwnerSig: (v: string | null) => void;
-  onTenantSig: (v: string | null) => void;
+  tenantId: string;
+  tenantName: string;
+  sections: AgreementSection[];
+  ownerSignatureUrl: string | null;
+  onDone: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="rounded-xl border border-line bg-paper-2/40">
-      {/* header — click to expand */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
-      >
-        <div className="flex items-center gap-2.5">
-          <PenLine className="size-4 text-clay-500" />
-          <div>
-            <p className="text-sm font-semibold text-ink">Signatures</p>
-            <p className="text-xs text-ink-muted">
-              {ownerSig && tenantSig
-                ? "✓ Both signatures captured"
-                : ownerSig
-                  ? "Owner signed · tenant pending"
-                  : tenantSig
-                    ? "Tenant signed · owner pending"
-                    : "Optional — draw or upload owner & tenant signatures"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {(ownerSig || tenantSig) && (
-            <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[0.65rem] font-semibold text-teal-700 ring-1 ring-teal-100">
-              {ownerSig && tenantSig ? "2/2" : "1/2"} signed
-            </span>
-          )}
-          {open ? <ChevronUp className="size-4 text-ink-muted" /> : <ChevronDown className="size-4 text-ink-muted" />}
-        </div>
-      </button>
-
-      {open && (
-        <div className="space-y-5 border-t border-line px-4 pb-5 pt-4">
-          {/* Owner */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Owner / Manager signature
-            </p>
-            <InlineSigPad value={ownerSig} onChange={onOwnerSig} label="owner" />
-          </div>
-
-          <div className="border-t border-line" />
-
-          {/* Tenant */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Tenant signature
-            </p>
-            <InlineSigPad value={tenantSig} onChange={onTenantSig} label="tenant" />
-          </div>
-        </div>
-      )}
-    </div>
+  const [state, action, pending] = useActionState<AgreementActionState, FormData>(
+    signAgreementForTenantAction,
+    {},
   );
-}
+  const [value, setValue] = useState<string | null>(null);
+  const router = useRouter();
 
-function InlineSigPad({
-  value,
-  onChange,
-  label,
-}: {
-  value: string | null;
-  onChange: (v: string | null) => void;
-  label: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const drawing = useRef(false);
-  const dirty = useRef(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  // init canvas
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = "#1f2937";
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-  }, []);
-
-  const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const c = canvasRef.current!;
-    const r = c.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) };
-  };
-  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    drawing.current = true; dirty.current = true;
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y);
-  };
-  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawing.current) return;
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke();
-  };
-  const end = () => { drawing.current = false; };
-
-  const clear = () => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
-    dirty.current = false; onChange(null); setErr(null);
-  };
-
-  const saveDrawn = async () => {
-    if (!dirty.current) { setErr("Please draw a signature first."); return; }
-    setBusy(true); setErr(null);
-    try {
-      const dataUrl = canvasRef.current!.toDataURL("image/png");
-      const val = await uploadSignature(dataUrl);
-      onChange(val);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
-    finally { setBusy(false); }
-  };
-
-  const onFile = async (file: File) => {
-    setBusy(true); setErr(null);
-    try {
-      const val = await uploadSignature(file);
-      onChange(val);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
-    finally { setBusy(false); }
-  };
+    if (state.ok) {
+      router.refresh();
+      onDone();
+    }
+  }, [state.ok, onDone, router]);
 
   return (
-    <div className="space-y-2">
-      {value ? (
-        <div className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-3">
-          <Check className="size-4 text-teal-600" />
-          <p className="flex-1 text-xs font-semibold text-teal-700">
-            {label.charAt(0).toUpperCase() + label.slice(1)} signature captured
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-clay-500">Step 2 of 2 · optional</p>
+        <h3 className="mt-1 font-display text-lg font-semibold text-ink">
+          Read &amp; sign the resident agreement
+        </h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          {tenantName || "The tenant"} has been added. Walk through the house rules together now, or
+          skip — they&apos;ll be asked to read &amp; sign this the first time they log in themselves.
+        </p>
+      </div>
+
+      <div className="max-h-56 space-y-4 overflow-y-auto rounded-xl border border-line bg-paper-2/40 p-4">
+        {sections.map((s, i) => (
+          <div key={s.id}>
+            <p className="text-sm font-semibold text-ink">
+              {i + 1}. {s.title}
+            </p>
+            {s.body && <p className="mt-1 whitespace-pre-wrap text-xs text-ink-soft">{s.body}</p>}
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-line bg-paper-2/40 p-3">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Owner signature
+        </p>
+        {ownerSignatureUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ownerSignatureUrl} alt="Owner signature" className="max-h-14 object-contain" />
+        ) : (
+          <p className="text-xs text-ink-muted">Not signed yet — add it in Settings.</p>
+        )}
+      </div>
+
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="tenant_id" value={tenantId} />
+        <input type="hidden" name="signature_url" value={value ?? ""} />
+        {state.error && (
+          <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">
+            <AlertCircle className="size-3.5 shrink-0" /> {state.error}
+          </div>
+        )}
+        <div>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Tenant signature
           </p>
-          <button
-            type="button"
-            onClick={() => { onChange(null); dirty.current = false; }}
-            className="text-xs font-semibold text-rose-600 hover:underline"
-          >
-            Clear
-          </button>
+          <SignaturePad onChange={setValue} />
         </div>
-      ) : (
-        <>
-          {/* Canvas */}
-          <div className="overflow-hidden rounded-xl border border-line bg-white p-1.5">
-            <canvas
-              ref={canvasRef}
-              width={480}
-              height={130}
-              onPointerDown={start}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerLeave={end}
-              className="h-[110px] w-full touch-none rounded-lg"
-              style={{ touchAction: "none" }}
-            />
-          </div>
-          {err && <p className="text-xs text-rose-600">{err}</p>}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={saveDrawn}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-clay-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-clay-700 disabled:opacity-60"
-            >
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <PenLine className="size-3.5" />}
-              Save signature
-            </button>
-            <button
-              type="button"
-              onClick={clear}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600"
-            >
-              <Eraser className="size-3.5" /> Clear
-            </button>
-            <input
-              ref={cameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }}
-            />
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
-            >
-              <Camera className="size-3.5" /> Take photo
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft hover:text-clay-600 disabled:opacity-60"
-            >
-              <ImageUp className="size-3.5" /> Upload file
-            </button>
-          </div>
-        </>
-      )}
+        <div className="flex gap-2 pt-1">
+          <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
+            Skip for now
+          </Button>
+          <Button type="submit" className="flex-1" disabled={pending || !value}>
+            {pending ? (
+              <><Loader2 className="size-4 animate-spin" /> Saving…</>
+            ) : (
+              <><CheckCircle2 className="size-4" /> Save &amp; finish</>
+            )}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

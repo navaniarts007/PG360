@@ -16,7 +16,7 @@ import { getEdition } from "../get-client";
 import { VPS_MARKER } from "../storage/vps";
 import { logTenantEvent } from "../events";
 
-export type ActionState = { ok?: boolean; error?: string };
+export type ActionState = { ok?: boolean; error?: string; tenantId?: string };
 
 const amenityList = (s?: string) => (s ?? "").split(",").map((a) => a.trim()).filter(Boolean);
 
@@ -429,7 +429,7 @@ export async function addTenantAction(
   revalidatePath("/dashboard/tenants");
   revalidatePath("/dashboard/rooms");
   revalidatePath("/dashboard");
-  return { ok: true };
+  return { ok: true, tenantId };
 }
 
 /* ---- lean record onboarding (custom editions: no login, ID capture) ------ */

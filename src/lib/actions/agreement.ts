@@ -108,3 +108,41 @@ export async function acceptAgreementAction(
   }
   redirect("/portal");
 }
+
+/* -------- admin/staff: capture the tenant's signature at signup ----------- */
+
+/** Records the resident agreement as signed for a tenant admin/staff just
+ *  added — the optional "read & sign now" step in the add-tenant flow.
+ *  Same tenant_agreements row the tenant's own first-login flow writes to,
+ *  so whichever happens first (staff-assisted or the tenant's own login)
+ *  is the one that sticks (on duplicate key). */
+export async function signAgreementForTenantAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const url = String(formData.get("signature_url") ?? "");
+  if (!tenantId) return { error: "No tenant selected." };
+  if (!VPS_MARKER.test(url)) return { error: "Please add a signature first." };
+
+  const tenant = await queryOne<{ id: string }>(`select id from tenants where id = ? and pg_id = ?`, [
+    tenantId,
+    pid,
+  ]);
+  if (!tenant) return { error: "That tenant isn't in this property." };
+
+  try {
+    await query(
+      `insert into tenant_agreements (pg_id, tenant_id, signature_url, accepted_at) values (?, ?, ?, now())
+       on duplicate key update signature_url = values(signature_url), accepted_at = values(accepted_at)`,
+      [pid, tenantId, url],
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not save the agreement.") };
+  }
+  revalidatePath("/dashboard/tenants");
+  return { ok: true };
+}
