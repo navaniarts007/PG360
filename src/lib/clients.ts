@@ -67,6 +67,10 @@ const ROOT_LABELS = new Set(["pg", "pg360", "www", "localhost", "127", "192", "a
  */
 const CUSTOM_DOMAINS: Record<string, ClientConfig> = {
   "pg360.shanthisladieshostel.com": shanthi,
+  // Vercel-assigned fallback hosts for this project, for QA/testing while the
+  // custom domain's DNS is down (e.g. a temp APK build pointed at one of these).
+  "pg360-shanthis-ladies-hostel.vercel.app": shanthi,
+  "pg360-shanthis-ladies-hoste-git-b30c8a-navanidhiram-as-projects.vercel.app": shanthi,
 };
 
 /** Resolve a client from a request host header. */
