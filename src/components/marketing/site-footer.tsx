@@ -91,7 +91,7 @@ export function SiteFooter() {
 
         <div className="border-t border-line/80">
           <div className="mx-auto flex flex-col items-center justify-between gap-3 px-6 py-6 text-sm text-ink-muted sm:flex-row lg:px-10">
-          <p>© {new Date().getFullYear()} PG360. Made in India 🇮🇳</p>
+          <p>© {new Date().getFullYear()} PG 360. Made in India 🇮🇳</p>
           <p className="tnum">GST-ready invoices · UPI &amp; bank · Asia/Kolkata</p>
           </div>
         </div>

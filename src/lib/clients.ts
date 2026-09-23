@@ -21,7 +21,7 @@ export interface ClientConfig {
 /** The default PG360 product (any unrecognised host). */
 export const DEFAULT_CLIENT: ClientConfig = {
   slug: "pg360",
-  brandName: "PG360",
+  brandName: "PG 360",
   edition: "full",
   portalEnabled: true,
 };

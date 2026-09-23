@@ -20,6 +20,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // don't advertise the framework/version
+  // Allow both localhost and 127.0.0.1 in dev to suppress cross-origin HMR warnings
+  allowedDevOrigins: ["localhost", "127.0.0.1"],
   eslint: {
     // Lint runs in CI (.github/workflows/ci.yml), not here. A stray unused
     // import is a style problem, not a reason to take the live site down —

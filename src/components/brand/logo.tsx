@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /** The brand mark. Uses `src` (a white-label client logo) when given, else
  *  public/pg360-logo.png, and falls back to the built-in glyph if the asset
  *  is missing — so branding never breaks. */
-export function Mark({ className, src, alt = "PG360" }: { className?: string; src?: string | null; alt?: string }) {
+export function Mark({ className, src, alt = "PG 360" }: { className?: string; src?: string | null; alt?: string }) {
   const [failed, setFailed] = useState(false);
 
   if (!failed) {
@@ -58,7 +58,7 @@ export function Logo({
   href?: string;
   invert?: boolean;
   wordmark?: boolean;
-  /** White-label brand name. Defaults to the PG360 wordmark. */
+  /** White-label brand name. Defaults to the PG 360 wordmark. */
   label?: string;
   /** White-label brand mark. Defaults to the PG360 logo. */
   logoSrc?: string | null;
@@ -70,7 +70,7 @@ export function Logo({
     >
       <Mark
         src={logoSrc}
-        alt={label ?? "PG360"}
+        alt={label ?? "PG 360"}
         className="transition-transform duration-500 group-hover:rotate-[20deg]"
       />
       {wordmark && (
@@ -84,7 +84,7 @@ export function Logo({
             label
           ) : (
             <>
-              PG<span className="text-clay-500">360</span>
+              PG <span className="text-clay-500">360</span>
             </>
           )}
         </span>
