@@ -42,6 +42,7 @@ export default async function AdminLayout({
       settings={pg?.settings ?? {}}
       edition={client.edition}
       brandName={client.brandName}
+      logoSrc={client.logoSrc}
       impersonating={user.impersonating ?? null}
       permissions={user.permissions ?? null}
     >

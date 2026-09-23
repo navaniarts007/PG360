@@ -22,6 +22,7 @@ export interface ResolvedEdition {
   portalEnabled: boolean;
   regPrefix: string | null;
   brandName: string;
+  logoSrc: string | null;
 }
 
 export const getEdition = cache(async (): Promise<ResolvedEdition> => {
@@ -51,6 +52,7 @@ export const getEdition = cache(async (): Promise<ResolvedEdition> => {
             : acct.edition === "gvm"
               ? acct.pg_name
               : base.brandName,
+        logoSrc: base.logoSrc ?? null,
       };
     }
   }
@@ -60,5 +62,6 @@ export const getEdition = cache(async (): Promise<ResolvedEdition> => {
     portalEnabled: base.portalEnabled,
     regPrefix: base.regPrefix ?? null,
     brandName: base.brandName,
+    logoSrc: base.logoSrc ?? null,
   };
 });

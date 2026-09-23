@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getClient } from "@/lib/get-client";
 import {
   ArrowRight,
   BedDouble,
@@ -20,7 +22,12 @@ import { FeatureWeb } from "@/components/marketing/feature-web";
 import { DownloadCards } from "@/components/marketing/download-cards";
 import { cn } from "@/lib/utils";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // White-label clients on their own domain land straight on sign-in — the
+  // generic PG360 marketing/pricing page is only for the root product.
+  const client = await getClient();
+  if (client.slug !== "pg360") redirect("/login");
+
   return (
     <>
       <Hero />

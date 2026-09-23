@@ -127,6 +127,7 @@ export function AppShell({
   settings,
   edition = "full",
   brandName,
+  logoSrc,
   impersonating,
   permissions,
   demoExpiry,
@@ -142,6 +143,7 @@ export function AppShell({
   settings: PropertySettings;
   edition?: Edition;
   brandName?: string;
+  logoSrc?: string | null;
   impersonating?: { pgId: string; pgName: string } | null;
   permissions?: StaffPermissions | null;
   demoExpiry?: string | null;
@@ -184,7 +186,7 @@ export function AppShell({
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-5">
-        <Logo label={brandName} />
+        <Logo label={brandName} logoSrc={logoSrc} />
         <button
           onClick={() => setOpen(false)}
           className="grid size-9 place-items-center rounded-lg text-ink-muted hover:bg-paper-2 lg:hidden"
@@ -301,7 +303,7 @@ export function AppShell({
           >
             <Menu className="size-5" />
           </button>
-          <Logo label={brandName} />
+          <Logo label={brandName} logoSrc={logoSrc} />
           <NotificationBell userId={userId} initial={notifications} />
         </header>
 

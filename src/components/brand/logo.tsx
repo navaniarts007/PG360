@@ -4,17 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** The PG360 brand mark. Uses public/pg360-logo.png when present, and falls back
- *  to the built-in glyph if the asset is missing — so branding never breaks. */
-export function Mark({ className }: { className?: string }) {
+/** The brand mark. Uses `src` (a white-label client logo) when given, else
+ *  public/pg360-logo.png, and falls back to the built-in glyph if the asset
+ *  is missing — so branding never breaks. */
+export function Mark({ className, src, alt = "PG360" }: { className?: string; src?: string | null; alt?: string }) {
   const [failed, setFailed] = useState(false);
 
   if (!failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src="/pg360-logo.png"
-        alt="PG360"
+        src={src || "/pg360-logo.png"}
+        alt={alt}
         width={36}
         height={36}
         onError={() => setFailed(true)}
@@ -51,6 +52,7 @@ export function Logo({
   invert = false,
   wordmark = true,
   label,
+  logoSrc,
 }: {
   className?: string;
   href?: string;
@@ -58,13 +60,19 @@ export function Logo({
   wordmark?: boolean;
   /** White-label brand name. Defaults to the PG360 wordmark. */
   label?: string;
+  /** White-label brand mark. Defaults to the PG360 logo. */
+  logoSrc?: string | null;
 }) {
   return (
     <Link
       href={href}
       className={cn("group inline-flex items-center gap-2.5", className)}
     >
-      <Mark className="transition-transform duration-500 group-hover:rotate-[20deg]" />
+      <Mark
+        src={logoSrc}
+        alt={label ?? "PG360"}
+        className="transition-transform duration-500 group-hover:rotate-[20deg]"
+      />
       {wordmark && (
         <span
           className={cn(
