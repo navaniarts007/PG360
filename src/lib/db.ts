@@ -1005,6 +1005,13 @@ export async function getTenantAgreement(tenantId: string): Promise<TenantAgreem
   return queryOne<TenantAgreement>(`select * from tenant_agreements where tenant_id = ?`, [tenantId]);
 }
 
+/** Every signed agreement for a property, keyed by tenant_id — one query for
+ *  a whole tenant list instead of one per row. */
+export async function listTenantAgreementsByTenant(pgId: string): Promise<Record<string, TenantAgreement>> {
+  const rows = await query<TenantAgreement>(`select * from tenant_agreements where pg_id = ?`, [pgId]);
+  return Object.fromEntries(rows.map((r) => [r.tenant_id, r]));
+}
+
 export async function getMyIssues(): Promise<Issue[]> {
   const session = await getSession();
   if (!session?.tenant_id) return [];

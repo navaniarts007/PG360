@@ -18,24 +18,27 @@ import {
   getKycSignedUrl,
   getPgAccount,
   listAgreementSections,
+  listTenantAgreementsByTenant,
   listTenantsWithRoom,
   paidTenantIds,
 } from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
+import type { TenantAgreement } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
   const pid = await getActiveProperty();
-  const [tenants, beds, client, paidIds, agreementSections, pg] = await Promise.all([
+  const [tenants, beds, client, paidIds, agreementSections, pg, agreementsByTenant] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
     getEdition(),
     paidTenantIds(),
     pid ? listAgreementSections(pid) : Promise.resolve([]),
     pid ? getPgAccount(pid) : Promise.resolve(null),
+    pid ? listTenantAgreementsByTenant(pid) : Promise.resolve({} as Record<string, TenantAgreement>),
   ]);
   const ownerSignatureUrl = await getKycSignedUrl(pg?.owner_signature_url ?? null);
   // Custom editions register residents as records (no login + ID capture).
@@ -165,7 +168,20 @@ export default async function TenantsPage() {
                         >
                           <Eye className="size-3.5" /> View
                         </Link>
-                        <AddTenantDialog beds={beds} tenant={t} />
+                        <AddTenantDialog
+                          beds={beds}
+                          tenant={t}
+                          agreementSections={agreementSections}
+                          ownerSignatureUrl={ownerSignatureUrl}
+                          existingAgreement={
+                            agreementsByTenant[t.id]
+                              ? {
+                                  signatureUrl: agreementsByTenant[t.id]!.signature_url,
+                                  acceptedAt: agreementsByTenant[t.id]!.accepted_at,
+                                }
+                              : null
+                          }
+                        />
                         <ConfirmDelete action={deleteTenantAction} id={t.id} title="Delete tenant" />
                       </div>
                     </td>

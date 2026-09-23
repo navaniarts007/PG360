@@ -32,10 +32,14 @@ import { requireRole } from "@/lib/guards";
 import {
   getBedOptions,
   getJoiningFees,
+  getKycSignedUrl,
   getKycSignedUrls,
   getPayTenants,
+  getPgAccount,
   getPgPolicy,
+  getTenantAgreement,
   getTenantDetail,
+  listAgreementSections,
   listTenantDocumentsSigned,
   listTenantEvents,
 } from "@/lib/db";
@@ -83,16 +87,21 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents] = await Promise.all([
-    getPayTenants(),
-    getBedOptions(),
-    getJoiningFees(id),
-    getPgPolicy(tenant.pg_id),
-    listTenantEvents(id),
-    getKycSignedUrls(tenant.aadhaar_photo_url),
-    listTenantDocumentsSigned(id),
-  ]);
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount, agreementSections, agreement] =
+    await Promise.all([
+      getPayTenants(),
+      getBedOptions(),
+      getJoiningFees(id),
+      getPgPolicy(tenant.pg_id),
+      listTenantEvents(id),
+      getKycSignedUrls(tenant.aadhaar_photo_url),
+      listTenantDocumentsSigned(id),
+      getPgAccount(tenant.pg_id),
+      listAgreementSections(tenant.pg_id),
+      getTenantAgreement(id),
+    ]);
 
+  const ownerSignatureUrl = await getKycSignedUrl(pgAccount?.owner_signature_url ?? null);
   const aadhaarUrl = aadhaarUrls[0] ?? null;
   const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
   const onboardingTotal = tenant.rent_amount + tenant.security_deposit + joiningTotal;
@@ -135,7 +144,13 @@ export default async function TenantDetail({
             <FileText className="size-3.5" /> Print record
           </Link>
           <ChangeBedDialog tenant={tenant} beds={beds} />
-          <AddTenantDialog beds={beds} tenant={tenant} />
+          <AddTenantDialog
+            beds={beds}
+            tenant={tenant}
+            agreementSections={agreementSections}
+            ownerSignatureUrl={ownerSignatureUrl}
+            existingAgreement={agreement ? { signatureUrl: agreement.signature_url, acceptedAt: agreement.accepted_at } : null}
+          />
           {tenant.status === "active" && (
             <>
               <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />

@@ -32,12 +32,14 @@ export function AddTenantDialog({
   tenant,
   agreementSections,
   ownerSignatureUrl,
+  existingAgreement,
 }: {
   beds: BedOption[];
   tenant?: Tenant;
-  /** Only meaningful for the create flow — offers the optional step-2 signing. */
   agreementSections?: AgreementSection[];
   ownerSignatureUrl?: string | null;
+  /** Editing only — the tenant's already-signed agreement, if any. */
+  existingAgreement?: { signatureUrl: string; acceptedAt: string } | null;
 }) {
   const isEdit = !!tenant;
   return (
@@ -69,6 +71,7 @@ export function AddTenantDialog({
           tenant={tenant}
           agreementSections={agreementSections ?? []}
           ownerSignatureUrl={ownerSignatureUrl ?? null}
+          existingAgreement={existingAgreement ?? null}
           onDone={close}
         />
       )}
@@ -76,44 +79,67 @@ export function AddTenantDialog({
   );
 }
 
-/** Step 1 (mandatory) is always the registration form. Step 2 (optional) —
- *  read & sign the resident agreement — only ever shows right after a new
- *  tenant is created, and only when the owner has actually set up agreement
- *  sections to read. Editing an existing tenant never shows step 2. */
+/** Create flow: step 1 (mandatory) is the registration form; step 2
+ *  (optional) — read & sign the resident agreement — shows right after the
+ *  new tenant is created, only when agreement sections exist.
+ *  Edit flow: the form plus a standing "resident agreement signature"
+ *  section at the end, so a signature skipped at signup (or one that needs
+ *  replacing) can be added any time. */
 function TenantOnboarding({
   beds,
   tenant,
   agreementSections,
   ownerSignatureUrl,
+  existingAgreement,
   onDone,
 }: {
   beds: BedOption[];
   tenant?: Tenant;
   agreementSections: AgreementSection[];
   ownerSignatureUrl: string | null;
+  existingAgreement: { signatureUrl: string; acceptedAt: string } | null;
   onDone: () => void;
 }) {
   const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
 
-  if (created) {
+  if (!tenant) {
+    if (created) {
+      return (
+        <AgreementStep
+          tenantId={created.id}
+          tenantName={created.name}
+          sections={agreementSections}
+          ownerSignatureUrl={ownerSignatureUrl}
+          onDone={onDone}
+        />
+      );
+    }
     return (
-      <AgreementStep
-        tenantId={created.id}
-        tenantName={created.name}
-        sections={agreementSections}
-        ownerSignatureUrl={ownerSignatureUrl}
+      <TenantForm
+        beds={beds}
         onDone={onDone}
+        onCreated={agreementSections.length > 0 ? (id, name) => setCreated({ id, name }) : undefined}
       />
     );
   }
 
   return (
-    <TenantForm
-      beds={beds}
-      tenant={tenant}
-      onDone={onDone}
-      onCreated={!tenant && agreementSections.length > 0 ? (id, name) => setCreated({ id, name }) : undefined}
-    />
+    <div className="space-y-6">
+      <TenantForm beds={beds} tenant={tenant} onDone={onDone} />
+      {agreementSections.length > 0 && (
+        <div className="border-t border-line pt-5">
+          <AgreementStep
+            tenantId={tenant.id}
+            tenantName={tenant.name}
+            sections={agreementSections}
+            ownerSignatureUrl={ownerSignatureUrl}
+            existingSignatureUrl={existingAgreement?.signatureUrl ?? null}
+            existingSignedAt={existingAgreement?.acceptedAt ?? null}
+            standalone
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -503,20 +529,31 @@ function TenantForm({
   );
 }
 
-/* ── Step 2: optional read & sign, shown right after a new tenant is added ── */
+/* ── Read & sign the resident agreement. Two contexts:
+   - Onboarding (right after "Add tenant"): "Step 2 of 2 · optional", can be
+     skipped, and a successful save closes the whole dialog.
+   - Standalone (inside "Edit tenant", always available): shows the current
+     signed status, lets it be added or replaced any time, and saving just
+     refreshes in place — it doesn't close the edit dialog. ───────────────── */
 
 function AgreementStep({
   tenantId,
   tenantName,
   sections,
   ownerSignatureUrl,
+  existingSignatureUrl = null,
+  existingSignedAt = null,
+  standalone = false,
   onDone,
 }: {
   tenantId: string;
   tenantName: string;
   sections: AgreementSection[];
   ownerSignatureUrl: string | null;
-  onDone: () => void;
+  existingSignatureUrl?: string | null;
+  existingSignedAt?: string | null;
+  standalone?: boolean;
+  onDone?: () => void;
 }) {
   const [state, action, pending] = useActionState<AgreementActionState, FormData>(
     signAgreementForTenantAction,
@@ -526,23 +563,44 @@ function AgreementStep({
   const router = useRouter();
 
   useEffect(() => {
-    if (state.ok) {
-      router.refresh();
-      onDone();
-    }
-  }, [state.ok, onDone, router]);
+    if (!state.ok) return;
+    router.refresh();
+    if (!standalone) onDone?.();
+  }, [state.ok, standalone, onDone, router]);
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-clay-500">Step 2 of 2 · optional</p>
-        <h3 className="mt-1 font-display text-lg font-semibold text-ink">
-          Read &amp; sign the resident agreement
-        </h3>
-        <p className="mt-1 text-sm text-ink-muted">
-          {tenantName || "The tenant"} has been added. Walk through the house rules together now, or
-          skip — they&apos;ll be asked to read &amp; sign this the first time they log in themselves.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          {standalone ? (
+            <h3 className="font-display text-lg font-semibold text-ink">Resident agreement</h3>
+          ) : (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wide text-clay-500">Step 2 of 2 · optional</p>
+              <h3 className="mt-1 font-display text-lg font-semibold text-ink">
+                Read &amp; sign the resident agreement
+              </h3>
+            </>
+          )}
+          <p className="mt-1 text-sm text-ink-muted">
+            {standalone
+              ? "Add or replace the tenant's signature any time."
+              : `${tenantName || "The tenant"} has been added. Walk through the house rules together now, or skip — they'll be asked to read & sign this the first time they log in themselves.`}
+          </p>
+        </div>
+        {standalone && (
+          <span
+            className={
+              existingSignatureUrl
+                ? "shrink-0 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-100"
+                : "shrink-0 rounded-full bg-gold-50 px-2.5 py-0.5 text-xs font-semibold text-gold-700 ring-1 ring-gold-100"
+            }
+          >
+            {existingSignatureUrl
+              ? `Signed${existingSignedAt ? ` ${new Date(existingSignedAt).toLocaleDateString("en-IN")}` : ""}`
+              : "Not signed yet"}
+          </span>
+        )}
       </div>
 
       <div className="max-h-56 space-y-4 overflow-y-auto rounded-xl border border-line bg-paper-2/40 p-4">
@@ -576,19 +634,36 @@ function AgreementStep({
             <AlertCircle className="size-3.5 shrink-0" /> {state.error}
           </div>
         )}
+        {state.ok && standalone && !value && (
+          <div className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-medium text-teal-700">
+            <CheckCircle2 className="size-3.5 shrink-0" /> Signature saved.
+          </div>
+        )}
         <div>
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Tenant signature
           </p>
+          {existingSignatureUrl && !value && (
+            <div className="mb-2 rounded-xl border border-line bg-paper-2/40 p-3">
+              <p className="mb-1 text-xs font-semibold text-teal-600">✓ Current signature</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={existingSignatureUrl} alt="Tenant signature" className="max-h-16 object-contain" />
+              <p className="mt-1 text-xs text-ink-muted">Draw or upload below to replace it.</p>
+            </div>
+          )}
           <SignaturePad onChange={setValue} />
         </div>
         <div className="flex gap-2 pt-1">
-          <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
-            Skip for now
-          </Button>
+          {!standalone && (
+            <Button type="button" variant="outline" className="flex-1" onClick={onDone}>
+              Skip for now
+            </Button>
+          )}
           <Button type="submit" className="flex-1" disabled={pending || !value}>
             {pending ? (
               <><Loader2 className="size-4 animate-spin" /> Saving…</>
+            ) : standalone ? (
+              <><CheckCircle2 className="size-4" /> Save signature</>
             ) : (
               <><CheckCircle2 className="size-4" /> Save &amp; finish</>
             )}
