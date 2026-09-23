@@ -5,12 +5,11 @@ import { SettingsForm } from "@/components/admin/settings-form";
 import { MoneySettingsForm } from "@/components/admin/money-settings-form";
 import { WifiNetworksCard } from "@/components/admin/wifi-networks-card";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
-import { RulesRegulationsCard } from "@/components/admin/rules-regulations-card";
 import { AgreementSectionsCard } from "@/components/admin/agreement-sections-card";
 import { ChangePasswordCard } from "@/components/app/change-password-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
-import { getKycSignedUrl, getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
+import { getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -25,8 +24,6 @@ export default async function SettingsPage() {
     listAgreementSections(pid),
   ]);
   if (!pg) notFound();
-  const ownerSignatureUrl = await getKycSignedUrl(pg.owner_signature_url);
-  const rulesDocUrl = pg.rules_doc_url ?? ((pg.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
 
   return (
     <div className="space-y-7">
@@ -69,15 +66,6 @@ export default async function SettingsPage() {
         </h2>
         <div className="max-w-2xl">
           <MoneySettingsForm pg={pg} policy={policy} />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
-          Rules &amp; Regulations
-        </h2>
-        <div className="max-w-2xl">
-          <RulesRegulationsCard rulesDocUrl={rulesDocUrl} ownerSignatureUrl={ownerSignatureUrl} />
         </div>
       </section>
 
