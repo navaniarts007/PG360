@@ -16,6 +16,9 @@ const config: CapacitorConfig = {
     url: "https://pg360.shanthisladieshostel.com",
     cleartext: false,
     allowNavigation: ["pg360.shanthisladieshostel.com", "*.cloudinary.com"],
+    // On a load failure (no network, DNS down, etc.) show the branded
+    // offline screen in www/ instead of Android's default WebView error page.
+    errorPath: "index.html",
   },
   android: {
     allowMixedContent: false,
