@@ -53,6 +53,8 @@ export function Logo({
   wordmark = true,
   label,
   logoSrc,
+  size = "default",
+  stacked = false,
 }: {
   className?: string;
   href?: string;
@@ -62,21 +64,33 @@ export function Logo({
   label?: string;
   /** White-label brand mark. Defaults to the PG360 logo. */
   logoSrc?: string | null;
+  /** "lg" for a bigger mark + wordmark — e.g. a centered hero logo. */
+  size?: "default" | "lg";
+  /** Mark above the wordmark, both centered, instead of side by side. */
+  stacked?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className={cn("group inline-flex items-center gap-2.5", className)}
+      className={cn(
+        "group",
+        stacked ? "flex flex-col items-center gap-3" : "inline-flex items-center gap-2.5",
+        className,
+      )}
     >
       <Mark
         src={logoSrc}
         alt={label ?? "PG 360"}
-        className="transition-transform duration-500 group-hover:rotate-[20deg]"
+        className={cn(
+          "transition-transform duration-500 group-hover:rotate-[20deg]",
+          size === "lg" && "size-16",
+        )}
       />
       {wordmark && (
         <span
           className={cn(
-            "font-display text-[1.35rem] font-medium tracking-tight",
+            "font-display font-medium tracking-tight",
+            size === "lg" ? "text-2xl" : "text-[1.35rem]",
             invert ? "text-paper" : "text-ink",
           )}
         >

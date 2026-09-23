@@ -78,7 +78,7 @@ export default async function LoginPage({
       </aside>
 
       {/* Form panel */}
-      <main className="relative flex flex-col items-center justify-center px-5 py-10 sm:px-8">
+      <main className="relative flex flex-col items-center justify-start px-5 pb-10 pt-20 sm:px-8 lg:justify-center lg:py-10">
         <Link
           href="/"
           className="absolute left-5 top-5 inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink sm:left-8 sm:top-8"
@@ -87,10 +87,10 @@ export default async function LoginPage({
         </Link>
 
         <div className="w-full max-w-sm">
-          <div className="lg:hidden">
-            <Logo label={client.brandName} logoSrc={client.logoSrc} />
+          <div className="flex justify-center lg:hidden">
+            <Logo label={client.brandName} logoSrc={client.logoSrc} size="lg" stacked />
           </div>
-          <h1 className="mt-8 font-display text-3xl font-semibold tracking-tight text-ink lg:mt-0">
+          <h1 className="mt-6 font-display text-3xl font-semibold tracking-tight text-ink lg:mt-0">
             Sign in
           </h1>
           <p className="mt-1.5 text-ink-muted">
