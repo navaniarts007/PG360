@@ -79,12 +79,19 @@ self-serves MySQL, not Postgres. Self-hosting Supabase needs:
    need to be reachable from wherever this client's app deployment runs) —
    flagged here as a decision, not yet made.
 
-## Explicitly not done yet
+## Status
 
-- No data has been copied — this is schema only. Copying actual tenant/
-  payment/KYC data is a separate, deliberately-scoped step once the schema
-  is confirmed working, and needs its own plan for do-not-lose-data safety.
-- No app code changes yet.
-- No production credentials touched — this whole folder was built from the
-  local `supabase/migrations/*.sql` files already in the repo, plus one
-  read-only `select version();` against the existing Supabase project.
+**Done** (on the `mysql/` path, not the Postgres self-hosting path above):
+the app's auth (`src/lib/auth.ts`), data access (`src/lib/db.ts`) and every
+server action file have been migrated to the MySQL layer and deployed —
+see `mysql/AUTH_DESIGN.md` and `mysql/RLS_TO_APP_LAYER.md` for what that
+migration actually covers. Native Windows (Electron) and Android (Capacitor)
+clients were also built for this client, pointing at the live deployment.
+
+**Still not done:**
+
+- No real data has been copied — this schema is set up but empty. Copying
+  actual tenant/payment/KYC data is a separate, deliberately-scoped step,
+  and needs its own plan for do-not-lose-data safety.
+- File storage migration (Cloudinary stays as-is for now; nothing has moved
+  to OVI Panel FTP or elsewhere).

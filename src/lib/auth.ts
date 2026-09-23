@@ -211,11 +211,19 @@ export async function signIn(
   const valid = await bcrypt.compare(password, hash);
   if (!row || !valid) {
     if (row) {
-      const attempts = row.failed_attempts + 1;
-      const lockedUntil = attempts >= MAX_FAILED_ATTEMPTS ? new Date(Date.now() + LOCKOUT_MS) : null;
+      // Atomic increment: the old read-modify-write (read failed_attempts,
+      // compute +1, write it back) let concurrent wrong-password requests
+      // all read the same starting value and overwrite each other's
+      // increment, undercounting attempts and letting an attacker bypass the
+      // lockout by firing guesses in parallel. Doing the +1 and the lockout
+      // decision in the UPDATE itself makes MySQL's row lock serialize it.
+      const lockedUntil = new Date(Date.now() + LOCKOUT_MS);
       await query(
-        `update users set failed_attempts = ?, locked_until = ? where id = ?`,
-        [attempts, lockedUntil, row.id],
+        `update users
+            set failed_attempts = failed_attempts + 1,
+                locked_until = case when failed_attempts + 1 >= ? then ? else locked_until end
+          where id = ?`,
+        [MAX_FAILED_ATTEMPTS, lockedUntil, row.id],
       );
     }
     return { ok: false, error: genericError };

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getActiveProperty, getSession, setActiveProperty } from "../auth";
 import { requireRole } from "../guards";
-import { query, queryOne } from "../mysql/client";
+import { query, queryOne, withTransaction } from "../mysql/client";
 import type { PropertySettings } from "../types";
 
 export type ActionState = { ok?: boolean; error?: string };
@@ -143,34 +143,39 @@ export async function createPropertyAction(
 
   const newId = randomUUID();
   try {
-    await query(
-      `insert into pg_accounts
-         (id, owner_name, pg_name, mobile, location, pg_type, category, subscription_plan,
-          subscription_expiry, is_demo, created_by, owner_id)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+    // Same transaction as the other onboarding actions in this branch (see
+    // withTransaction's doc comment) — a property row committed without its
+    // property_members row (e.g. a transient DB error on the second insert)
+    // would otherwise leave an orphaned, unreachable property behind.
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `insert into pg_accounts
+           (id, owner_name, pg_name, mobile, location, pg_type, category, subscription_plan,
+            subscription_expiry, is_demo, created_by, owner_id)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newId,
+          me.full_name,
+          d.pg_name,
+          d.mobile,
+          d.location,
+          d.pg_type,
+          d.category,
+          existing?.subscription_plan ?? "yearly",
+          existing?.subscription_expiry ?? fallbackExpiry.toISOString().slice(0, 10),
+          existing?.is_demo ?? false,
+          me.id,
+          me.id,
+        ],
+      );
+      await tx.query(`insert into property_members (property_id, user_id, role) values (?, ?, 'admin')`, [
         newId,
-        me.full_name,
-        d.pg_name,
-        d.mobile,
-        d.location,
-        d.pg_type,
-        d.category,
-        existing?.subscription_plan ?? "yearly",
-        existing?.subscription_expiry ?? fallbackExpiry.toISOString().slice(0, 10),
-        existing?.is_demo ?? false,
         me.id,
-        me.id,
-      ],
-    );
+      ]);
+    });
   } catch (error) {
     return { error: humanizeDbError(error as never, "Could not create the property.") };
   }
-
-  await query(`insert into property_members (property_id, user_id, role) values (?, ?, 'admin')`, [
-    newId,
-    me.id,
-  ]);
 
   await setActiveProperty(newId);
   revalidatePath("/dashboard", "layout");

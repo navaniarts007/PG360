@@ -5,9 +5,10 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { homeForRole, signIn, signOut, getSession } from "./auth";
-import { query, queryOne } from "./mysql/client";
+import { query, queryOne, withTransaction } from "./mysql/client";
 import { generateSessionToken, hashToken } from "./mysql/session-token";
 import { sendEmail } from "./email";
+import { isAllowedHost } from "./clients";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email."),
@@ -49,14 +50,23 @@ const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 export type ResetState = { error?: string; sent?: boolean };
 export type ChangePasswordState = { error?: string; done?: boolean };
 
+const SAFE_DEFAULT_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://pg360.software";
+
+/** The origin to build outbound links (password-reset emails) from. Never
+ *  trusts the request's Origin/X-Forwarded-Host directly — those are
+ *  client-supplied and a caller can set them to an arbitrary value on a
+ *  direct HTTP request, which would otherwise put an attacker-controlled
+ *  host into a legitimate user's reset email. Only a host this app is
+ *  actually known to be served on is used; anything else falls back to the
+ *  safe default. */
 async function appOrigin(): Promise<string> {
   const hdrs = await headers();
-  return (
-    hdrs.get("origin") ||
-    (hdrs.get("x-forwarded-host") ? `https://${hdrs.get("x-forwarded-host")}` : null) ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "https://pg360.software"
-  );
+  const forwardedHost = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
+  if (forwardedHost && isAllowedHost(forwardedHost)) {
+    const protocol = forwardedHost.startsWith("localhost") ? "http" : "https";
+    return `${protocol}://${forwardedHost}`;
+  }
+  return SAFE_DEFAULT_ORIGIN;
 }
 
 /** Step 1: email a password-reset link. Always reports success so we never
@@ -105,7 +115,13 @@ export async function validateResetToken(token: string): Promise<string | null> 
   return row?.email ?? null;
 }
 
-/** Step 2: set a new password from the emailed token. Single-use. */
+/** Step 2: set a new password from the emailed token. Single-use.
+ *
+ *  Claims the token with an atomic UPDATE ... WHERE used_at IS NULL (checked
+ *  via ROW_COUNT()) before doing anything else, inside a transaction with the
+ *  password change — two concurrent submissions of the same token can no
+ *  longer both pass a "is it used" read and both reset the account; only the
+ *  one whose UPDATE actually flips used_at=NULL -> now() proceeds. */
 export async function updatePasswordAction(
   _prev: ResetState,
   formData: FormData,
@@ -116,22 +132,34 @@ export async function updatePasswordAction(
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
   if (password !== confirm) return { error: "The two passwords don't match." };
 
-  const row = await queryOne<{ id: string; user_id: string }>(
-    `select id, user_id
-       from password_resets
-      where token_hash = ? and used_at is null and expires_at > now()`,
-    [hashToken(token)],
-  );
-  if (!row) return { error: "Your reset link has expired — request a new one." };
-
+  const tokenHash = hashToken(token);
   const passwordHash = await bcrypt.hash(password, 10);
-  await query(`update users set password_hash = ?, failed_attempts = 0, locked_until = null where id = ?`, [
-    passwordHash,
-    row.user_id,
-  ]);
-  await query(`update password_resets set used_at = now() where id = ?`, [row.id]);
-  // Reset password invalidates any existing sessions for this user.
-  await query(`delete from sessions where user_id = ?`, [row.user_id]);
+
+  const userId = await withTransaction(async (tx) => {
+    await tx.query(
+      `update password_resets set used_at = now()
+        where token_hash = ? and used_at is null and expires_at > now()`,
+      [tokenHash],
+    );
+    const claimed = await tx.queryOne<{ affected: number }>(`select row_count() as affected`);
+    if (!claimed || claimed.affected !== 1) return null;
+
+    const row = await tx.queryOne<{ user_id: string }>(
+      `select user_id from password_resets where token_hash = ?`,
+      [tokenHash],
+    );
+    if (!row) return null;
+
+    await tx.query(`update users set password_hash = ?, failed_attempts = 0, locked_until = null where id = ?`, [
+      passwordHash,
+      row.user_id,
+    ]);
+    // Reset password invalidates any existing sessions for this user.
+    await tx.query(`delete from sessions where user_id = ?`, [row.user_id]);
+    return row.user_id;
+  });
+
+  if (!userId) return { error: "Your reset link has expired — request a new one." };
 
   redirect("/login?reset=1");
 }

@@ -85,3 +85,21 @@ export function clientFromHost(host: string | null | undefined): ClientConfig {
   if (ROOT_LABELS.has(label)) return DEFAULT_CLIENT;
   return CLIENTS[label] ?? DEFAULT_CLIENT;
 }
+
+const ROOT_DOMAIN = "pg360.software";
+
+/**
+ * Hosts this app is actually served on — the safe set for anything built
+ * from a request header into an outbound link (e.g. a password-reset email).
+ * A `Host`/`X-Forwarded-Host`/`Origin` header is client-supplied and can be
+ * spoofed by a direct HTTP call bypassing the browser, so callers must check
+ * this before trusting it, rather than interpolating the header directly.
+ */
+export function isAllowedHost(hostname: string | null | undefined): boolean {
+  if (!hostname) return false;
+  const h = hostname.split(":")[0]!.toLowerCase();
+  if (h in CUSTOM_DOMAINS) return true;
+  if (h === ROOT_DOMAIN || h.endsWith(`.${ROOT_DOMAIN}`)) return true;
+  if (h === "localhost" || h === "127.0.0.1") return true;
+  return false;
+}

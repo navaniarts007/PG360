@@ -309,10 +309,17 @@ export async function createInvoiceAction(
   }
   const d = parsed.data;
   try {
+    // Claim the current counter value first, then advance it — the sequence
+    // is seeded at 1001, so the first invoice must be 1001, not 1002.
+    // (Incrementing-then-reading-back shifts every number by one; see the
+    // matching note on next_platform_invoice_no in 004_counters_and_functions.sql.)
     const nextNo = await withTransaction(async (tx) => {
-      await tx.query(`update platform_invoice_seq set next_no = last_insert_id(next_no + 1) where id = 1`);
-      const row = await tx.queryOne<{ n: number }>(`select last_insert_id() as n`);
-      return row?.n ?? 1001;
+      const row = await tx.queryOne<{ next_no: number }>(
+        `select next_no from platform_invoice_seq where id = 1 for update`,
+      );
+      const claimed = row?.next_no ?? 1001;
+      await tx.query(`update platform_invoice_seq set next_no = next_no + 1 where id = 1`);
+      return claimed;
     });
     await query(
       `insert into platform_invoices

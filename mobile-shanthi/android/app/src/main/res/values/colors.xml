@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shanthi's Ladies Hostel brand colors, referenced by styles.xml's
+         AppTheme. Without this file, colorPrimary/colorPrimaryDark/colorAccent
+         are undefined and resource linking fails before the app can build. -->
+    <color name="colorPrimary">#C2613B</color>
+    <color name="colorPrimaryDark">#96431F</color>
+    <color name="colorAccent">#D9A441</color>
+</resources>

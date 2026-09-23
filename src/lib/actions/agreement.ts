@@ -72,7 +72,9 @@ export async function saveOwnerSignatureAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  // pg_accounts writes are admin-only (see RLS_TO_APP_LAYER.md) — staff must
+  // not be able to replace the owner's signature.
+  await requireRole(["admin"]);
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
   const url = String(formData.get("signature_url") ?? "");

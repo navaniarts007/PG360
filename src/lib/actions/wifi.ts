@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { query } from "../mysql/client";
+import { humanizeDbError } from "../errors";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -30,7 +31,14 @@ export async function createWifiAction(
     ]);
   } catch (error) {
     const msg = (error as { message?: string })?.message ?? "";
-    return { error: /duplicate|unique/i.test(msg) ? "A network with that name already exists." : msg };
+    // Keep the friendly duplicate-specific message, but never surface the
+    // raw mysql2 message otherwise — it can expose table/column/constraint
+    // details, contradicting humanizeDbError's no-SQL-jargon-to-the-user rule.
+    return {
+      error: /duplicate|unique/i.test(msg)
+        ? "A network with that name already exists."
+        : humanizeDbError(error as never),
+    };
   }
   revalidatePath("/dashboard/settings");
   return { ok: true };

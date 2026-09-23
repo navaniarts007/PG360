@@ -92,7 +92,9 @@ export async function savePaymentDetailsAction(
   _prev: { ok?: boolean; error?: string },
   formData: FormData,
 ): Promise<{ ok?: boolean; error?: string }> {
-  await requireRole(["admin", "staff"]);
+  // pg_accounts writes are admin-only (see RLS_TO_APP_LAYER.md) — staff must
+  // not be able to change the property's UPI/bank/QR payment details.
+  await requireRole(["admin"]);
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
   const upi = String(formData.get("upi_id") ?? "").trim();

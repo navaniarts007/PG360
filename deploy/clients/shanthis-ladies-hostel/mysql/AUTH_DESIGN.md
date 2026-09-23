@@ -63,8 +63,10 @@ Auth.js/NextAuth with a custom MySQL adapter instead of hand-rolling).
 - **Required env vars** (not committed — set locally in `.env.local` and on
   whatever hosts this branch's deployment): `MYSQL_HOST`, `MYSQL_PORT`,
   `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
-- **Not done as part of this pass**: rewriting the ~26 files in
-  `src/lib/actions/*.ts` plus `src/lib/db.ts` — those still call the
-  Supabase client and will not work against MySQL yet. Auth alone doesn't
-  make the app functional; it's the dependency everything else needed
-  first.
+- **Update — no longer true**: this section originally said the
+  `src/lib/actions/*.ts` files and `src/lib/db.ts` still called the
+  Supabase client and wouldn't work against MySQL yet. That rewrite has
+  since happened — every action file and `db.ts` are on the MySQL layer
+  described here, and the app is functional against it (see the branch's
+  commit history and `deploy/clients/shanthis-ladies-hostel/README.md`
+  for current status).

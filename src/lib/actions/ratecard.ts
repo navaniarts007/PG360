@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
 import { query, queryOne } from "../mysql/client";
+import { humanizeDbError } from "../errors";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -62,9 +63,13 @@ export async function createRateCardAction(
   } catch (error) {
     const msg = (error as { message?: string })?.message ?? "";
     return {
+      // Keep the friendly duplicate-specific message, but never surface the
+      // raw mysql2 message otherwise — that can expose table/column/
+      // constraint details, which contradicts humanizeDbError's no-SQL-
+      // jargon-to-the-user contract used everywhere else in this file.
       error: /duplicate|unique/i.test(msg)
         ? "A rate card with the same type, AC, bath and price already exists."
-        : msg,
+        : humanizeDbError(error as never),
     };
   }
   revalidatePath("/dashboard/pricing");

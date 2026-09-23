@@ -30,10 +30,18 @@ begin
 end//
 
 -- Call from app code as: CALL next_platform_invoice_no(@n); then read @n.
+-- Must run inside a transaction so the row lock from FOR UPDATE holds across
+-- both statements.
+--
+-- NOTE: the previous version incremented next_no *before* reading it back
+-- (`last_insert_id(next_no + 1)` then `last_insert_id()`), so with the
+-- sequence seeded at 1001 the first call returned 1002, not 1001 — every
+-- invoice number was shifted by one from the documented start. This claims
+-- the current value first, then advances the counter for the next caller.
 create procedure next_platform_invoice_no(out p_next bigint)
 begin
-  update platform_invoice_seq set next_no = last_insert_id(next_no + 1) where id = 1;
-  set p_next = last_insert_id();
+  select next_no into p_next from platform_invoice_seq where id = 1 for update;
+  update platform_invoice_seq set next_no = next_no + 1 where id = 1;
 end//
 
 delimiter ;

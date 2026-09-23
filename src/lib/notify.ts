@@ -30,10 +30,15 @@ export async function notify(input: NotifyInput | NotifyInput[]): Promise<void> 
   }
 }
 
-/** ids of the admins/staff whose home property is this PG. */
+/** ids of the admins/staff who are members of this PG. Resolved from
+ *  property_members rather than profiles.pg_id (the "home" property) —
+ *  admins/staff can belong to multiple properties, and a user who's only a
+ *  member through another property's membership still needs this property's
+ *  notifications. property_members.role is already constrained to
+ *  ('admin', 'staff'), so no extra filter is needed. */
 export async function pgStaffUserIds(pgId: string): Promise<{ id: string; role: Role }[]> {
   return query<{ id: string; role: Role }>(
-    `select id, role from profiles where pg_id = ? and role in ('admin', 'staff')`,
+    `select user_id as id, role from property_members where property_id = ?`,
     [pgId],
   );
 }
