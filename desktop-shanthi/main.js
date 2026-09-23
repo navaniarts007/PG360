@@ -45,8 +45,7 @@ function createWindow() {
   // external links) in the system browser.
   const isInternal = (url) => {
     try {
-      const host = new URL(url).host;
-      return host === APP_HOST || host.endsWith(".cloudinary.com");
+      return new URL(url).host === APP_HOST;
     } catch {
       return false;
     }
