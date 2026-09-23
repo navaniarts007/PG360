@@ -6,10 +6,11 @@ import { MoneySettingsForm } from "@/components/admin/money-settings-form";
 import { WifiNetworksCard } from "@/components/admin/wifi-networks-card";
 import { PaymentDetailsCard } from "@/components/admin/payment-details-card";
 import { RulesRegulationsCard } from "@/components/admin/rules-regulations-card";
+import { AgreementSectionsCard } from "@/components/admin/agreement-sections-card";
 import { ChangePasswordCard } from "@/components/app/change-password-card";
 import { requireRole } from "@/lib/guards";
 import { getActiveProperty } from "@/lib/auth";
-import { getKycSignedUrl, getPgAccount, getPgPolicy, listWifiNetworks } from "@/lib/db";
+import { getKycSignedUrl, getPgAccount, getPgPolicy, listAgreementSections, listWifiNetworks } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -17,10 +18,11 @@ export default async function SettingsPage() {
   await requireRole(["admin"]);
   const pid = await getActiveProperty();
   if (!pid) notFound();
-  const [pg, policy, wifiNetworks] = await Promise.all([
+  const [pg, policy, wifiNetworks, agreementSections] = await Promise.all([
     getPgAccount(pid),
     getPgPolicy(pid),
     listWifiNetworks(),
+    listAgreementSections(pid),
   ]);
   if (!pg) notFound();
   const ownerSignatureUrl = await getKycSignedUrl(pg.owner_signature_url);
@@ -76,6 +78,15 @@ export default async function SettingsPage() {
         </h2>
         <div className="max-w-2xl">
           <RulesRegulationsCard rulesDocUrl={rulesDocUrl} ownerSignatureUrl={ownerSignatureUrl} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
+          Resident agreement
+        </h2>
+        <div className="max-w-2xl">
+          <AgreementSectionsCard sections={agreementSections} />
         </div>
       </section>
 
