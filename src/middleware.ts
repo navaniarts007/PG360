@@ -18,6 +18,16 @@ export function middleware(req: NextRequest) {
 
   if (PROTECTED.some((p) => pathname.startsWith(p)) && !hasSession) {
     const url = req.nextUrl.clone();
+    // Behind the client VPS's .htaccess proxy, req.nextUrl carries
+    // 127.0.0.1:3001 (there's no root access to set ProxyPreserveHost in
+    // that vhost), so the redirect must use the forwarded public hostname
+    // instead or it sends the browser to an unreachable internal address.
+    const fwdHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    if (fwdHost) {
+      url.host = fwdHost;
+      url.port = "";
+      url.protocol = (req.headers.get("x-forwarded-proto") ?? "https") + ":";
+    }
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
