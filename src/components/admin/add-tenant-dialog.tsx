@@ -326,21 +326,19 @@ function TenantForm({
             required
           />
         </FieldRow>
-        {!tenant && (
-          <FieldRow
-            label="Joining fee (₹)"
-            htmlFor="joining_fee"
-            hint="one-time, optional"
-          >
-            <Input
-              id="joining_fee"
-              name="joining_fee"
-              type="number"
-              min={0}
-              placeholder="0"
-            />
-          </FieldRow>
-        )}
+        <FieldRow
+          label="Joining fee (₹)"
+          htmlFor="joining_fee"
+          hint={tenant ? "adds a new one-time fee" : "one-time, optional"}
+        >
+          <Input
+            id="joining_fee"
+            name="joining_fee"
+            type="number"
+            min={0}
+            placeholder="0"
+          />
+        </FieldRow>
       </div>
 
       {/* Aadhaar / ID photo — up to 4 photos */}

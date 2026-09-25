@@ -536,6 +536,7 @@ const tenantUpdateSchema = z.object({
   stay_type: z.enum(["monthly", "daily"]).default("monthly"),
   daily_rate: z.coerce.number().min(0).optional(),
   stay_days: z.coerce.number().int().min(1).optional(),
+  joining_fee: z.coerce.number().int().min(0).optional(),
 });
 
 export async function updateTenantAction(
@@ -623,6 +624,14 @@ export async function updateTenantAction(
         notifyTenant(pid, id, "Your room / bed was updated by your PG owner.", "/portal"),
       ]);
     }
+  }
+
+  // Editing a tenant can also record a one-time joining fee that wasn't
+  // charged at signup — a new row, same as the add-tenant flow, not an edit
+  // of an existing fee's amount (those stay editable via "Mark paid" only).
+  if (d.joining_fee && d.joining_fee > 0) {
+    const pid = await getActiveProperty();
+    if (pid) await s.from("joining_fees").insert({ pg_id: pid, tenant_id: id, amount: d.joining_fee });
   }
 
   revalidatePath("/dashboard/tenants");
