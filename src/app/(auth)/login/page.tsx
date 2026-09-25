@@ -18,12 +18,12 @@ const DEMO = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ as?: string }>;
+  searchParams: Promise<{ as?: string; error?: string }>;
 }) {
   const session = await getSession();
   if (session) redirect(homeForRole(session.role));
 
-  const { as } = await searchParams;
+  const { as, error } = await searchParams;
   const demoMode = !isSupabaseConfigured();
   const picked = as && as in DEMO ? DEMO[as as keyof typeof DEMO] : null;
 
@@ -85,6 +85,7 @@ export default async function LoginPage({
               key={picked?.email ?? "default"}
               initialEmail={picked?.email ?? ""}
               initialPassword={picked ? "demo1234" : ""}
+              oauthError={error}
             />
           </div>
 
