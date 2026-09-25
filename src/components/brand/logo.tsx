@@ -4,17 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** The PG360 brand mark. Uses public/pg360-logo.png when present, and falls back
- *  to the built-in glyph if the asset is missing — so branding never breaks. */
-export function Mark({ className }: { className?: string }) {
+/** The brand mark. Uses `src` (a white-label client logo) when given, else
+ *  public/pg360-logo.png, and falls back to the built-in glyph if the asset
+ *  is missing — so branding never breaks. */
+export function Mark({ className, src, alt = "PG 360" }: { className?: string; src?: string | null; alt?: string }) {
   const [failed, setFailed] = useState(false);
 
   if (!failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src="/pg360-logo.png"
-        alt="PG 360"
+        src={src || "/pg360-logo.png"}
+        alt={alt}
         width={36}
         height={36}
         onError={() => setFailed(true)}
@@ -51,6 +52,9 @@ export function Logo({
   invert = false,
   wordmark = true,
   label,
+  logoSrc,
+  size = "default",
+  stacked = false,
 }: {
   className?: string;
   href?: string;
@@ -58,17 +62,35 @@ export function Logo({
   wordmark?: boolean;
   /** White-label brand name. Defaults to the PG 360 wordmark. */
   label?: string;
+  /** White-label brand mark. Defaults to the PG360 logo. */
+  logoSrc?: string | null;
+  /** "lg" for a bigger mark + wordmark — e.g. a centered hero logo. */
+  size?: "default" | "lg";
+  /** Mark above the wordmark, both centered, instead of side by side. */
+  stacked?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className={cn("group inline-flex items-center gap-2.5", className)}
+      className={cn(
+        "group",
+        stacked ? "flex flex-col items-center gap-3" : "inline-flex items-center gap-2.5",
+        className,
+      )}
     >
-      <Mark className="transition-transform duration-500 group-hover:rotate-[20deg]" />
+      <Mark
+        src={logoSrc}
+        alt={label ?? "PG 360"}
+        className={cn(
+          "transition-transform duration-500 group-hover:rotate-[20deg]",
+          size === "lg" && "size-16",
+        )}
+      />
       {wordmark && (
         <span
           className={cn(
-            "font-display text-[1.35rem] font-medium tracking-tight",
+            "font-display font-medium tracking-tight",
+            size === "lg" ? "text-2xl" : "text-[1.35rem]",
             invert ? "text-paper" : "text-ink",
           )}
         >

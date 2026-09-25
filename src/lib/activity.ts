@@ -1,5 +1,5 @@
 import "server-only";
-import { createAdminClient } from "./supabase/admin";
+import { query } from "./mysql/client";
 import { getSession } from "./auth";
 
 /** Record an activity-log entry. Best-effort — never blocks the primary action.
@@ -12,17 +12,19 @@ export async function logActivity(
 ): Promise<void> {
   try {
     const s = await getSession();
-    const pgId =
-      opts && "pgId" in opts ? opts.pgId : s?.activePropertyId ?? s?.pg_id ?? null;
-    const admin = createAdminClient();
-    await admin.from("activity_log").insert({
-      pg_id: pgId ?? null,
-      actor_id: s?.id ?? null,
-      actor_name: s?.full_name ?? null,
-      actor_role: s?.impersonating ? "super_admin (as owner)" : s?.role ?? null,
-      action,
-      detail,
-    });
+    const pgId = opts && "pgId" in opts ? opts.pgId : s?.activePropertyId ?? s?.pg_id ?? null;
+    await query(
+      `insert into activity_log (pg_id, actor_id, actor_name, actor_role, action, detail)
+       values (?, ?, ?, ?, ?, ?)`,
+      [
+        pgId ?? null,
+        s?.id ?? null,
+        s?.full_name ?? null,
+        s?.impersonating ? "super_admin (as owner)" : s?.role ?? null,
+        action,
+        detail,
+      ],
+    );
   } catch {
     /* best-effort */
   }

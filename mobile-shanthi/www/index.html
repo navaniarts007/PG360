@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Shanthi's Ladies Hostel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #faf6f0;
+        color: #3a2e1f;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .wrap {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        gap: 12px;
+      }
+      .badge {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: #c2613b;
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        font-weight: 700;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 8px 0 0;
+      }
+      p {
+        color: #8b8071;
+        max-width: 22rem;
+        line-height: 1.5;
+        margin: 0;
+      }
+      button {
+        margin-top: 8px;
+        border: 0;
+        background: #c2613b;
+        color: #fff;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px 22px;
+        border-radius: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="badge">SLH</div>
+      <h1>You're offline</h1>
+      <p>The app needs an internet connection. Check your network and try again.</p>
+      <button onclick="location.reload()">Retry</button>
+    </div>
+  </body>
+</html>

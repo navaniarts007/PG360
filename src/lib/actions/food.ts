@@ -5,13 +5,13 @@ import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
-import { createClient } from "../supabase/server";
+import { query } from "../mysql/client";
 
 export type ActionState = { ok?: boolean; error?: string };
 
 const MEALS = ["breakfast", "lunch", "dinner"] as const;
 
-/** Admin saves the whole weekly menu (21 cells: 7 days × 3 meals). */
+/** Admin saves the whole weekly menu (21 cells: 7 days x 3 meals). */
 export async function saveFoodMenuAction(
   _prev: ActionState,
   formData: FormData,
@@ -19,29 +19,24 @@ export async function saveFoodMenuAction(
   await requireRole(["admin", "staff"]);
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
-  const s = await createClient();
 
-  const rows: {
-    pg_id: string;
-    day_of_week: number;
-    meal_type: string;
-    description: string;
-  }[] = [];
+  const rows: [string, number, string, string][] = [];
   for (let day = 0; day < 7; day++) {
     for (const meal of MEALS) {
       const desc = String(formData.get(`d${day}_${meal}`) ?? "").trim();
-      rows.push({
-        pg_id: pid,
-        day_of_week: day,
-        meal_type: meal,
-        description: desc,
-      });
+      rows.push([pid, day, meal, desc]);
     }
   }
-  const { error } = await s
-    .from("food_menu")
-    .upsert(rows, { onConflict: "pg_id,day_of_week,meal_type" });
-  if (error) return { error: humanizeDbError(error) };
+  try {
+    const placeholders = rows.map(() => "(?,?,?,?)").join(",");
+    await query(
+      `insert into food_menu (pg_id, day_of_week, meal_type, description) values ${placeholders}
+       on duplicate key update description = values(description)`,
+      rows.flat(),
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
+  }
   revalidatePath("/dashboard/food");
   revalidatePath("/portal/food");
   return { ok: true };
@@ -59,16 +54,10 @@ export async function toggleFoodOptAction(formData: FormData): Promise<void> {
   if (!me.tenant_id || !me.pg_id) return;
   const parsed = optSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return;
-  const s = await createClient();
-  await s.from("food_opt").upsert(
-    {
-      pg_id: me.pg_id,
-      tenant_id: me.tenant_id,
-      date: parsed.data.date,
-      meal_type: parsed.data.meal_type,
-      opted_in: parsed.data.opted_in === "true",
-    },
-    { onConflict: "tenant_id,date,meal_type" },
+  await query(
+    `insert into food_opt (pg_id, tenant_id, opt_date, meal_type, opted_in) values (?, ?, ?, ?, ?)
+     on duplicate key update opted_in = values(opted_in)`,
+    [me.pg_id, me.tenant_id, parsed.data.date, parsed.data.meal_type, parsed.data.opted_in === "true"],
   );
   revalidatePath("/portal/food");
 }

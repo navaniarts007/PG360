@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, Check } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { markAllNotificationsReadAction } from "@/lib/actions/notifications";
+import { markAllNotificationsReadAction, fetchMyNotificationsAction } from "@/lib/actions/notifications";
 import type { AppNotification } from "@/lib/types";
+
+const POLL_MS = 20_000;
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -29,36 +30,28 @@ export function NotificationBell({
   const ref = useRef<HTMLDivElement>(null);
   const unread = items.filter((n) => !n.is_read).length;
 
-  // realtime: prepend new notifications for this user (best-effort; never throws)
+  // Polling replacement for the original Supabase Realtime subscription — no
+  // MySQL equivalent exists, so new notifications arrive within POLL_MS
+  // instead of instantly. Merges by id so an in-flight "mark all read" isn't
+  // clobbered by a stale poll response.
   useEffect(() => {
-    const supabase = createClient();
-    // unique topic per mount — the browser client is a singleton, so reusing a
-    // topic across React strict-mode remounts would re-.on() a subscribed channel.
-    const channel = supabase
-      .channel(`notif:${userId}:${crypto.randomUUID()}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `recipient_id=eq.${userId}`,
-        },
-        (payload) => {
-          setItems((prev) => [payload.new as AppNotification, ...prev].slice(0, 30));
-        },
-      )
-      .subscribe((status) => {
-        // swallow CHANNEL_ERROR / TIMED_OUT so a flaky socket never surfaces
-        // an unhandled Event to the dev error overlay.
-        void status;
-      });
-    return () => {
+    let cancelled = false;
+    const tick = async () => {
       try {
-        void supabase.removeChannel(channel);
+        const fresh = await fetchMyNotificationsAction(30);
+        if (cancelled) return;
+        setItems((prev) => {
+          const readIds = new Set(prev.filter((n) => n.is_read).map((n) => n.id));
+          return fresh.map((n) => (readIds.has(n.id) ? { ...n, is_read: true } : n));
+        });
       } catch {
-        /* ignore */
+        /* best-effort */
       }
+    };
+    const id = setInterval(tick, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
     };
   }, [userId]);
 

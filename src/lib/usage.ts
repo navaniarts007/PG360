@@ -1,5 +1,4 @@
 import "server-only";
-import { createClient } from "./supabase/server";
 
 export interface SupabaseUsage {
   db_bytes: number;
@@ -12,16 +11,11 @@ export interface SupabaseUsage {
   activity_count: number;
 }
 
-/** Live Supabase snapshot via the secured platform_usage() function. */
+/** This branch runs on MySQL, not Supabase — there's no project for this
+ *  deployment to report quota/usage for. Always null; the caller already
+ *  degrades gracefully (deep-links to a dashboard instead) when this is null. */
 export async function supabaseUsage(): Promise<SupabaseUsage | null> {
-  try {
-    const s = await createClient();
-    const { data, error } = await s.rpc("platform_usage");
-    if (error || !data || Object.keys(data).length === 0) return null;
-    return data as SupabaseUsage;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export interface SupabaseEgress {

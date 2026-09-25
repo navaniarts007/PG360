@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldRow, Input, Select } from "@/components/ui/field";
 import { addTenantRecordAction, type ActionState } from "@/lib/actions/admin";
-import { getUploadSignatureAction } from "@/lib/actions/upload";
-import { uploadKyc } from "@/lib/upload-client";
+import { uploadKyc, uploadToStorage } from "@/lib/upload-client";
 import { inr } from "@/lib/utils";
 import type { BedOption } from "@/lib/db";
 
@@ -33,7 +32,7 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     addTenantRecordAction,
     {},
   );
-  const [selfie, setSelfie] = useState<string | null>(null); // check-in photo (Cloudinary URL)
+  const [selfie, setSelfie] = useState<string | null>(null); // check-in photo
   const [photo, setPhoto] = useState<string | null>(null); // ID document (private storage path)
   const [idPreview, setIdPreview] = useState<string | null>(null); // local preview of the ID
   const [busy, setBusy] = useState<null | "selfie" | "id">(null);
@@ -58,28 +57,14 @@ function RecordForm({ beds, onDone }: { beds: BedOption[]; onDone: () => void })
     setBusy(which);
     setUploadErr(null);
     try {
-      // ID/Aadhaar → PRIVATE Supabase Storage (returns a storage path).
+      // ID/Aadhaar → private, staff-only folder on the VPS.
       if (which === "id") {
         setIdPreview(URL.createObjectURL(file));
         setPhoto(await uploadKyc(file));
         return;
       }
-      // Check-in selfie (not PII) stays on Cloudinary.
-      const sig = await getUploadSignatureAction("pg360/avatars");
-      if (!sig.ok) throw new Error(sig.error);
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("api_key", sig.apiKey);
-      fd.append("timestamp", String(sig.timestamp));
-      fd.append("signature", sig.signature);
-      fd.append("folder", sig.folder);
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
-        { method: "POST", body: fd },
-      );
-      const json = (await res.json()) as { secure_url?: string };
-      if (!json.secure_url) throw new Error("Upload failed");
-      setSelfie(json.secure_url);
+      // Check-in selfie (not PII).
+      setSelfie(await uploadToStorage(file, "pg360/avatars"));
     } catch (e) {
       setUploadErr(e instanceof Error ? e.message : "Upload failed");
     } finally {

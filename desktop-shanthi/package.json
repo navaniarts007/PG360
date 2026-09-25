@@ -1,0 +1,47 @@
+{
+  "name": "shanthi-ladies-hostel-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shanthi's Ladies Hostel desktop app (Windows) — Electron wrapper around the live web app, same pattern as PG360's own ../desktop",
+  "author": "PG360",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis msi",
+    "dist:exe": "electron-builder --win nsis",
+    "dist:msi": "electron-builder --win msi"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.shanthisladieshostel.app",
+    "productName": "Shanthi's Ladies Hostel",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "msi"
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Shanthi's Ladies Hostel"
+    }
+  }
+}

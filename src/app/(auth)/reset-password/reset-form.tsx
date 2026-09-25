@@ -6,7 +6,7 @@ import { updatePasswordAction, type ResetState } from "@/lib/auth-actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
 
-export function ResetForm() {
+export function ResetForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState<ResetState, FormData>(
     updatePasswordAction,
     {},
@@ -15,6 +15,7 @@ export function ResetForm() {
 
   return (
     <form action={action} className="space-y-4">
+      <input type="hidden" name="token" value={token} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm font-medium text-rose-600">
           <AlertCircle className="size-4 shrink-0" /> {state.error}

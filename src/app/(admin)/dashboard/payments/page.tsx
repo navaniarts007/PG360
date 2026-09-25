@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, IndianRupee, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, IndianRupee, Printer, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Filterable } from "@/components/app/filterable";
 import { Card } from "@/components/ui/card";
@@ -271,6 +271,17 @@ export default async function PaymentsPage({
                         ) : r.status === "paid" ? (
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold text-teal-600">✓ Paid</span>
+                            {r.paymentId && (
+                              <a
+                                href={`/receipt/${r.paymentId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Print receipt"
+                                className="grid size-7 place-items-center rounded-lg text-ink-muted transition hover:bg-paper-2 hover:text-clay-600"
+                              >
+                                <Printer className="size-3.5" />
+                              </a>
+                            )}
                             {r.paymentId && (
                               <form action={deletePaymentRecordAction}>
                                 <input type="hidden" name="id" value={r.paymentId} />

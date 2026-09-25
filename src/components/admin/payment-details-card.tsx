@@ -13,10 +13,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FieldRow, Input, Textarea } from "@/components/ui/field";
-import {
-  getUploadSignatureAction,
-  savePaymentDetailsAction,
-} from "@/lib/actions/upload";
+import { savePaymentDetailsAction } from "@/lib/actions/upload";
+import { uploadToStorage } from "@/lib/upload-client";
 
 export function PaymentDetailsCard({
   upiId,
@@ -37,21 +35,8 @@ export function PaymentDetailsCard({
     setUploading(true);
     setUploadErr(null);
     try {
-      const sig = await getUploadSignatureAction("pg360/qr");
-      if (!sig.ok) throw new Error(sig.error);
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("api_key", sig.apiKey);
-      fd.append("timestamp", String(sig.timestamp));
-      fd.append("signature", sig.signature);
-      fd.append("folder", sig.folder);
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
-        { method: "POST", body: fd },
-      );
-      const json = (await res.json()) as { secure_url?: string; error?: { message: string } };
-      if (!json.secure_url) throw new Error(json.error?.message ?? "Upload failed.");
-      setQr(json.secure_url);
+      const url = await uploadToStorage(file, "pg360/qr");
+      setQr(url);
     } catch (e) {
       setUploadErr(e instanceof Error ? e.message : "Upload failed.");
     } finally {

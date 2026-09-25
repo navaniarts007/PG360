@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
-import { createClient } from "../supabase/server";
-import { createAdminClient } from "../supabase/admin";
+import { query, queryOne } from "../mysql/client";
 import { notifyStaff } from "../notify";
 import { computeBill } from "../money";
 import { logTenantEvent } from "../events";
+import { VPS_MARKER } from "../storage/vps";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -28,14 +28,16 @@ export async function raiseIssueAction(
   const parsed = issueSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
 
-  const s = await createClient();
-  const { error } = await s.from("issues").insert({
-    pg_id: me.pg_id,
-    tenant_id: me.tenant_id,
-    category: parsed.data.category,
-    description: parsed.data.description,
-  });
-  if (error) return { error: humanizeDbError(error) };
+  try {
+    await query(`insert into issues (pg_id, tenant_id, category, description) values (?, ?, ?, ?)`, [
+      me.pg_id,
+      me.tenant_id,
+      parsed.data.category,
+      parsed.data.description,
+    ]);
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
+  }
 
   await notifyStaff(
     me.pg_id,
@@ -62,9 +64,10 @@ const paySchema = z.object({
   screenshot_url: z.string().optional(),
 });
 
-/** A tenant records what they paid (UPI requires a screenshot). Uses the service
- *  client since RLS makes tenants read-only on payments; only ever touches their
- *  own current/derived invoice. Admin sees it with the proof and can adjust. */
+/** A tenant records what they paid (UPI requires a screenshot). Scoped to
+ *  their own tenant_id (passed explicitly, not RLS-inferred) — only ever
+ *  touches their own current/derived invoice. Admin sees it with the proof
+ *  and can adjust. */
 export async function tenantRecordPaymentAction(
   _prev: ActionState,
   formData: FormData,
@@ -77,27 +80,37 @@ export async function tenantRecordPaymentAction(
   if (d.payment_mode === "upi" && !d.screenshot_url) {
     return { error: "Please upload your UPI payment screenshot." };
   }
-  if (d.screenshot_url && !/^https:\/\/res\.cloudinary\.com\//.test(d.screenshot_url)) {
+  if (d.screenshot_url && !VPS_MARKER.test(d.screenshot_url)) {
     return { error: "Invalid screenshot URL." };
   }
 
-  const admin = createAdminClient();
-  const [{ data: tenant }, { data: pg }] = await Promise.all([
-    admin
-      .from("tenants")
-      .select("rent_amount, checkin_date, food_opt_out")
-      .eq("id", me.tenant_id)
-      .maybeSingle(),
-    admin.from("pg_accounts").select("food_opt_out_deduction").eq("id", me.pg_id).maybeSingle(),
+  const [tenant, pg, existing] = await Promise.all([
+    queryOne<{ rent_amount: number; checkin_date: string; food_opt_out: boolean }>(
+      `select rent_amount, checkin_date, food_opt_out from tenants where id = ? and pg_id = ?`,
+      [me.tenant_id, me.pg_id],
+    ),
+    queryOne<{ food_opt_out_deduction: number }>(
+      `select food_opt_out_deduction from pg_accounts where id = ?`,
+      [me.pg_id],
+    ),
+    queryOne<{
+      base_rent: number;
+      electricity_charge: number;
+      food_charge: number;
+      other_charges: number;
+      food_opt_out_deduction: number;
+      is_pro_rata: boolean;
+      pro_rata_days: number | null;
+      payment_screenshot_url: string | null;
+    }>(
+      `select base_rent, electricity_charge, food_charge, other_charges, food_opt_out_deduction,
+              is_pro_rata, pro_rata_days, payment_screenshot_url
+         from payments where tenant_id = ? and month_for = ?`,
+      [me.tenant_id, d.month_for],
+    ),
   ]);
-  const { data: existing } = await admin
-    .from("payments")
-    .select("base_rent, electricity_charge, food_charge, other_charges, food_opt_out_deduction, is_pro_rata, pro_rata_days, payment_screenshot_url")
-    .eq("tenant_id", me.tenant_id)
-    .eq("month_for", d.month_for)
-    .maybeSingle();
 
-  // First-time invoice for this month → derive it the Bangalore way.
+  // First-time invoice for this month -> derive it the Bangalore way.
   const derived = computeBill({
     pricePerMonth: tenant?.rent_amount ?? 0,
     checkinISO: tenant?.checkin_date ?? d.month_for + "-01",
@@ -106,27 +119,39 @@ export async function tenantRecordPaymentAction(
     foodOptOutDeduction: pg?.food_opt_out_deduction ?? 0,
   });
 
-  const { error } = await admin.from("payments").upsert(
-    {
-      pg_id: me.pg_id,
-      tenant_id: me.tenant_id,
-      month_for: d.month_for,
-      base_rent: existing?.base_rent ?? derived.baseRent,
-      electricity_charge: existing?.electricity_charge ?? 0,
-      food_charge: existing?.food_charge ?? 0,
-      other_charges: existing?.other_charges ?? 0,
-      food_opt_out_deduction: existing?.food_opt_out_deduction ?? derived.foodDeduction,
-      is_pro_rata: existing?.is_pro_rata ?? derived.isProRata,
-      pro_rata_days: existing?.pro_rata_days ?? (derived.isProRata ? derived.proRataDays : null),
-      amount_paid: d.amount_paid,
-      payment_mode: d.payment_mode,
-      payment_screenshot_url: d.screenshot_url ?? existing?.payment_screenshot_url ?? null,
-      payment_date: d.payment_date || new Date().toISOString().slice(0, 10),
-      verified: false, // tenant-submitted — owner must confirm
-    },
-    { onConflict: "tenant_id,month_for" },
-  );
-  if (error) return { error: humanizeDbError(error) };
+  try {
+    await query(
+      `insert into payments
+         (pg_id, tenant_id, month_for, base_rent, electricity_charge, food_charge, other_charges,
+          food_opt_out_deduction, is_pro_rata, pro_rata_days, amount_paid, payment_mode,
+          payment_screenshot_url, payment_date, verified)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false)
+       on duplicate key update
+         amount_paid = values(amount_paid),
+         payment_mode = values(payment_mode),
+         payment_screenshot_url = values(payment_screenshot_url),
+         payment_date = values(payment_date),
+         verified = false`,
+      [
+        me.pg_id,
+        me.tenant_id,
+        d.month_for,
+        existing?.base_rent ?? derived.baseRent,
+        existing?.electricity_charge ?? 0,
+        existing?.food_charge ?? 0,
+        existing?.other_charges ?? 0,
+        existing?.food_opt_out_deduction ?? derived.foodDeduction,
+        existing?.is_pro_rata ?? derived.isProRata,
+        existing?.pro_rata_days ?? (derived.isProRata ? derived.proRataDays : null),
+        d.amount_paid,
+        d.payment_mode,
+        d.screenshot_url ?? existing?.payment_screenshot_url ?? null,
+        d.payment_date || new Date().toISOString().slice(0, 10),
+      ],
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
+  }
 
   await notifyStaff(
     me.pg_id,
@@ -140,24 +165,21 @@ export async function tenantRecordPaymentAction(
 
 /* ------------------------------- profile photo ------------------------------- */
 
-/** Tenant sets their portal profile photo (Cloudinary URL). Uses the service
- *  client since tenants are read-only on the tenants table under RLS. */
+/** Tenant sets their portal profile photo. Scoped to their own tenant_id. */
 export async function tenantUpdateAvatarAction(
   formData: FormData,
 ): Promise<{ ok?: boolean; error?: string }> {
   const me = await requireRole(["tenant"]);
   if (!me.tenant_id) return { error: "No tenant record linked to your login." };
   const url = String(formData.get("avatar_url") || "");
-  if (url && !/^https:\/\/res\.cloudinary\.com\//.test(url)) {
+  if (url && !VPS_MARKER.test(url)) {
     return { error: "Invalid image URL." };
   }
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("tenants")
-    .update({ avatar_url: url || null })
-    .eq("id", me.tenant_id);
-  if (error) return { error: error.message };
+  try {
+    await query(`update tenants set avatar_url = ? where id = ?`, [url || null, me.tenant_id]);
+  } catch (error) {
+    return { error: (error as { message?: string })?.message ?? "Could not save." };
+  }
   revalidatePath("/portal");
   return { ok: true };
 }
-

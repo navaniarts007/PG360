@@ -1,24 +1,8 @@
 import "server-only";
-import { createClient } from "./supabase/server";
-import { createAdminClient } from "./supabase/admin";
+import { query, queryOne, parseJsonColumn } from "./mysql/client";
 import { getActiveProperty, getSession } from "./auth";
-import { v2 as cloudinary } from "cloudinary";
 import { computeBill } from "./money";
 import { currentMonthRent, dueDateFor, firstProRataPeriod } from "./rent";
-
-let cldReady = false;
-function cld() {
-  if (!cldReady) {
-    cloudinary.config({
-      cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
-      secure: true,
-    });
-    cldReady = true;
-  }
-  return cloudinary;
-}
 import type {
   ActivityEntry,
   AgreementSection,
@@ -45,40 +29,51 @@ import type {
 } from "./types";
 
 /* =========================================================================
-   Supabase-backed data access. RLS does the pg/tenant scoping, so most reads
-   are plain `select *` — the policies guarantee the caller only sees their rows.
+   MySQL-backed data access for the Shanthi Ladies Hostel branch. Postgres
+   RLS used to do the pg/tenant scoping automatically on every query; none of
+   that exists here. Every function below either:
+     (a) filters explicitly by pg_id via getActiveProperty() — the original
+         code already did this for most admin/staff reads, so those are a
+         mostly mechanical translation, or
+     (b) is one of the "getMy*"/tenant-self functions that had NO explicit
+         filter at all in the original — those relied entirely on RLS and
+         are the highest-risk part of this file. Each one now explicitly
+         filters by session.tenant_id / session.pg_id / session.id. See
+         deploy/clients/shanthis-ladies-hostel/mysql/RLS_TO_APP_LAYER.md.
+   Role gating (who may call a given page at all) happens upstream in
+   requireRole() at each route-group layout — same trust boundary the
+   Supabase version had; this file's job is correct pg/tenant scoping.
    ========================================================================= */
-
-const sb = () => createClient();
 
 /* ------------------------------------------------------------- platform */
 
+/** Super-admin-only: every PG account, platform-wide. Callers are gated by
+ *  requireRole(["super_admin"]) upstream (see (super-admin) route group). */
 export async function listPgAccounts(): Promise<PgAccount[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("pg_accounts")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data ?? []) as PgAccount[];
+  return query<PgAccount>(`select * from pg_accounts order by created_at desc`);
 }
 
-/** Properties the current admin/staff is a member of (RLS-scoped). */
+/** Properties the current admin/staff is a member of. */
 export async function listMyProperties(): Promise<PgAccount[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("pg_accounts")
-    .select("*")
-    .order("created_at", { ascending: true });
-  return (data ?? []) as PgAccount[];
+  const session = await getSession();
+  const ids = session?.properties.map((p) => p.id) ?? [];
+  if (ids.length === 0) return [];
+  return query<PgAccount>(
+    `select * from pg_accounts where id in (${ids.map(() => "?").join(",")}) order by created_at asc`,
+    ids,
+  );
 }
 
 export async function getPgAccount(id: string): Promise<PgAccount | null> {
-  const s = await sb();
-  const { data } = await s.from("pg_accounts").select("*").eq("id", id).maybeSingle();
-  if (!data) return null;
-  const acct = data as PgAccount & { settings?: Record<string, any> };
-  acct.rules_doc_url = acct.rules_doc_url || acct.settings?.rules_doc_url || null;
-  return acct;
+  const acct = await queryOne<PgAccount & { settings?: Record<string, unknown> }>(
+    `select * from pg_accounts where id = ?`,
+    [id],
+  );
+  if (!acct) return null;
+  const settings = parseJsonColumn<Record<string, unknown>>(acct.settings, {});
+  acct.settings = settings;
+  acct.rules_doc_url = acct.rules_doc_url || (settings.rules_doc_url as string | undefined) || null;
+  return acct as PgAccount;
 }
 
 /** Recent tenant activity for one PG (super-admin account view). */
@@ -86,62 +81,41 @@ export async function getAccountActivity(
   pgId: string,
   limit = 15,
 ): Promise<Array<TenantEvent & { tenant_name: string }>> {
-  const s = await sb();
-  const { data } = await s
-    .from("tenant_events")
-    .select("*, tenant:tenants(name)")
-    .eq("pg_id", pgId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  type Row = TenantEvent & { tenant: { name: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((e) => ({
-    ...e,
-    tenant_name: e.tenant?.name ?? "Tenant",
-  }));
+  const rows = await query<TenantEvent & { tenant_name: string | null }>(
+    `select e.id, e.pg_id, e.tenant_id, e.event_type as type, e.detail, e.room_id, e.floor,
+            e.created_by, e.created_at, t.name as tenant_name
+       from tenant_events e
+       left join tenants t on t.id = e.tenant_id
+      where e.pg_id = ?
+      order by e.created_at desc
+      limit ?`,
+    [pgId, limit],
+  );
+  return rows.map((e) => ({ ...e, tenant_name: e.tenant_name ?? "Tenant" }));
 }
 
 /** All PG360 invoices across the platform (super-admin), newest first. */
-export async function listAllInvoices(): Promise<
-  Array<PlatformInvoice & { pg_name: string }>
-> {
-  const s = await sb();
-  const { data } = await s
-    .from("platform_invoices")
-    .select("*, pg:pg_accounts(pg_name)")
-    .order("created_at", { ascending: false });
-  type Row = PlatformInvoice & { pg: { pg_name: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((iv) => ({
-    ...iv,
-    pg_name: iv.pg?.pg_name ?? "—",
-  }));
+export async function listAllInvoices(): Promise<Array<PlatformInvoice & { pg_name: string }>> {
+  const rows = await query<PlatformInvoice & { pg_name: string | null }>(
+    `select iv.*, pa.pg_name as pg_name
+       from platform_invoices iv
+       left join pg_accounts pa on pa.id = iv.pg_id
+      order by iv.created_at desc`,
+  );
+  return rows.map((iv) => ({ ...iv, pg_name: iv.pg_name ?? "—" }));
 }
 
-/** Turn a stored KYC value into a viewable URL. New uploads store a private
- *  Cloudinary asset as "cld:<public_id>.<format>" → return a signed authenticated
- *  delivery URL (not openable without our secret). Legacy public Cloudinary URLs
- *  are returned as-is; a leftover Supabase path is signed from storage. */
+/** Turn a stored file value into a viewable URL. Uploads are stored as
+ *  "/api/storage/pg360/<folder>/<filename>" — already a stable, directly
+ *  usable path (see src/lib/storage/vps.ts and the upload route); this just
+ *  validates the stored value looks like one before handing it to a caller. */
 export async function getKycSignedUrl(value: string | null): Promise<string | null> {
   if (!value) return null;
-  // If multiple comma-separated keys/URLs, grab the first one for single URL usage
   const first = value.split(",")[0]?.trim();
   if (!first) return null;
-  if (first.startsWith("cld:")) {
-    const rest = first.slice(4);
-    const dot = rest.lastIndexOf(".");
-    const publicId = dot > 0 ? rest.slice(0, dot) : rest;
-    const format = dot > 0 ? rest.slice(dot + 1) : "jpg";
-    return cld().url(publicId, {
-      type: "authenticated",
-      resource_type: "image",
-      format,
-      sign_url: true,
-      secure: true,
-    });
-  }
-  if (/^https?:\/\//i.test(first)) return first; // legacy public Cloudinary
-  const admin = createAdminClient(); // leftover private Supabase path
-  const { data } = await admin.storage.from("kyc").createSignedUrl(first, 60 * 10);
-  return data?.signedUrl ?? null;
+  if (first.startsWith("/api/storage/")) return first;
+  if (/^https?:\/\//i.test(first)) return first; // legacy public URL
+  return null;
 }
 
 /** Get signed viewable URLs for multi-photo KYC fields (comma separated). */
@@ -154,89 +128,71 @@ export async function getKycSignedUrls(value: string | null): Promise<string[]> 
 
 /** Activity log for the active property (admin/staff view). */
 export async function listActivity(limit = 200): Promise<ActivityEntry[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  const { data } = await s
-    .from("activity_log")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as ActivityEntry[];
+  return query<ActivityEntry>(
+    `select * from activity_log where pg_id = ? order by created_at desc limit ?`,
+    [pid, limit],
+  );
 }
 
 /** Platform-wide activity log (super-admin), with the PG name resolved. */
 export async function listAllActivity(
   limit = 300,
 ): Promise<Array<ActivityEntry & { pg_name: string | null }>> {
-  const s = await sb();
-  const { data } = await s
-    .from("activity_log")
-    .select("*, pg:pg_accounts(pg_name)")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  type Row = ActivityEntry & { pg: { pg_name: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((r) => ({ ...r, pg_name: r.pg?.pg_name ?? null }));
+  return query<ActivityEntry & { pg_name: string | null }>(
+    `select a.*, pa.pg_name as pg_name
+       from activity_log a
+       left join pg_accounts pa on pa.id = a.pg_id
+      order by a.created_at desc
+      limit ?`,
+    [limit],
+  );
 }
 
-/** The login email for an auth user (super-admin account view). */
+/** The login email for a user (super-admin account view). */
 export async function getAuthEmail(userId: string | null): Promise<string | null> {
   if (!userId) return null;
-  const admin = createAdminClient();
-  const { data } = await admin.auth.admin.getUserById(userId);
-  return data.user?.email ?? null;
+  const row = await queryOne<{ email: string }>(`select email from users where id = ?`, [userId]);
+  return row?.email ?? null;
 }
 
 /** PG360 subscription invoices for one PG (super-admin / owner read). */
 export async function listInvoices(pgId: string): Promise<PlatformInvoice[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("platform_invoices")
-    .select("*")
-    .eq("pg_id", pgId)
-    .order("created_at", { ascending: false });
-  return (data ?? []) as PlatformInvoice[];
+  return query<PlatformInvoice>(
+    `select * from platform_invoices where pg_id = ? order by created_at desc`,
+    [pgId],
+  );
 }
 
 /** One invoice + its billed PG account (for the printable invoice page). */
 export async function getInvoiceWithPg(
   id: string,
 ): Promise<{ invoice: PlatformInvoice; pg: PgAccount } | null> {
-  const s = await sb();
-  const { data: invoice } = await s
-    .from("platform_invoices")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const invoice = await queryOne<PlatformInvoice>(`select * from platform_invoices where id = ?`, [id]);
   if (!invoice) return null;
-  const { data: pg } = await s
-    .from("pg_accounts")
-    .select("*")
-    .eq("id", (invoice as PlatformInvoice).pg_id)
-    .maybeSingle();
+  const pg = await queryOne<PgAccount>(`select * from pg_accounts where id = ?`, [invoice.pg_id]);
   if (!pg) return null;
-  return { invoice: invoice as PlatformInvoice, pg: pg as PgAccount };
+  return { invoice, pg };
 }
 
 /** Headline counts for one PG (super-admin account view). */
-export async function getAccountStats(
-  pgId: string,
-): Promise<{ tenants: number; rooms: number }> {
-  const s = await sb();
+export async function getAccountStats(pgId: string): Promise<{ tenants: number; rooms: number }> {
   const [t, r] = await Promise.all([
-    s.from("tenants").select("id", { count: "exact", head: true }).eq("pg_id", pgId).eq("status", "active"),
-    s.from("rooms").select("id", { count: "exact", head: true }).eq("pg_id", pgId),
+    queryOne<{ n: number }>(
+      `select count(*) as n from tenants where pg_id = ? and status = 'active'`,
+      [pgId],
+    ),
+    queryOne<{ n: number }>(`select count(*) as n from rooms where pg_id = ?`, [pgId]),
   ]);
-  return { tenants: t.count ?? 0, rooms: r.count ?? 0 };
+  return { tenants: t?.n ?? 0, rooms: r?.n ?? 0 };
 }
 
 /** The active property's money policy, guaranteed non-null (schema defaults when
  *  no row exists yet) — convenient for settings forms. */
 export async function getPgPolicy(pgId: string): Promise<PgPolicy> {
-  const s = await sb();
-  const { data } = await s.from("pg_policies").select("*").eq("pg_id", pgId).maybeSingle();
-  if (data) return data as PgPolicy;
+  const data = await queryOne<PgPolicy>(`select * from pg_policies where pg_id = ?`, [pgId]);
+  if (data) return data;
   return {
     id: "",
     pg_id: pgId,
@@ -250,56 +206,52 @@ export async function getPgPolicy(pgId: string): Promise<PgPolicy> {
 }
 
 export async function platformStats() {
-  const s = await sb();
-  const [{ data: pgs }, { count: tenantCount }, { data: paid }] = await Promise.all([
-    s.from("pg_accounts").select("status, is_demo"),
-    s.from("tenants").select("id", { count: "exact", head: true }).eq("status", "active"),
-    s.from("platform_invoices").select("amount, tax_percent").eq("status", "paid"),
+  const [pgs, tenantCount, paid] = await Promise.all([
+    query<{ status: string; is_demo: number }>(`select status, is_demo from pg_accounts`),
+    queryOne<{ n: number }>(`select count(*) as n from tenants where status = 'active'`),
+    query<{ amount: number; tax_percent: number }>(
+      `select amount, tax_percent from platform_invoices where status = 'paid'`,
+    ),
   ]);
-  const rows = (pgs ?? []) as { status: string; is_demo: boolean }[];
-  const active = rows.filter((p) => p.status === "active");
-  const demoPgs = rows.filter((p) => p.is_demo).length;
+  const active = pgs.filter((p) => p.status === "active");
+  const demoPgs = pgs.filter((p) => !!p.is_demo).length;
   const payingPgs = active.filter((p) => !p.is_demo).length;
-  // real revenue = money actually invoiced & marked paid (not a plan estimate)
-  const revenue = ((paid ?? []) as { amount: number; tax_percent: number }[]).reduce(
-    (sum, iv) => sum + iv.amount + Math.round((iv.amount * iv.tax_percent) / 100),
+  const revenue = paid.reduce(
+    (sum, iv) => sum + Number(iv.amount) + Math.round((Number(iv.amount) * Number(iv.tax_percent)) / 100),
     0,
   );
   return {
-    totalPgs: rows.length,
+    totalPgs: pgs.length,
     activePgs: active.length,
     demoPgs,
     payingPgs,
-    totalTenants: tenantCount ?? 0,
+    totalTenants: tenantCount?.n ?? 0,
     revenue,
   };
 }
 
 /* ---------------------------------------------------------------- rooms */
 
+/** rooms.amenities is a JSON column — see parseJsonColumn's doc comment for
+ *  why this can't be trusted to come back as an array without normalizing. */
+function normalizeRoom(r: Room): Room {
+  return { ...r, amenities: parseJsonColumn<string[]>(r.amenities, []) };
+}
+function normalizeRoomOrNull(r: Room | null): Room | null {
+  return r ? normalizeRoom(r) : null;
+}
+
 export async function listRooms(): Promise<Room[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("rooms")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("room_number");
-  return (data ?? []) as Room[];
+  const rows = await query<Room>(`select * from rooms where pg_id = ? order by room_number`, [pid]);
+  return rows.map(normalizeRoom);
 }
 
 /* -------------------------------------------------------------- floors */
 
 export async function listFloors(): Promise<Floor[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("floors")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("sort_order")
-    .order("name");
-  return (data ?? []) as Floor[];
+  return query<Floor>(`select * from floors where pg_id = ? order by sort_order, name`, [pid]);
 }
 
 export interface FloorWithRooms {
@@ -329,31 +281,30 @@ export async function getFloorOptions(): Promise<{ id: string; label: string }[]
 export async function getFloorDetail(
   floorId: string,
 ): Promise<{ floor: Floor; rooms: RoomBeds[] } | null> {
-  const s = await sb();
-  const { data: floor } = await s.from("floors").select("*").eq("id", floorId).maybeSingle();
+  const floor = await queryOne<Floor>(`select * from floors where id = ?`, [floorId]);
   if (!floor) return null;
-  const { data: rooms } = await s
-    .from("rooms")
-    .select("*")
-    .eq("floor_id", floorId)
-    .order("room_number");
-  const roomList = (rooms ?? []) as Room[];
+  const roomList = (
+    await query<Room>(`select * from rooms where floor_id = ? order by room_number`, [floorId])
+  ).map(normalizeRoom);
   const roomIds = roomList.map((r) => r.id);
-  const [{ data: beds }, { data: tenants }] = await Promise.all([
+  const [beds, tenants] = await Promise.all([
     roomIds.length
-      ? s.from("beds").select("*").in("room_id", roomIds).order("bed_number")
-      : Promise.resolve({ data: [] as Bed[] }),
-    s.from("tenants").select("id, name").eq("pg_id", (floor as Floor).pg_id),
+      ? query<Bed>(
+          `select * from beds where room_id in (${roomIds.map(() => "?").join(",")}) order by bed_number`,
+          roomIds,
+        )
+      : Promise.resolve([] as Bed[]),
+    query<{ id: string; name: string }>(`select id, name from tenants where pg_id = ?`, [floor.pg_id]),
   ]);
-  const nameById = new Map((tenants ?? []).map((t) => [t.id as string, t.name as string]));
+  const nameById = new Map(tenants.map((t) => [t.id, t.name]));
   const bedsByRoom = new Map<string, Array<Bed & { tenant_name: string | null }>>();
-  for (const b of (beds ?? []) as Bed[]) {
+  for (const b of beds) {
     const list = bedsByRoom.get(b.room_id) ?? [];
     list.push({ ...b, tenant_name: b.current_tenant_id ? nameById.get(b.current_tenant_id) ?? null : null });
     bedsByRoom.set(b.room_id, list);
   }
   return {
-    floor: floor as Floor,
+    floor,
     rooms: roomList.map((room) => ({ room, beds: bedsByRoom.get(room.id) ?? [] })),
   };
 }
@@ -361,73 +312,64 @@ export async function getFloorDetail(
 /* ----------------------------------------------------- rate cards / beds */
 
 export async function listRateCards(): Promise<RateCard[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("rate_cards")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("price_per_month", { ascending: false });
-  return (data ?? []) as RateCard[];
+  return query<RateCard>(
+    `select * from rate_cards where pg_id = ? order by price_per_month desc`,
+    [pid],
+  );
 }
 
 /* ----------------------------------------------- tenant records (events) */
 
 export async function listTenantEvents(tenantId: string): Promise<TenantEvent[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("tenant_events")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
-  return (data ?? []) as TenantEvent[];
+  return query<TenantEvent>(
+    `select id, pg_id, tenant_id, event_type as type, detail, room_id, floor, created_by, created_at
+       from tenant_events where tenant_id = ? order by created_at desc`,
+    [tenantId],
+  );
 }
 
 /** Recent activity across the active property (for the GVM home feed). */
 export async function listRecentEvents(
   limit = 12,
 ): Promise<Array<TenantEvent & { tenant_name: string }>> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("tenant_events")
-    .select("*, tenant:tenants(name)")
-    .eq("pg_id", pid)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  type Row = TenantEvent & { tenant: { name: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((e) => ({
-    ...e,
-    tenant_name: e.tenant?.name ?? "Tenant",
-  }));
+  const rows = await query<TenantEvent & { tenant_name: string | null }>(
+    `select e.id, e.pg_id, e.tenant_id, e.event_type as type, e.detail, e.room_id, e.floor,
+            e.created_by, e.created_at, t.name as tenant_name
+       from tenant_events e
+       left join tenants t on t.id = e.tenant_id
+      where e.pg_id = ?
+      order by e.created_at desc
+      limit ?`,
+    [pid, limit],
+  );
+  return rows.map((e) => ({ ...e, tenant_name: e.tenant_name ?? "Tenant" }));
 }
 
 /** Checked-out tenants (the "Vacated Master") for the active property. */
-export async function listVacated(): Promise<
-  Array<Tenant & { room_number: string | null }>
-> {
-  const s = await sb();
+export async function listVacated(): Promise<Array<Tenant & { room_number: string | null }>> {
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("tenants")
-    .select("*, room:rooms(room_number)")
-    .eq("pg_id", pid)
-    .eq("status", "checked_out")
-    .order("checkout_date", { ascending: false });
-  type Row = Tenant & { room: { room_number: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((t) => ({
-    ...t,
-    room_number: t.room?.room_number ?? null,
-  }));
+  const rows = await query<Tenant & { room_number: string | null }>(
+    `select t.*, r.room_number as room_number
+       from tenants t
+       left join rooms r on r.id = t.room_id
+      where t.pg_id = ? and t.status = 'checked_out'
+      order by t.checkout_date desc`,
+    [pid],
+  );
+  return rows;
 }
 
 /** How many beds currently price off each rate card (for the Pricing page). */
 export async function rateCardBedCounts(): Promise<Record<string, number>> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s.from("beds").select("rate_card_id").eq("pg_id", pid);
+  const rows = await query<{ rate_card_id: string | null }>(
+    `select rate_card_id from beds where pg_id = ?`,
+    [pid],
+  );
   const counts: Record<string, number> = {};
-  for (const b of (data ?? []) as { rate_card_id: string | null }[]) {
+  for (const b of rows) {
     if (b.rate_card_id) counts[b.rate_card_id] = (counts[b.rate_card_id] ?? 0) + 1;
   }
   return counts;
@@ -436,14 +378,8 @@ export async function rateCardBedCounts(): Promise<Record<string, number>> {
 /* ------------------------------------------------------------- wifi master */
 
 export async function listWifiNetworks(): Promise<WifiNetwork[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("wifi_networks")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("ssid");
-  return (data ?? []) as WifiNetwork[];
+  return query<WifiNetwork>(`select * from wifi_networks where pg_id = ? order by ssid`, [pid]);
 }
 
 export interface RoomBeds {
@@ -453,16 +389,15 @@ export interface RoomBeds {
 
 /** Bed-level occupancy grouped by room (the view Bangalore owners want). */
 export async function listBedsByRoom(): Promise<RoomBeds[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: beds }, rooms, { data: tenants }] = await Promise.all([
-    s.from("beds").select("*").eq("pg_id", pid).order("bed_number"),
+  const [beds, rooms, tenants] = await Promise.all([
+    query<Bed>(`select * from beds where pg_id = ? order by bed_number`, [pid]),
     listRooms(),
-    s.from("tenants").select("id, name").eq("pg_id", pid),
+    query<{ id: string; name: string }>(`select id, name from tenants where pg_id = ?`, [pid]),
   ]);
-  const nameById = new Map((tenants ?? []).map((t) => [t.id as string, t.name as string]));
+  const nameById = new Map(tenants.map((t) => [t.id, t.name]));
   const bedsByRoom = new Map<string, Array<Bed & { tenant_name: string | null }>>();
-  for (const b of (beds ?? []) as Bed[]) {
+  for (const b of beds) {
     const list = bedsByRoom.get(b.room_id) ?? [];
     list.push({ ...b, tenant_name: b.current_tenant_id ? nameById.get(b.current_tenant_id) ?? null : null });
     bedsByRoom.set(b.room_id, list);
@@ -481,20 +416,23 @@ export interface BedOption {
 /** All beds in the active property as picker options. The dialog filters to
  *  vacant beds (plus the tenant's own bed when editing). */
 export async function getBedOptions(): Promise<BedOption[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data: beds } = await s
-    .from("beds")
-    .select("id, bed_number, price_per_month, room_id, status")
-    .eq("pg_id", pid)
-    .order("bed_number");
+  const beds = await query<{
+    id: string;
+    bed_number: string;
+    price_per_month: number;
+    room_id: string;
+    status: "vacant" | "occupied";
+  }>(
+    `select id, bed_number, price_per_month, room_id, status from beds where pg_id = ? order by bed_number`,
+    [pid],
+  );
   const rooms = await listRooms();
   const roomNo = new Map(rooms.map((r) => [r.id, r.room_number]));
-  type Row = { id: string; bed_number: string; price_per_month: number; room_id: string; status: "vacant" | "occupied" };
-  return ((beds ?? []) as Row[]).map((b) => ({
+  return beds.map((b) => ({
     id: b.id,
-    label: `Room ${roomNo.get(b.room_id) ?? "?"} · Bed ${b.bed_number} · ₹${b.price_per_month.toLocaleString("en-IN")}/mo`,
-    price: b.price_per_month,
+    label: `Room ${roomNo.get(b.room_id) ?? "?"} · Bed ${b.bed_number} · ₹${Number(b.price_per_month).toLocaleString("en-IN")}/mo`,
+    price: Number(b.price_per_month),
     room_id: b.room_id,
     status: b.status,
   }));
@@ -509,43 +447,44 @@ type TenantRow = Tenant & { room: { room_number: string; floor: number } | null 
  *  balance is tracked on the recorded bill instead. An unpaid "due" bill does
  *  NOT count, so a never-collected first month still shows its full amount. */
 export async function paidTenantIds(): Promise<Set<string>> {
-  const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return new Set();
-  const { data } = await s
-    .from("payments")
-    .select("tenant_id")
-    .eq("pg_id", pid)
-    .gt("amount_paid", 0);
-  return new Set(((data ?? []) as { tenant_id: string }[]).map((p) => p.tenant_id));
+  const rows = await query<{ tenant_id: string }>(
+    `select tenant_id from payments where pg_id = ? and amount_paid > 0`,
+    [pid],
+  );
+  return new Set(rows.map((p) => p.tenant_id));
 }
 
 /** Total joining/admission fees per tenant for the active property. */
 export async function joiningFeeTotals(): Promise<Record<string, number>> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("joining_fees")
-    .select("tenant_id, amount")
-    .eq("pg_id", pid);
+  const rows = await query<{ tenant_id: string; amount: number }>(
+    `select tenant_id, amount from joining_fees where pg_id = ?`,
+    [pid],
+  );
   const map: Record<string, number> = {};
-  for (const r of (data ?? []) as { tenant_id: string; amount: number }[]) {
-    map[r.tenant_id] = (map[r.tenant_id] ?? 0) + r.amount;
-  }
+  for (const r of rows) map[r.tenant_id] = (map[r.tenant_id] ?? 0) + Number(r.amount);
   return map;
 }
 
 export async function listTenantsWithRoom(): Promise<TenantRow[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("tenants")
-    .select("*, room:rooms(room_number, floor)")
-    .eq("pg_id", pid)
-    .order("status", { ascending: true })
-    .order("created_at", { ascending: false });
-  // to-one FK embeds return objects at runtime; cast through unknown.
-  return (data ?? []) as unknown as TenantRow[];
+  const rows = await query<Tenant & { room_number: string | null; floor: number | null }>(
+    `select t.*, r.room_number as room_number, r.floor as floor
+       from tenants t
+       left join rooms r on r.id = t.room_id
+      where t.pg_id = ?
+      order by (t.status = 'checked_out') asc, t.created_at desc`,
+    [pid],
+  );
+  return rows.map((t) => {
+    const { room_number, floor, ...rest } = t;
+    return {
+      ...rest,
+      room: room_number != null ? { room_number, floor: floor ?? 0 } : null,
+    } as TenantRow;
+  });
 }
 
 /** The bill the record-payment dialog should open pre-filled with for a tenant:
@@ -564,7 +503,6 @@ export interface PayTenant {
   name: string;
   rent_amount: number;
   room_label: string;
-  // fields the record-payment dialog uses to auto-calculate the first month
   checkin_date: string;
   rent_due_day: number;
   security_deposit: number;
@@ -573,28 +511,29 @@ export interface PayTenant {
 }
 
 export async function getPayTenants(): Promise<PayTenant[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data }, paidIds] = await Promise.all([
-    s
-      .from("tenants")
-      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, status, room:rooms(room_number)")
-      .eq("pg_id", pid)
-      .eq("status", "active"),
+  const [rows, paidIds] = await Promise.all([
+    query<{
+      id: string;
+      name: string;
+      rent_amount: number;
+      security_deposit: number;
+      checkin_date: string;
+      rent_due_day: number;
+      stay_type: "monthly" | "daily";
+      room_number: string | null;
+    }>(
+      `select t.id, t.name, t.rent_amount, t.security_deposit, t.checkin_date, t.rent_due_day,
+              t.stay_type, r.room_number as room_number
+         from tenants t
+         left join rooms r on r.id = t.room_id
+        where t.pg_id = ? and t.status = 'active'`,
+      [pid],
+    ),
     paidTenantIds(),
   ]);
-  const nowMonth = new Date().toISOString().slice(0, 10).slice(0, 7);
-  type Row = {
-    id: string;
-    name: string;
-    rent_amount: number;
-    security_deposit: number;
-    checkin_date: string;
-    rent_due_day: number;
-    stay_type: "monthly" | "daily";
-    room: { room_number: string } | null;
-  };
-  return ((data ?? []) as unknown as Row[]).map((t) => {
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  return rows.map((t) => {
     const checkinMonth = t.checkin_date.slice(0, 7);
     const pending = !paidIds.has(t.id);
     const cr = currentMonthRent(t, { securityDeposit: t.security_deposit, firstMonthPending: pending });
@@ -605,7 +544,7 @@ export async function getPayTenants(): Promise<PayTenant[]> {
       id: t.id,
       name: t.name,
       rent_amount: t.rent_amount,
-      room_label: t.room ? `Room ${t.room.room_number}` : "Unassigned",
+      room_label: t.room_number ? `Room ${t.room_number}` : "Unassigned",
       checkin_date: t.checkin_date,
       rent_due_day: t.rent_due_day,
       security_deposit: t.security_deposit,
@@ -620,47 +559,52 @@ export async function getTenantDetail(id: string): Promise<{
   room: Room | null;
   payments: Payment[];
 } | null> {
-  const s = await sb();
-  const { data: tenant } = await s.from("tenants").select("*").eq("id", id).maybeSingle();
+  const tenant = await queryOne<Tenant>(`select * from tenants where id = ?`, [id]);
   if (!tenant) return null;
-  const t = tenant as Tenant;
-  const [{ data: room }, { data: payments }] = await Promise.all([
-    t.room_id
-      ? s.from("rooms").select("*").eq("id", t.room_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    s.from("payments").select("*").eq("tenant_id", id).order("month_for", { ascending: false }),
+  const [room, payments] = await Promise.all([
+    tenant.room_id ? queryOne<Room>(`select * from rooms where id = ?`, [tenant.room_id]) : Promise.resolve(null),
+    query<Payment>(`select * from payments where tenant_id = ? order by month_for desc`, [id]),
   ]);
-  return {
-    tenant: t,
-    room: (room as Room) ?? null,
-    payments: (payments ?? []) as Payment[],
-  };
+  return { tenant, room: normalizeRoomOrNull(room), payments };
 }
 
 /* ------------------------------------------------------------- payments */
 
 export async function adminKpis(month: string) {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: rooms }, { data: tenants }, { data: payments }, { data: pg }] = await Promise.all([
-    s.from("rooms").select("total_beds, occupied_beds").eq("pg_id", pid),
-    s.from("tenants").select("id, rent_amount, checkin_date, food_opt_out, stay_type").eq("pg_id", pid).eq("status", "active"),
-    s.from("payments").select("tenant_id, total_amount, amount_paid").eq("pg_id", pid).eq("month_for", month),
-    s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
+  const [rooms, tenants, payments, pg] = await Promise.all([
+    query<{ total_beds: number; occupied_beds: number }>(
+      `select total_beds, occupied_beds from rooms where pg_id = ?`,
+      [pid],
+    ),
+    query<{
+      id: string;
+      rent_amount: number;
+      checkin_date: string;
+      food_opt_out: number;
+      stay_type: "monthly" | "daily";
+    }>(
+      `select id, rent_amount, checkin_date, food_opt_out, stay_type
+         from tenants where pg_id = ? and status = 'active'`,
+      [pid],
+    ),
+    query<{ tenant_id: string; total_amount: number; amount_paid: number }>(
+      `select tenant_id, total_amount, amount_paid from payments where pg_id = ? and month_for = ?`,
+      [pid, month],
+    ),
+    queryOne<{ food_opt_out_deduction: number }>(
+      `select food_opt_out_deduction from pg_accounts where id = ?`,
+      [pid],
+    ),
   ]);
-  const r = (rooms ?? []) as { total_beds: number; occupied_beds: number }[];
-  const t = (tenants ?? []) as { id: string; rent_amount: number; checkin_date: string; food_opt_out: boolean; stay_type: "monthly" | "daily" }[];
-  const p = (payments ?? []) as { tenant_id: string; total_amount: number; amount_paid: number }[];
-  const foodDeduction = (pg as { food_opt_out_deduction: number } | null)?.food_opt_out_deduction ?? 0;
-  const payByTenant = new Map(p.map((x) => [x.tenant_id, x]));
-  const totalBeds = r.reduce((sum, x) => sum + x.total_beds, 0);
-  const occupiedBeds = r.reduce((sum, x) => sum + x.occupied_beds, 0);
-  const collected = p.reduce((sum, x) => sum + x.amount_paid, 0);
-  // billed counts EVERY active tenant — derived (pro-rata + food) when not yet invoiced
-  const billed = t.reduce((sum, x) => {
+  const foodDeduction = pg?.food_opt_out_deduction ?? 0;
+  const payByTenant = new Map(payments.map((x) => [x.tenant_id, x]));
+  const totalBeds = rooms.reduce((sum, x) => sum + x.total_beds, 0);
+  const occupiedBeds = rooms.reduce((sum, x) => sum + x.occupied_beds, 0);
+  const collected = payments.reduce((sum, x) => sum + Number(x.amount_paid), 0);
+  const billed = tenants.reduce((sum, x) => {
     const invoiced = payByTenant.get(x.id)?.total_amount;
-    if (invoiced != null) return sum + invoiced;
-    // day-wise: the whole-stay total counts once, in the check-in month
+    if (invoiced != null) return sum + Number(invoiced);
     if (x.stay_type === "daily") {
       return sum + (x.checkin_date.slice(0, 7) === month ? x.rent_amount : 0);
     }
@@ -670,14 +614,14 @@ export async function adminKpis(month: string) {
         pricePerMonth: x.rent_amount,
         checkinISO: x.checkin_date,
         month,
-        foodOptOut: x.food_opt_out,
+        foodOptOut: !!x.food_opt_out,
         foodOptOutDeduction: foodDeduction,
       }).total
     );
   }, 0);
   return {
-    totalTenants: t.length,
-    roomCount: r.length,
+    totalTenants: tenants.length,
+    roomCount: rooms.length,
     totalBeds,
     occupiedBeds,
     occupancyPct: totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
@@ -705,48 +649,48 @@ export interface BillRow {
   rent_due_day: number;
   checkin_date: string;
   due_date: string;
-  /** True when the due date is still in the future and nothing has been recorded yet.
-   *  The owner should see these as "Upcoming" rather than overdue. */
   is_upcoming: boolean;
 }
 
 /** Every active tenant's bill for the month — a real invoice row if recorded,
  *  else derived from their rent (so the owner always sees who is due). */
 export async function getMonthBill(month: string): Promise<BillRow[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const [{ data: tenants }, { data: pays }, { data: pg }] = await Promise.all([
-    s
-      .from("tenants")
-      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, food_opt_out, stay_type, daily_rate, stay_days, room:rooms(room_number)")
-      .eq("pg_id", pid)
-      .eq("status", "active"),
-    s.from("payments").select("*").eq("pg_id", pid).eq("month_for", month),
-    s.from("pg_accounts").select("food_opt_out_deduction").eq("id", pid).maybeSingle(),
+  const [tenants, pays, pg] = await Promise.all([
+    query<{
+      id: string;
+      name: string;
+      rent_amount: number;
+      security_deposit: number;
+      checkin_date: string;
+      rent_due_day: number;
+      food_opt_out: number;
+      stay_type: "monthly" | "daily";
+      daily_rate: number | null;
+      stay_days: number | null;
+      room_number: string | null;
+    }>(
+      `select t.id, t.name, t.rent_amount, t.security_deposit, t.checkin_date, t.rent_due_day,
+              t.food_opt_out, t.stay_type, t.daily_rate, t.stay_days, r.room_number as room_number
+         from tenants t
+         left join rooms r on r.id = t.room_id
+        where t.pg_id = ? and t.status = 'active'`,
+      [pid],
+    ),
+    query<Payment>(`select * from payments where pg_id = ? and month_for = ?`, [pid, month]),
+    queryOne<{ food_opt_out_deduction: number }>(
+      `select food_opt_out_deduction from pg_accounts where id = ?`,
+      [pid],
+    ),
   ]);
-  const foodDeduction = (pg as { food_opt_out_deduction: number } | null)?.food_opt_out_deduction ?? 0;
-  const payByTenant = new Map(((pays ?? []) as Payment[]).map((p) => [p.tenant_id, p]));
-  type T = {
-    id: string;
-    name: string;
-    rent_amount: number;
-    security_deposit: number;
-    checkin_date: string;
-    rent_due_day: number;
-    food_opt_out: boolean;
-    stay_type: "monthly" | "daily";
-    daily_rate: number | null;
-    stay_days: number | null;
-    room: { room_number: string } | null;
-  };
+  const foodDeduction = pg?.food_opt_out_deduction ?? 0;
+  const payByTenant = new Map(pays.map((p) => [p.tenant_id, p]));
   const todayISO = new Date().toISOString().slice(0, 10);
   const order = { due: 0, partial: 1, paid: 2 } as const;
-  return ((tenants ?? []) as unknown as T[])
+  return tenants
     .map((t): BillRow | null => {
       const p = payByTenant.get(t.id);
 
-      // Day-wise stay: one total for the whole stay, billed once in the
-      // check-in month (and collected on arrival). Skip every other month.
       if (t.stay_type === "daily") {
         if (t.checkin_date.slice(0, 7) !== month) return null;
         const total = p?.total_amount ?? t.rent_amount;
@@ -754,13 +698,13 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
         return {
           tenant_id: t.id,
           name: t.name,
-          room: t.room?.room_number ?? "—",
+          room: t.room_number ?? "—",
           paymentId: p?.id ?? null,
-          total,
-          paid,
-          balance: Math.max(total - paid, 0),
+          total: Number(total),
+          paid: Number(paid),
+          balance: Math.max(Number(total) - Number(paid), 0),
           status: (p?.status ?? "due") as BillRow["status"],
-          verified: p?.verified ?? false,
+          verified: !!p?.verified,
           payment_mode: p?.payment_mode ?? null,
           screenshot_url: p?.payment_screenshot_url ?? null,
           rent_amount: t.rent_amount,
@@ -768,38 +712,33 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
           stay_type: t.stay_type,
           rent_due_day: t.rent_due_day,
           checkin_date: t.checkin_date,
-          due_date: t.checkin_date, // collect on arrival
-          is_upcoming: false, // day-wise: collect on arrival, never upcoming
+          due_date: t.checkin_date,
+          is_upcoming: false,
         };
       }
 
-      // Monthly: derive the Bangalore way (pro-rata first month, food included
-      // by default with an opt-out deduction).
       const derived = computeBill({
         pricePerMonth: t.rent_amount,
         checkinISO: t.checkin_date,
         month,
-        foodOptOut: t.food_opt_out,
+        foodOptOut: !!t.food_opt_out,
         foodOptOutDeduction: foodDeduction,
       });
       const dueDate = dueDateFor(month, t.rent_due_day);
       const total = p?.total_amount ?? derived.total;
       const paid = p?.amount_paid ?? 0;
-      // Upcoming: nothing recorded AND we're still in this billing month (or it's
-      // a future month). The due date having passed within the same month does NOT
-      // make it overdue — only when we've moved to a later month is it overdue.
       const todayMonth = todayISO.slice(0, 7);
       const isUpcoming = !p && month >= todayMonth;
       return {
         tenant_id: t.id,
         name: t.name,
-        room: t.room?.room_number ?? "—",
+        room: t.room_number ?? "—",
         paymentId: p?.id ?? null,
-        total,
-        paid,
-        balance: Math.max(total - paid, 0),
+        total: Number(total),
+        paid: Number(paid),
+        balance: Math.max(Number(total) - Number(paid), 0),
         status: (p?.status ?? "due") as BillRow["status"],
-        verified: p?.verified ?? false,
+        verified: !!p?.verified,
         payment_mode: p?.payment_mode ?? null,
         screenshot_url: p?.payment_screenshot_url ?? null,
         rent_amount: t.rent_amount,
@@ -812,7 +751,6 @@ export async function getMonthBill(month: string): Promise<BillRow[]> {
       };
     })
     .filter((r): r is BillRow => r !== null)
-    // upcoming rows go last (after paid), overdue first
     .sort((a, b) => {
       if (a.is_upcoming !== b.is_upcoming) return a.is_upcoming ? 1 : -1;
       return order[a.status] - order[b.status] || b.balance - a.balance;
@@ -823,10 +761,10 @@ export interface EarlyPartialDue {
   tenant_id: string;
   name: string;
   room: string;
-  month_for: string; // the check-in month, YYYY-MM
-  rent: number; // pro-rata first-month rent
+  month_for: string;
+  rent: number;
   deposit: number;
-  amount: number; // rent + deposit
+  amount: number;
   days: number;
   checkin_date: string;
 }
@@ -835,42 +773,41 @@ export interface EarlyPartialDue {
  *  join whose pro-rata first month was never recorded and has since rolled off
  *  the current-month bill. Lets the owner still collect it. */
 export async function pendingFirstMonthPartials(currentMonth: string): Promise<EarlyPartialDue[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  const [{ data: tenants }, paidIds] = await Promise.all([
-    s
-      .from("tenants")
-      .select("id, name, rent_amount, security_deposit, checkin_date, rent_due_day, stay_type, room:rooms(room_number)")
-      .eq("pg_id", pid)
-      .eq("status", "active"),
-    // a tenant who's paid ANY bill is being collected from — the balance lives on
-    // that bill, so don't also nag them here (avoids a duplicate entry).
+  const [tenants, paidIds] = await Promise.all([
+    query<{
+      id: string;
+      name: string;
+      rent_amount: number;
+      security_deposit: number;
+      checkin_date: string;
+      rent_due_day: number;
+      stay_type: "monthly" | "daily";
+      room_number: string | null;
+    }>(
+      `select t.id, t.name, t.rent_amount, t.security_deposit, t.checkin_date, t.rent_due_day,
+              t.stay_type, r.room_number as room_number
+         from tenants t
+         left join rooms r on r.id = t.room_id
+        where t.pg_id = ? and t.status = 'active'`,
+      [pid],
+    ),
     paidTenantIds(),
   ]);
-  type T = {
-    id: string;
-    name: string;
-    rent_amount: number;
-    security_deposit: number;
-    checkin_date: string;
-    rent_due_day: number;
-    stay_type: "monthly" | "daily";
-    room: { room_number: string } | null;
-  };
   const out: EarlyPartialDue[] = [];
-  for (const t of (tenants ?? []) as unknown as T[]) {
+  for (const t of tenants) {
     if (t.stay_type === "daily") continue;
     const checkinMonth = t.checkin_date.slice(0, 7);
-    if (checkinMonth >= currentMonth) continue; // current month handled by getMonthBill
-    if (paidIds.has(t.id)) continue; // already being collected from (bill exists)
+    if (checkinMonth >= currentMonth) continue;
+    if (paidIds.has(t.id)) continue;
     const fp = firstProRataPeriod(t.checkin_date, t.rent_due_day, t.rent_amount, new Map());
     if (!fp.isProRata) continue;
     const deposit = t.security_deposit ?? 0;
     out.push({
       tenant_id: t.id,
       name: t.name,
-      room: t.room?.room_number ?? "—",
+      room: t.room_number ?? "—",
       month_for: checkinMonth,
       rent: fp.amount,
       deposit,
@@ -885,106 +822,92 @@ export async function pendingFirstMonthPartials(currentMonth: string): Promise<E
 export async function listStaff(): Promise<
   { id: string; full_name: string; phone: string | null; role: string; permissions: import("./types").StaffPermissions | null }[]
 > {
-  // RLS only lets a user see their own membership + profile rows, so reading the
-  // team needs the service client. Safe: the staff page is admin-only and we
-  // scope strictly to the caller's validated active property.
-  const s = createAdminClient();
   const pid = await getActiveProperty();
   if (!pid) return [];
-  // members of the active property who are staff (+ the owner admins)
-  const { data: members } = await s
-    .from("property_members")
-    .select("user_id, role")
-    .eq("property_id", pid);
-  const ids = ((members ?? []) as { user_id: string; role: string }[]).map((m) => m.user_id);
-  if (ids.length === 0) return [];
-  const { data: profiles } = await s
-    .from("profiles")
-    .select("id, full_name, phone, role, permissions")
-    .in("id", ids);
-  return ((profiles ?? []) as {
+  const rows = await query<{
     id: string;
     full_name: string;
     phone: string | null;
     role: string;
     permissions: import("./types").StaffPermissions | null;
-  }[]).filter((p) => p.role === "staff" || p.role === "admin");
+  }>(
+    `select p.id, p.full_name, p.phone, p.role, p.permissions
+       from property_members pm
+       join profiles p on p.id = pm.user_id
+      where pm.property_id = ? and p.role in ('staff', 'admin')`,
+    [pid],
+  );
+  return rows;
 }
-
-type PaymentRow = Payment & {
-  tenant: { name: string; room: { room_number: string } | null } | null;
-};
 
 export async function getMonthPayments(
   month: string,
 ): Promise<Array<Payment & { name: string; room: string }>> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("payments")
-    .select("*, tenant:tenants(name, room:rooms(room_number))")
-    .eq("pg_id", pid)
-    .eq("month_for", month);
-  return ((data ?? []) as unknown as PaymentRow[]).map((p) => ({
-    ...p,
-    name: p.tenant?.name ?? "—",
-    room: p.tenant?.room?.room_number ?? "—",
-  }));
+  const rows = await query<Payment & { name: string | null; room_number: string | null }>(
+    `select p.*, t.name as name, r.room_number as room_number
+       from payments p
+       left join tenants t on t.id = p.tenant_id
+       left join rooms r on r.id = t.room_id
+      where p.pg_id = ? and p.month_for = ?`,
+    [pid, month],
+  );
+  return rows.map((p) => {
+    const { name, room_number, ...rest } = p;
+    return { ...rest, name: name ?? "—", room: room_number ?? "—" };
+  });
 }
 
 /* --------------------------------------------------------------- issues */
 
-type IssueRow = Issue & {
-  tenant: { name: string; room: { room_number: string } | null } | null;
-};
-
 export async function listIssuesWithTenant(): Promise<
   Array<Issue & { tenant_name: string; room_number: string | null }>
 > {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("issues")
-    .select("*, tenant:tenants(name, room:rooms(room_number))")
-    .eq("pg_id", pid)
-    .order("created_at", { ascending: false });
-  return ((data ?? []) as unknown as IssueRow[]).map((i) => ({
-    ...i,
-    tenant_name: i.tenant?.name ?? "Tenant",
-    room_number: i.tenant?.room?.room_number ?? null,
-  }));
+  const rows = await query<Issue & { tenant_name: string | null; room_number: string | null }>(
+    `select i.*, t.name as tenant_name, r.room_number as room_number
+       from issues i
+       left join tenants t on t.id = i.tenant_id
+       left join rooms r on r.id = t.room_id
+      where i.pg_id = ?
+      order by i.created_at desc`,
+    [pid],
+  );
+  return rows.map((i) => ({ ...i, tenant_name: i.tenant_name ?? "Tenant" }));
 }
 
 /* ----------------------------------------------------------- tenant self */
+// Every function below was previously scoped ONLY by Postgres RLS with zero
+// explicit filter in the code (tenants_self_read / payments_self_read /
+// notif_self_read / etc.). All now filter explicitly by the caller's own
+// session.tenant_id / session.pg_id / session.id — see RLS_TO_APP_LAYER.md.
 
 export async function getMyTenant(): Promise<{
   tenant: Tenant;
   room: Room | null;
 } | null> {
-  const s = await sb();
-  const { data } = await s
-    .from("tenants")
-    .select("*, room:rooms(*)")
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  const { room, ...tenant } = data as unknown as Tenant & { room: Room | null };
-  return { tenant: tenant as Tenant, room: (room as Room) ?? null };
+  const session = await getSession();
+  if (!session) return null;
+  const tenant = await queryOne<Tenant>(`select * from tenants where user_id = ? limit 1`, [session.id]);
+  if (!tenant) return null;
+  const room = tenant.room_id
+    ? await queryOne<Room>(`select * from rooms where id = ?`, [tenant.room_id])
+    : null;
+  return { tenant, room: normalizeRoomOrNull(room) };
 }
 
 export async function getMyPg(): Promise<PgAccount | null> {
-  const s = await sb();
-  const { data } = await s.from("pg_accounts").select("*").limit(1).maybeSingle();
-  return (data as PgAccount) ?? null;
+  const session = await getSession();
+  if (!session?.pg_id) return null;
+  return queryOne<PgAccount>(`select * from pg_accounts where id = ?`, [session.pg_id]);
 }
 
 export async function getMyPayments(): Promise<Payment[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("payments")
-    .select("*")
-    .order("month_for", { ascending: false });
-  return (data ?? []) as Payment[];
+  const session = await getSession();
+  if (!session?.tenant_id) return [];
+  return query<Payment>(`select * from payments where tenant_id = ? order by month_for desc`, [
+    session.tenant_id,
+  ]);
 }
 
 /** The signed-in tenant's outstanding rent reminder, or null if nothing's due.
@@ -1006,7 +929,7 @@ export async function myRentReminder(): Promise<{
   let dueDate: string;
   if (t.stay_type === "daily") {
     total = cur?.total_amount ?? Math.round((t.daily_rate ?? 0) * (t.stay_days ?? 0));
-    dueDate = t.checkin_date; // collected on arrival
+    dueDate = t.checkin_date;
   } else {
     const derived = computeBill({
       pricePerMonth: t.rent_amount,
@@ -1029,36 +952,29 @@ export async function myRentReminder(): Promise<{
 
 /** The PG's ordered policy sections (staff/admin view). */
 export async function listAgreementSections(pgId: string): Promise<AgreementSection[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("agreement_sections")
-    .select("*")
-    .eq("pg_id", pgId)
-    .order("idx", { ascending: true });
-  return (data ?? []) as AgreementSection[];
+  return query<AgreementSection>(
+    `select * from agreement_sections where pg_id = ? order by idx asc`,
+    [pgId],
+  );
 }
 
 /** The signed-in tenant's PG policy sections (for the agreement screen). */
 export async function getMyAgreementSections(): Promise<AgreementSection[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("agreement_sections")
-    .select("*")
-    .order("idx", { ascending: true });
-  return (data ?? []) as AgreementSection[];
+  const session = await getSession();
+  if (!session?.pg_id) return [];
+  return query<AgreementSection>(
+    `select * from agreement_sections where pg_id = ? order by idx asc`,
+    [session.pg_id],
+  );
 }
 
 /** The signed-in tenant's agreement row, if they've signed. */
 export async function myAgreement(): Promise<TenantAgreement | null> {
   const me = await getSession();
   if (!me?.tenant_id) return null;
-  const s = await sb();
-  const { data } = await s
-    .from("tenant_agreements")
-    .select("*")
-    .eq("tenant_id", me.tenant_id)
-    .maybeSingle();
-  return (data as TenantAgreement) ?? null;
+  return queryOne<TenantAgreement>(`select * from tenant_agreements where tenant_id = ?`, [
+    me.tenant_id,
+  ]);
 }
 
 /** Does the signed-in tenant still owe a signed agreement? (sections exist and
@@ -1070,13 +986,10 @@ export async function tenantNeedsAgreement(): Promise<boolean> {
 
 /** A tenant's ID documents (raw rows). */
 export async function listTenantDocuments(tenantId: string): Promise<TenantDocument[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("tenant_documents")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: true });
-  return (data ?? []) as TenantDocument[];
+  return query<TenantDocument>(
+    `select * from tenant_documents where tenant_id = ? order by created_at asc`,
+    [tenantId],
+  );
 }
 
 /** A tenant's documents with short-lived signed view URLs (for display). */
@@ -1084,57 +997,91 @@ export async function listTenantDocumentsSigned(
   tenantId: string,
 ): Promise<Array<TenantDocument & { url: string | null }>> {
   const docs = await listTenantDocuments(tenantId);
-  return Promise.all(
-    docs.map(async (d) => ({ ...d, url: await getKycSignedUrl(d.file_url) })),
-  );
+  return Promise.all(docs.map(async (d) => ({ ...d, url: await getKycSignedUrl(d.file_url) })));
 }
 
 /** A tenant's signed agreement (staff/admin view, for profile + record). */
 export async function getTenantAgreement(tenantId: string): Promise<TenantAgreement | null> {
-  const s = await sb();
-  const { data } = await s
-    .from("tenant_agreements")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  return (data as TenantAgreement) ?? null;
+  return queryOne<TenantAgreement>(`select * from tenant_agreements where tenant_id = ?`, [tenantId]);
+}
+
+/** Every signed agreement for a property, keyed by tenant_id — one query for
+ *  a whole tenant list instead of one per row. */
+export async function listTenantAgreementsByTenant(pgId: string): Promise<Record<string, TenantAgreement>> {
+  const rows = await query<TenantAgreement>(`select * from tenant_agreements where pg_id = ?`, [pgId]);
+  return Object.fromEntries(rows.map((r) => [r.tenant_id, r]));
 }
 
 export async function getMyIssues(): Promise<Issue[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("issues")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data ?? []) as Issue[];
+  const session = await getSession();
+  if (!session?.tenant_id) return [];
+  return query<Issue>(`select * from issues where tenant_id = ? order by created_at desc`, [
+    session.tenant_id,
+  ]);
 }
 
-/** A single payment of the logged-in tenant (RLS-scoped) — for the HRA receipt. */
+/** A single payment of the logged-in tenant — for the HRA receipt. Scoped to
+ *  the caller's own tenant_id so a guessed id can't fetch someone else's. */
 export async function getMyPayment(id: string): Promise<Payment | null> {
-  const s = await sb();
-  const { data } = await s.from("payments").select("*").eq("id", id).maybeSingle();
-  return (data as Payment) ?? null;
+  const session = await getSession();
+  if (!session?.tenant_id) return null;
+  return queryOne<Payment>(`select * from payments where id = ? and tenant_id = ?`, [
+    id,
+    session.tenant_id,
+  ]);
+}
+
+/** A payment + its tenant + its PG, scoped by the caller's actual access —
+ *  a tenant sees only their own, admin/staff only their active property's,
+ *  super_admin unrestricted (matches the global bypass elsewhere). Backs the
+ *  one shared /receipt/[paymentId] page both tenant and admin/staff print
+ *  from, so there's exactly one receipt format, not two. */
+export async function getPaymentForReceipt(
+  id: string,
+): Promise<{ payment: Payment; tenant: Tenant; pg: PgAccount } | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  let payment: Payment | null = null;
+  if (session.role === "tenant") {
+    if (!session.tenant_id) return null;
+    payment = await queryOne<Payment>(`select * from payments where id = ? and tenant_id = ?`, [
+      id,
+      session.tenant_id,
+    ]);
+  } else if (session.role === "admin" || session.role === "staff") {
+    const pid = await getActiveProperty();
+    if (!pid) return null;
+    payment = await queryOne<Payment>(`select * from payments where id = ? and pg_id = ?`, [id, pid]);
+  } else if (session.role === "super_admin") {
+    payment = await queryOne<Payment>(`select * from payments where id = ?`, [id]);
+  }
+  if (!payment) return null;
+
+  const [tenant, pg] = await Promise.all([
+    queryOne<Tenant>(`select * from tenants where id = ?`, [payment.tenant_id]),
+    queryOne<PgAccount>(`select * from pg_accounts where id = ?`, [payment.pg_id]),
+  ]);
+  if (!tenant || !pg) return null;
+  return { payment, tenant, pg };
 }
 
 /* -------------------------------------------------------- notifications */
 
 export async function getMyNotifications(limit = 20): Promise<AppNotification[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as AppNotification[];
+  const session = await getSession();
+  if (!session) return [];
+  return query<AppNotification>(
+    `select * from notifications where recipient_id = ? order by created_at desc limit ?`,
+    [session.id, limit],
+  );
 }
 
 /* ---------------------------------------------------------------- food */
 
 export async function getFoodMenu(): Promise<FoodMenuItem[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s.from("food_menu").select("*").eq("pg_id", pid);
-  return (data ?? []) as FoodMenuItem[];
+  return query<FoodMenuItem>(`select * from food_menu where pg_id = ?`, [pid]);
 }
 
 export interface FoodOptRow {
@@ -1144,45 +1091,43 @@ export interface FoodOptRow {
 }
 
 export async function getMyFoodOpts(from: string, to: string): Promise<FoodOptRow[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("food_opt")
-    .select("date, meal_type, opted_in")
-    .gte("date", from)
-    .lte("date", to);
-  return (data ?? []) as FoodOptRow[];
+  const session = await getSession();
+  if (!session?.tenant_id) return [];
+  const rows = await query<{ opt_date: string; meal_type: MealType; opted_in: number }>(
+    `select opt_date, meal_type, opted_in
+       from food_opt
+      where tenant_id = ? and opt_date >= ? and opt_date <= ?`,
+    [session.tenant_id, from, to],
+  );
+  return rows.map((r) => ({ date: r.opt_date, meal_type: r.meal_type, opted_in: !!r.opted_in }));
 }
 
 /* ------------------------------------------------------------ bookings */
 
 export async function listBookings(): Promise<import("./types").Booking[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("bookings")
-    .select("*")
-    .eq("pg_id", pid)
-    .order("created_at", { ascending: false });
-  return (data ?? []) as import("./types").Booking[];
+  return query<import("./types").Booking>(
+    `select * from bookings where pg_id = ? order by created_at desc`,
+    [pid],
+  );
 }
 
-/** Public PG lookup for the booking page (anon can't read pg_accounts via RLS). */
+/** Public PG lookup for the booking page — intentionally unauthenticated
+ *  (no session check), matching the original "anon can read via the admin
+ *  client" design for this one public-facing page. */
 export async function getPublicPg(
   id: string,
 ): Promise<{ pg_name: string; location: string; status: string } | null> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("pg_accounts")
-    .select("pg_name, location, status")
-    .eq("id", id)
-    .maybeSingle();
-  return (data as { pg_name: string; location: string; status: string }) ?? null;
+  return queryOne<{ pg_name: string; location: string; status: string }>(
+    `select pg_name, location, status from pg_accounts where id = ?`,
+    [id],
+  );
 }
 
 /* ------------------------------------------------------ expenses / P&L */
 
 // Inclusive first day, EXCLUSIVE first-of-next-month (avoids invalid dates like
-// 2026-06-31 which Postgres rejects). Use with .gte(from).lt(to).
+// 2026-06-31). Use with date >= from AND date < to.
 const monthBounds = (month: string) => {
   const [y, m] = month.split("-").map(Number);
   const yy = y ?? 1970;
@@ -1192,42 +1137,38 @@ const monthBounds = (month: string) => {
 };
 
 export async function listExpenses(month: string): Promise<Expense[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
   const { from, to } = monthBounds(month);
-  const { data } = await s
-    .from("expenses")
-    .select("*")
-    .eq("pg_id", pid)
-    .gte("date", from)
-    .lt("date", to)
-    .order("date", { ascending: false });
-  return (data ?? []) as Expense[];
+  return query<Expense>(
+    `select id, pg_id, category, subcategory, amount, expense_date as date, description, added_by, created_at
+       from expenses
+      where pg_id = ? and expense_date >= ? and expense_date < ?
+      order by expense_date desc`,
+    [pid, from, to],
+  );
 }
 
 export interface ExpenseCat {
   name: string;
-  parent: string; // "" = top-level, else the parent category name
+  parent: string;
 }
 
 /** Custom expense categories + sub-categories defined for the active property. */
 export async function listExpenseCategories(): Promise<ExpenseCat[]> {
-  const s = await sb();
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("expense_categories")
-    .select("name, parent")
-    .eq("pg_id", pid)
-    .order("name");
-  return (data ?? []).map((c) => ({ name: c.name as string, parent: (c.parent as string) ?? "" }));
+  const rows = await query<{ name: string; parent: string | null }>(
+    `select name, parent from expense_categories where pg_id = ? order by name`,
+    [pid],
+  );
+  return rows.map((c) => ({ name: c.name, parent: c.parent ?? "" }));
 }
 
 export async function expenseSummary(month: string) {
   const expenses = await listExpenses(month);
-  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
   const byCategory = new Map<string, number>();
   for (const e of expenses) {
-    byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount);
+    byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + Number(e.amount));
   }
   return {
     total,
@@ -1254,17 +1195,14 @@ export interface ExpenseAnalytics {
  *  months: monthly totals, category totals, and a per-month category breakdown
  *  (top 5 categories + "other"). Powers the expenses dashboard/charts. */
 export async function expenseAnalytics(monthsBack = 6): Promise<ExpenseAnalytics> {
-  const s = await sb();
   const pid = await getActiveProperty();
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
   const startISO = start.toISOString().slice(0, 10);
-  const { data } = await s
-    .from("expenses")
-    .select("category, amount, date")
-    .eq("pg_id", pid)
-    .gte("date", startISO);
-  const exps = (data ?? []) as { category: string; amount: number; date: string }[];
+  const exps = await query<{ category: string; amount: number; expense_date: string }>(
+    `select category, amount, expense_date from expenses where pg_id = ? and expense_date >= ?`,
+    [pid, startISO],
+  );
 
   const months: string[] = [];
   for (let i = 0; i < monthsBack; i++) {
@@ -1280,12 +1218,12 @@ export async function expenseAnalytics(monthsBack = 6): Promise<ExpenseAnalytics
   const catTotals = new Map<string, number>();
   const perMC = new Map(months.map((m) => [m, new Map<string, number>()]));
   for (const e of exps) {
-    const m = e.date.slice(0, 7);
+    const m = e.expense_date.slice(0, 7);
     if (!monthTotals.has(m)) continue;
-    monthTotals.set(m, (monthTotals.get(m) ?? 0) + e.amount);
-    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.amount);
+    monthTotals.set(m, (monthTotals.get(m) ?? 0) + Number(e.amount));
+    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + Number(e.amount));
     const mm = perMC.get(m)!;
-    mm.set(e.category, (mm.get(e.category) ?? 0) + e.amount);
+    mm.set(e.category, (mm.get(e.category) ?? 0) + Number(e.amount));
   }
 
   const categories = [...catTotals.entries()]
@@ -1301,7 +1239,7 @@ export async function expenseAnalytics(monthsBack = 6): Promise<ExpenseAnalytics
       if (topCats.includes(c)) row[c] = v;
       else other += v;
     }
-    if (other) row["other"] = (Number(row["other"] ?? 0)) + other;
+    if (other) row["other"] = Number(row["other"] ?? 0) + other;
     for (const c of topCats) if (!(c in row)) row[c] = 0;
     return row;
   });
@@ -1323,25 +1261,21 @@ export async function expenseAnalytics(monthsBack = 6): Promise<ExpenseAnalytics
 }
 
 export async function pnl(month: string) {
-  const s = await sb();
   const pid = await getActiveProperty();
   const { from, to } = monthBounds(month);
-  const [{ data: pays }, { data: exps }] = await Promise.all([
-    s
-      .from("payments")
-      .select("total_amount, amount_paid")
-      .eq("pg_id", pid)
-      .eq("month_for", month),
-    s
-      .from("expenses")
-      .select("amount")
-      .eq("pg_id", pid)
-      .gte("date", from)
-      .lt("date", to),
+  const [pays, exps] = await Promise.all([
+    query<{ total_amount: number; amount_paid: number }>(
+      `select total_amount, amount_paid from payments where pg_id = ? and month_for = ?`,
+      [pid, month],
+    ),
+    query<{ amount: number }>(
+      `select amount from expenses where pg_id = ? and expense_date >= ? and expense_date < ?`,
+      [pid, from, to],
+    ),
   ]);
-  const billed = ((pays ?? []) as { total_amount: number }[]).reduce((x, p) => x + p.total_amount, 0);
-  const collected = ((pays ?? []) as { amount_paid: number }[]).reduce((x, p) => x + p.amount_paid, 0);
-  const expenses = ((exps ?? []) as { amount: number }[]).reduce((x, e) => x + e.amount, 0);
+  const billed = pays.reduce((x, p) => x + Number(p.total_amount), 0);
+  const collected = pays.reduce((x, p) => x + Number(p.amount_paid), 0);
+  const expenses = exps.reduce((x, e) => x + Number(e.amount), 0);
   return { billed, collected, expenses, net: collected - expenses };
 }
 
@@ -1349,86 +1283,65 @@ export async function pnl(month: string) {
 
 /** The active property's policy row (notice / lock-in / deposit / electricity). */
 export async function getActivePolicy(): Promise<PgPolicy | null> {
-  const s = await sb();
   const pid = await getActiveProperty();
   if (!pid) return null;
-  const { data } = await s.from("pg_policies").select("*").eq("pg_id", pid).maybeSingle();
-  return (data as PgPolicy) ?? null;
+  return queryOne<PgPolicy>(`select * from pg_policies where pg_id = ?`, [pid]);
 }
 
 /** Tenant's own policy (read-only) — for the bill / receipt context. */
 export async function getMyPolicy(): Promise<PgPolicy | null> {
-  const s = await sb();
-  const { data } = await s.from("pg_policies").select("*").limit(1).maybeSingle();
-  return (data as PgPolicy) ?? null;
+  const session = await getSession();
+  if (!session?.pg_id) return null;
+  return queryOne<PgPolicy>(`select * from pg_policies where pg_id = ?`, [session.pg_id]);
 }
 
 /** Joining fees for a tenant (admin view). */
 export async function getJoiningFees(tenantId: string): Promise<JoiningFee[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("joining_fees")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
-  return (data ?? []) as JoiningFee[];
+  return query<JoiningFee>(
+    `select * from joining_fees where tenant_id = ? order by created_at desc`,
+    [tenantId],
+  );
 }
 
 /** Joining fees for the logged-in tenant. */
 export async function getMyJoiningFees(): Promise<JoiningFee[]> {
-  const s = await sb();
-  const { data } = await s
-    .from("joining_fees")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data ?? []) as JoiningFee[];
+  const session = await getSession();
+  if (!session?.tenant_id) return [];
+  return query<JoiningFee>(
+    `select * from joining_fees where tenant_id = ? order by created_at desc`,
+    [session.tenant_id],
+  );
 }
 
 /** All checkout settlements in the active property, newest first (admin). */
-export async function listSettlements(): Promise<
-  Array<CheckoutSettlement & { tenant_name: string }>
-> {
-  const s = await sb();
+export async function listSettlements(): Promise<Array<CheckoutSettlement & { tenant_name: string }>> {
   const pid = await getActiveProperty();
-  const { data } = await s
-    .from("checkout_settlements")
-    .select("*, tenant:tenants(name)")
-    .eq("pg_id", pid)
-    .order("created_at", { ascending: false });
-  type Row = CheckoutSettlement & { tenant: { name: string } | null };
-  return ((data ?? []) as unknown as Row[]).map((x) => ({
-    ...x,
-    tenant_name: x.tenant?.name ?? "—",
-  }));
+  const rows = await query<CheckoutSettlement & { tenant_name: string | null }>(
+    `select cs.*, t.name as tenant_name
+       from checkout_settlements cs
+       left join tenants t on t.id = cs.tenant_id
+      where cs.pg_id = ?
+      order by cs.created_at desc`,
+    [pid],
+  );
+  return rows.map((x) => ({ ...x, tenant_name: x.tenant_name ?? "—" }));
 }
 
 /** A tenant's most recent settlement (admin), if one was already drafted. */
-export async function getSettlementForTenant(
-  tenantId: string,
-): Promise<CheckoutSettlement | null> {
-  const s = await sb();
-  const { data } = await s
-    .from("checkout_settlements")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as CheckoutSettlement) ?? null;
+export async function getSettlementForTenant(tenantId: string): Promise<CheckoutSettlement | null> {
+  return queryOne<CheckoutSettlement>(
+    `select * from checkout_settlements where tenant_id = ? order by created_at desc limit 1`,
+    [tenantId],
+  );
 }
 
-/** Roommate names only — read via the service client so RLS (which hides other
- *  tenants from a tenant) isn't loosened; we expose just names of same-room peers. */
-export async function getRoommateNames(
-  roomId: string,
-  excludeTenantId: string,
-): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("tenants")
-    .select("name")
-    .eq("room_id", roomId)
-    .eq("status", "active")
-    .neq("id", excludeTenantId);
-  return ((data ?? []) as { name: string }[]).map((t) => t.name);
+/** Roommate names only — deliberately narrow (just names of same-room peers),
+ *  same restriction the original "read via the service client, not loosened
+ *  RLS" comment intended. */
+export async function getRoommateNames(roomId: string, excludeTenantId: string): Promise<string[]> {
+  const rows = await query<{ name: string }>(
+    `select name from tenants where room_id = ? and status = 'active' and id <> ?`,
+    [roomId, excludeTenantId],
+  );
+  return rows.map((t) => t.name);
 }

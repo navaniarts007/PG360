@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/guards";
-import { getMyPayment, getMyPg, getMyTenant } from "@/lib/db";
+import { getPaymentForReceipt } from "@/lib/db";
 import { rupeesInWords } from "@/lib/money";
 import { formatDate, inr } from "@/lib/utils";
 import { PrintButton } from "@/components/tenant/print-button";
@@ -21,15 +21,13 @@ export default async function RentReceipt({
 }: {
   params: Promise<{ paymentId: string }>;
 }) {
-  await requireRole(["tenant"]);
+  const me = await requireRole(["super_admin", "admin", "staff", "tenant"]);
   const { paymentId } = await params;
-  const [payment, mine, pg] = await Promise.all([
-    getMyPayment(paymentId),
-    getMyTenant(),
-    getMyPg(),
-  ]);
-  if (!payment || !mine || payment.amount_paid <= 0) notFound();
-  const tenant = mine.tenant;
+  const receipt = await getPaymentForReceipt(paymentId);
+  if (!receipt || receipt.payment.amount_paid <= 0) notFound();
+  const { payment, tenant, pg } = receipt;
+  const backHref = me.role === "tenant" ? "/portal/bill" : "/dashboard/payments";
+  const backLabel = me.role === "tenant" ? "← Back to my bill" : "← Back to payments";
 
   const receiptNo = `RCT-${payment.month_for.slice(0, 4)}-${paymentId.slice(0, 6).toUpperCase()}`;
   const amount = payment.amount_paid;
@@ -41,8 +39,8 @@ export default async function RentReceipt({
       <div className="mx-auto max-w-2xl">
         {/* toolbar (hidden on print) */}
         <div className="no-print mb-5 flex items-center justify-between">
-          <a href="/portal/bill" className="text-sm font-semibold text-clay-600 hover:text-clay-700">
-            ← Back to my bill
+          <a href={backHref} className="text-sm font-semibold text-clay-600 hover:text-clay-700">
+            {backLabel}
           </a>
           <PrintButton />
         </div>

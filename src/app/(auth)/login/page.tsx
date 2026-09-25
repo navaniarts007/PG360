@@ -5,9 +5,12 @@ import { ArrowLeft, Crown, ShieldCheck, Building2, UserRound } from "lucide-reac
 import { Logo } from "@/components/brand/logo";
 import { LoginForm } from "./login-form";
 import { getSession, homeForRole } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { getClient } from "@/lib/get-client";
 
-export const metadata: Metadata = { title: "Sign in" };
+export async function generateMetadata(): Promise<Metadata> {
+  const client = await getClient();
+  return { title: client.slug === "pg360" ? "Sign in" : `Sign in · ${client.brandName}` };
+}
 
 const DEMO = {
   super: { email: "owner@pg360.app", label: "Super admin", icon: Crown },
@@ -24,7 +27,11 @@ export default async function LoginPage({
   if (session) redirect(homeForRole(session.role));
 
   const { as } = await searchParams;
-  const demoMode = !isSupabaseConfigured();
+  const client = await getClient();
+  const branded = client.slug !== "pg360";
+  // No seeded demo accounts exist in this deployment's MySQL DB (those were
+  // Supabase-project-specific), so the "try the demo" panel never applies here.
+  const demoMode = false;
   const picked = as && as in DEMO ? DEMO[as as keyof typeof DEMO] : null;
 
   return (
@@ -41,11 +48,13 @@ export default async function LoginPage({
           style={{ background: "radial-gradient(circle, rgba(217,164,65,0.18), transparent 70%)" }}
         />
         <div className="relative">
-          <Logo invert />
+          <Logo invert label={client.brandName} logoSrc={client.logoSrc} />
         </div>
         <div className="relative">
           <h2 className="max-w-md font-display text-4xl font-semibold leading-tight tracking-tight">
-            Welcome back. Your whole PG is waiting on one calm screen.
+            {branded
+              ? `Welcome back to ${client.brandName}.`
+              : "Welcome back. Your whole PG is waiting on one calm screen."}
           </h2>
           <p className="mt-4 max-w-sm text-paper/60">
             Rent, rooms, food and complaints — and a login for every resident.
@@ -56,12 +65,20 @@ export default async function LoginPage({
           </div>
         </div>
         <div className="relative text-sm text-paper/40">
-          © {new Date().getFullYear()} PG360 · Made in India
+          Powered by{" "}
+          <a
+            href="https://pg360.software"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-paper/60 underline decoration-paper/20 underline-offset-2 transition-colors hover:text-paper"
+          >
+            PG360 software
+          </a>
         </div>
       </aside>
 
       {/* Form panel */}
-      <main className="relative flex flex-col items-center justify-center px-5 py-10 sm:px-8">
+      <main className="relative flex flex-col items-center justify-start px-5 pb-10 pt-20 sm:px-8 lg:justify-center lg:py-10">
         <Link
           href="/"
           className="absolute left-5 top-5 inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink sm:left-8 sm:top-8"
@@ -70,14 +87,16 @@ export default async function LoginPage({
         </Link>
 
         <div className="w-full max-w-sm">
-          <div className="lg:hidden">
-            <Logo />
+          <div className="flex justify-center lg:hidden">
+            <Logo label={client.brandName} logoSrc={client.logoSrc} size="lg" stacked />
           </div>
-          <h1 className="mt-8 font-display text-3xl font-semibold tracking-tight text-ink lg:mt-0">
+          <h1 className="mt-6 font-display text-3xl font-semibold tracking-tight text-ink lg:mt-0">
             Sign in
           </h1>
           <p className="mt-1.5 text-ink-muted">
-            Welcome back — let&apos;s get you to your dashboard.
+            {branded
+              ? `Welcome back — let's get you into ${client.brandName}.`
+              : "Welcome back — let's get you to your dashboard."}
           </p>
 
           <div className="mt-8">
@@ -87,6 +106,18 @@ export default async function LoginPage({
               initialPassword={picked ? "demo1234" : ""}
             />
           </div>
+
+          <p className="mt-8 text-center text-xs text-ink-muted lg:hidden">
+            Powered by{" "}
+            <a
+              href="https://pg360.software"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-ink-soft underline decoration-line underline-offset-2 transition-colors hover:text-ink"
+            >
+              PG360 software
+            </a>
+          </p>
 
           {demoMode && (
             <div className="mt-8">

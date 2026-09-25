@@ -12,23 +12,42 @@ import { ConfirmDelete } from "@/components/admin/confirm-delete";
 import { deleteTenantAction } from "@/lib/actions/admin";
 import { requireRole } from "@/lib/guards";
 import { getEdition } from "@/lib/get-client";
-import { getBedOptions, listTenantsWithRoom, paidTenantIds } from "@/lib/db";
+import { getActiveProperty } from "@/lib/auth";
+import {
+  getBedOptions,
+  getKycSignedUrl,
+  getPgAccount,
+  listAgreementSections,
+  listTenantAgreementsByTenant,
+  listTenantsWithRoom,
+  paidTenantIds,
+} from "@/lib/db";
 import { currentMonthRent } from "@/lib/rent";
 import { initials, inr } from "@/lib/utils";
+import type { TenantAgreement } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Tenants" };
 
 export default async function TenantsPage() {
   await requireRole(["admin", "staff"]);
-  const [tenants, beds, client, paidIds] = await Promise.all([
+  const pid = await getActiveProperty();
+  const [tenants, beds, client, paidIds, agreementSections, pg, agreementsByTenant] = await Promise.all([
     listTenantsWithRoom(),
     getBedOptions(),
     getEdition(),
     paidTenantIds(),
+    pid ? listAgreementSections(pid) : Promise.resolve([]),
+    pid ? getPgAccount(pid) : Promise.resolve(null),
+    pid ? listTenantAgreementsByTenant(pid) : Promise.resolve({} as Record<string, TenantAgreement>),
   ]);
+  const ownerSignatureUrl = await getKycSignedUrl(pg?.owner_signature_url ?? null);
   // Custom editions register residents as records (no login + ID capture).
   const addTenant =
-    client.edition === "gvm" ? <AddRecordDialog beds={beds} /> : <AddTenantDialog beds={beds} />;
+    client.edition === "gvm" ? (
+      <AddRecordDialog beds={beds} />
+    ) : (
+      <AddTenantDialog beds={beds} agreementSections={agreementSections} ownerSignatureUrl={ownerSignatureUrl} />
+    );
 
   const active = tenants.filter((t) => t.status === "active").length;
 
@@ -149,7 +168,20 @@ export default async function TenantsPage() {
                         >
                           <Eye className="size-3.5" /> View
                         </Link>
-                        <AddTenantDialog beds={beds} tenant={t} />
+                        <AddTenantDialog
+                          beds={beds}
+                          tenant={t}
+                          agreementSections={agreementSections}
+                          ownerSignatureUrl={ownerSignatureUrl}
+                          existingAgreement={
+                            agreementsByTenant[t.id]
+                              ? {
+                                  signatureUrl: agreementsByTenant[t.id]!.signature_url,
+                                  acceptedAt: agreementsByTenant[t.id]!.accepted_at,
+                                }
+                              : null
+                          }
+                        />
                         <ConfirmDelete action={deleteTenantAction} id={t.id} title="Delete tenant" />
                       </div>
                     </td>

@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { humanizeDbError } from "../errors";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
-import { createClient } from "../supabase/server";
+import { query } from "../mysql/client";
+import { humanizeDbError } from "../errors";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -23,17 +23,21 @@ export async function createWifiAction(
   if (!pid) return { error: "No active property selected." };
   const parsed = wifiSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
-  const s = await createClient();
-  const { error } = await s.from("wifi_networks").insert({
-    pg_id: pid,
-    ssid: parsed.data.ssid,
-    password: parsed.data.password,
-  });
-  if (error) {
+  try {
+    await query(`insert into wifi_networks (pg_id, ssid, password) values (?, ?, ?)`, [
+      pid,
+      parsed.data.ssid,
+      parsed.data.password,
+    ]);
+  } catch (error) {
+    const msg = (error as { message?: string })?.message ?? "";
+    // Keep the friendly duplicate-specific message, but never surface the
+    // raw mysql2 message otherwise — it can expose table/column/constraint
+    // details, contradicting humanizeDbError's no-SQL-jargon-to-the-user rule.
     return {
-      error: /duplicate|unique/i.test(error.message)
+      error: /duplicate|unique/i.test(msg)
         ? "A network with that name already exists."
-        : error.message,
+        : humanizeDbError(error as never),
     };
   }
   revalidatePath("/dashboard/settings");
@@ -47,21 +51,27 @@ export async function updateWifiAction(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
   const id = String(formData.get("id"));
   const parsed = wifiSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
-  const s = await createClient();
-  const { error } = await s
-    .from("wifi_networks")
-    .update({ ssid: parsed.data.ssid, password: parsed.data.password })
-    .eq("id", id);
-  if (error) return { error: humanizeDbError(error) };
 
-  // keep rooms in sync
-  await s
-    .from("rooms")
-    .update({ wifi_ssid: parsed.data.ssid, wifi_password: parsed.data.password })
-    .eq("wifi_network_id", id);
+  // pg_id = ? fixes a cross-tenant write gap the original had (id-only,
+  // relying entirely on RLS).
+  await query(`update wifi_networks set ssid = ?, password = ? where id = ? and pg_id = ?`, [
+    parsed.data.ssid,
+    parsed.data.password,
+    id,
+    pid,
+  ]);
+
+  // keep rooms in sync — also pg-scoped, though wifi_network_id already
+  // implies the same property via the FK
+  await query(
+    `update rooms set wifi_ssid = ?, wifi_password = ? where wifi_network_id = ? and pg_id = ?`,
+    [parsed.data.ssid, parsed.data.password, id, pid],
+  );
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/rooms");
@@ -70,10 +80,11 @@ export async function updateWifiAction(
 
 export async function deleteWifiAction(formData: FormData): Promise<void> {
   await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return;
   const id = String(formData.get("id"));
-  const s = await createClient();
   // rooms.wifi_network_id is set null by the FK; their last-known password stays.
-  await s.from("wifi_networks").delete().eq("id", id);
+  await query(`delete from wifi_networks where id = ? and pg_id = ?`, [id, pid]);
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/rooms");
 }

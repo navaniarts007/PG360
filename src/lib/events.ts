@@ -1,5 +1,5 @@
 import "server-only";
-import { createAdminClient } from "./supabase/admin";
+import { query } from "./mysql/client";
 import type { TenantEventType } from "./types";
 
 /**
@@ -16,16 +16,19 @@ export async function logTenantEvent(input: {
   createdBy?: string | null;
 }): Promise<void> {
   try {
-    const admin = createAdminClient();
-    await admin.from("tenant_events").insert({
-      pg_id: input.pgId,
-      tenant_id: input.tenantId,
-      type: input.type,
-      detail: input.detail ?? null,
-      room_id: input.roomId ?? null,
-      floor: input.floor ?? null,
-      created_by: input.createdBy ?? null,
-    });
+    await query(
+      `insert into tenant_events (pg_id, tenant_id, event_type, detail, room_id, floor, created_by)
+       values (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.pgId,
+        input.tenantId,
+        input.type,
+        input.detail ?? null,
+        input.roomId ?? null,
+        input.floor ?? null,
+        input.createdBy ?? null,
+      ],
+    );
   } catch {
     /* timeline is non-critical — swallow */
   }

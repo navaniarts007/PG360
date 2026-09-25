@@ -4,6 +4,10 @@ import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getPgAccount } from "@/lib/db";
 import { getEdition } from "@/lib/get-client";
 
+// See (super-admin)/layout.tsx — same reasoning, force-dynamic prevents
+// next build from trying to prerender these with real DB queries.
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
 }: {
@@ -38,6 +42,7 @@ export default async function AdminLayout({
       settings={pg?.settings ?? {}}
       edition={client.edition}
       brandName={client.brandName}
+      logoSrc={client.logoSrc}
       impersonating={user.impersonating ?? null}
       permissions={user.permissions ?? null}
     >

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
-import { createClient } from "../supabase/server";
+import { query, queryOne } from "../mysql/client";
 import { logActivity } from "../activity";
 import { formatDate } from "../utils";
 
@@ -23,31 +23,23 @@ export async function recordRenewalDecisionAction(formData: FormData): Promise<v
   if (!tenantId || !/^\d{4}-\d{2}-\d{2}$/.test(cycleEnd)) return;
   if (decision !== "extend" && decision !== "vacate") return;
 
-  const s = await createClient();
-  const { data: tenant } = await s
-    .from("tenants")
-    .select("id, name")
-    .eq("id", tenantId)
-    .eq("pg_id", pid)
-    .maybeSingle();
+  const tenant = await queryOne<{ id: string; name: string }>(
+    `select id, name from tenants where id = ? and pg_id = ?`,
+    [tenantId, pid],
+  );
   if (!tenant) return;
 
   const decidedBy = UUID_REGEX.test(user.id) ? user.id : null;
 
-  const { error: upsertErr } = await s.from("renewal_checks").upsert(
-    {
-      pg_id: pid,
-      tenant_id: tenantId,
-      cycle_end: cycleEnd,
-      decision,
-      decided_at: new Date().toISOString(),
-      decided_by: decidedBy,
-    },
-    { onConflict: "tenant_id,cycle_end" },
-  );
-
-  if (upsertErr) {
-    console.error("renewal_checks upsert error:", upsertErr);
+  try {
+    await query(
+      `insert into renewal_checks (pg_id, tenant_id, cycle_end, decision, decided_at, decided_by)
+       values (?, ?, ?, ?, now(), ?)
+       on duplicate key update decision = values(decision), decided_at = values(decided_at), decided_by = values(decided_by)`,
+      [pid, tenantId, cycleEnd, decision, decidedBy],
+    );
+  } catch (err) {
+    console.error("renewal_checks upsert error:", err);
   }
 
   const outcome =
@@ -57,14 +49,11 @@ export async function recordRenewalDecisionAction(formData: FormData): Promise<v
 
   try {
     await Promise.all([
-      logActivity("Renewal check", `${(tenant as { name: string }).name} ${outcome}.`),
-      s.from("tenant_events").insert({
-        pg_id: pid,
-        tenant_id: tenantId,
-        type: "note",
-        detail: `Renewal check: ${outcome}`,
-        created_by: decidedBy,
-      }),
+      logActivity("Renewal check", `${tenant.name} ${outcome}.`),
+      query(
+        `insert into tenant_events (pg_id, tenant_id, event_type, detail, created_by) values (?, ?, 'note', ?, ?)`,
+        [pid, tenantId, `Renewal check: ${outcome}`, decidedBy],
+      ),
     ]);
   } catch (err) {
     console.error("Renewal decision activity insert error:", err);

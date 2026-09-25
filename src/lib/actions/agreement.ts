@@ -6,11 +6,10 @@ import { z } from "zod";
 import { humanizeDbError } from "../errors";
 import { requireRole } from "../guards";
 import { getActiveProperty } from "../auth";
-import { createAdminClient } from "../supabase/admin";
+import { query, queryOne } from "../mysql/client";
+import { VPS_MARKER } from "../storage/vps";
 
 export type ActionState = { ok?: boolean; error?: string };
-
-const cld = /^cld:/;
 
 /* -------- admin: build the policy sections + owner signature -------------- */
 
@@ -30,28 +29,30 @@ export async function saveSectionAction(
   const parsed = sectionSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
-  const admin = createAdminClient();
 
-  if (d.id) {
-    const { error } = await admin
-      .from("agreement_sections")
-      .update({ title: d.title, body: d.body ?? "" })
-      .eq("id", d.id)
-      .eq("pg_id", pid);
-    if (error) return { error: humanizeDbError(error) };
-  } else {
-    const { data: last } = await admin
-      .from("agreement_sections")
-      .select("idx")
-      .eq("pg_id", pid)
-      .order("idx", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const nextIdx = ((last?.idx as number | undefined) ?? 0) + 1;
-    const { error } = await admin
-      .from("agreement_sections")
-      .insert({ pg_id: pid, idx: nextIdx, title: d.title, body: d.body ?? "" });
-    if (error) return { error: humanizeDbError(error) };
+  try {
+    if (d.id) {
+      await query(`update agreement_sections set title = ?, body = ? where id = ? and pg_id = ?`, [
+        d.title,
+        d.body ?? "",
+        d.id,
+        pid,
+      ]);
+    } else {
+      const last = await queryOne<{ idx: number }>(
+        `select idx from agreement_sections where pg_id = ? order by idx desc limit 1`,
+        [pid],
+      );
+      const nextIdx = (last?.idx ?? 0) + 1;
+      await query(`insert into agreement_sections (pg_id, idx, title, body) values (?, ?, ?, ?)`, [
+        pid,
+        nextIdx,
+        d.title,
+        d.body ?? "",
+      ]);
+    }
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
   }
   revalidatePath("/dashboard/settings");
   return { ok: true };
@@ -62,8 +63,7 @@ export async function deleteSectionAction(formData: FormData): Promise<void> {
   const pid = await getActiveProperty();
   const id = String(formData.get("id"));
   if (!pid || !id) return;
-  const admin = createAdminClient();
-  await admin.from("agreement_sections").delete().eq("id", id).eq("pg_id", pid);
+  await query(`delete from agreement_sections where id = ? and pg_id = ?`, [id, pid]);
   revalidatePath("/dashboard/settings");
 }
 
@@ -71,14 +71,18 @@ export async function saveOwnerSignatureAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin", "staff"]);
+  // pg_accounts writes are admin-only (see RLS_TO_APP_LAYER.md) — staff must
+  // not be able to replace the owner's signature.
+  await requireRole(["admin"]);
   const pid = await getActiveProperty();
   if (!pid) return { error: "No active property selected." };
   const url = String(formData.get("signature_url") ?? "");
-  if (!cld.test(url)) return { error: "Please add a signature image first." };
-  const admin = createAdminClient();
-  const { error } = await admin.from("pg_accounts").update({ owner_signature_url: url }).eq("id", pid);
-  if (error) return { error: humanizeDbError(error) };
+  if (!VPS_MARKER.test(url)) return { error: "Please add a signature image first." };
+  try {
+    await query(`update pg_accounts set owner_signature_url = ? where id = ?`, [url, pid]);
+  } catch (error) {
+    return { error: humanizeDbError(error as never) };
+  }
   revalidatePath("/dashboard/settings");
   return { ok: true };
 }
@@ -92,14 +96,53 @@ export async function acceptAgreementAction(
   const me = await requireRole(["tenant"]);
   if (!me.tenant_id || !me.pg_id) return { error: "No tenant record found." };
   const url = String(formData.get("signature_url") ?? "");
-  if (!cld.test(url)) return { error: "Please add your signature to continue." };
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("tenant_agreements")
-    .upsert(
-      { pg_id: me.pg_id, tenant_id: me.tenant_id, signature_url: url, accepted_at: new Date().toISOString() },
-      { onConflict: "tenant_id" },
+  if (!VPS_MARKER.test(url)) return { error: "Please add your signature to continue." };
+  try {
+    await query(
+      `insert into tenant_agreements (pg_id, tenant_id, signature_url, accepted_at) values (?, ?, ?, now())
+       on duplicate key update signature_url = values(signature_url), accepted_at = values(accepted_at)`,
+      [me.pg_id, me.tenant_id, url],
     );
-  if (error) return { error: humanizeDbError(error, "Could not save your agreement.") };
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not save your agreement.") };
+  }
   redirect("/portal");
+}
+
+/* -------- admin/staff: capture the tenant's signature at signup ----------- */
+
+/** Records the resident agreement as signed for a tenant admin/staff just
+ *  added — the optional "read & sign now" step in the add-tenant flow.
+ *  Same tenant_agreements row the tenant's own first-login flow writes to,
+ *  so whichever happens first (staff-assisted or the tenant's own login)
+ *  is the one that sticks (on duplicate key). */
+export async function signAgreementForTenantAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["admin", "staff"]);
+  const pid = await getActiveProperty();
+  if (!pid) return { error: "No active property selected." };
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const url = String(formData.get("signature_url") ?? "");
+  if (!tenantId) return { error: "No tenant selected." };
+  if (!VPS_MARKER.test(url)) return { error: "Please add a signature first." };
+
+  const tenant = await queryOne<{ id: string }>(`select id from tenants where id = ? and pg_id = ?`, [
+    tenantId,
+    pid,
+  ]);
+  if (!tenant) return { error: "That tenant isn't in this property." };
+
+  try {
+    await query(
+      `insert into tenant_agreements (pg_id, tenant_id, signature_url, accepted_at) values (?, ?, ?, now())
+       on duplicate key update signature_url = values(signature_url), accepted_at = values(accepted_at)`,
+      [pid, tenantId, url],
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not save the agreement.") };
+  }
+  revalidatePath("/dashboard/tenants");
+  return { ok: true };
 }

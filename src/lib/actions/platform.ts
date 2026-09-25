@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { humanizeDbError } from "../errors";
+import { randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireRole } from "../guards";
 import { clearImpersonation, setImpersonation } from "../auth";
 import { logActivity } from "../activity";
-import { createClient } from "../supabase/server";
-import { createAdminClient } from "../supabase/admin";
+import { query, queryOne, withTransaction } from "../mysql/client";
 
 export type ActionState = { ok?: boolean; error?: string };
 
@@ -34,6 +35,8 @@ const pgSchema = z.object({
   reg_prefix: z.string().max(12).optional(),
 });
 
+/** Super-admin onboards a new PG: owner login + pg_account + profile +
+ *  property membership, atomically (see withTransaction's doc comment). */
 export async function createPgAction(
   _prev: ActionState,
   formData: FormData,
@@ -44,24 +47,11 @@ export async function createPgAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   }
   const d = parsed.data;
-  const admin = createAdminClient();
 
-  // 1) the owner's auth login
-  const { data: created, error: userErr } = await admin.auth.admin.createUser({
-    email: d.owner_email,
-    password: d.owner_password,
-    email_confirm: true,
-    user_metadata: { full_name: d.owner_name },
-  });
-  if (userErr || !created.user) {
-    return {
-      error: /already|registered|exists/i.test(humanizeDbError(userErr, ""))
-        ? "That owner email already has an account."
-        : humanizeDbError(userErr, "Could not create the owner login."),
-    };
-  }
+  const email = d.owner_email.trim().toLowerCase();
+  const existingUser = await queryOne<{ id: string }>(`select id from users where email = ?`, [email]);
+  if (existingUser) return { error: "That owner email already has an account." };
 
-  // 2) the PG account — demo = a time-limited trial (expires after trial_days)
   const isDemo = formData.get("is_demo") === "on";
   const trialDays = Math.min(365, Math.max(1, Number(formData.get("trial_days")) || 3));
   const expiry = new Date();
@@ -69,46 +59,57 @@ export async function createPgAction(
   else if (d.subscription_plan === "monthly") expiry.setMonth(expiry.getMonth() + 1);
   else if (d.subscription_plan === "yearly") expiry.setFullYear(expiry.getFullYear() + 1);
   else expiry.setFullYear(expiry.getFullYear() + 100);
-  const { data: pg, error: pgErr } = await admin
-    .from("pg_accounts")
-    .insert({
-      owner_name: d.owner_name,
-      pg_name: d.pg_name,
-      mobile: d.mobile,
-      location: d.location,
-      pg_type: d.pg_type,
-      category: d.category,
-      subscription_plan: d.subscription_plan,
-      subscription_expiry: expiry.toISOString().slice(0, 10),
-      is_demo: isDemo,
-      created_by: me.id,
-      owner_id: created.user.id,
-      edition: d.edition,
-      portal_enabled: d.edition !== "gvm",
-      reg_prefix: d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null,
-    })
-    .select()
-    .single();
-  if (pgErr || !pg) {
-    await admin.auth.admin.deleteUser(created.user.id); // roll back the orphan login
-    return { error: humanizeDbError(pgErr, "Could not create the PG.") };
+
+  const passwordHash = await bcrypt.hash(d.owner_password, 10);
+  const ownerId = randomUUID();
+  const pgId = randomUUID();
+
+  try {
+    await withTransaction(async (tx) => {
+      await tx.query(`insert into users (id, email, password_hash) values (?, ?, ?)`, [
+        ownerId,
+        email,
+        passwordHash,
+      ]);
+      await tx.query(
+        `insert into pg_accounts
+           (id, owner_name, pg_name, mobile, location, pg_type, category, subscription_plan,
+            subscription_expiry, is_demo, created_by, owner_id, edition, portal_enabled, reg_prefix)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          pgId,
+          d.owner_name,
+          d.pg_name,
+          d.mobile,
+          d.location,
+          d.pg_type,
+          d.category,
+          d.subscription_plan,
+          expiry.toISOString().slice(0, 10),
+          isDemo,
+          me.id,
+          ownerId,
+          d.edition,
+          d.edition !== "gvm",
+          d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null,
+        ],
+      );
+      await tx.query(`insert into profiles (id, role, pg_id, full_name, phone) values (?, 'admin', ?, ?, ?)`, [
+        ownerId,
+        pgId,
+        d.owner_name,
+        d.mobile,
+      ]);
+      await tx.query(`insert into property_members (property_id, user_id, role) values (?, ?, 'admin')`, [
+        pgId,
+        ownerId,
+      ]);
+    });
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not create the PG.") };
   }
 
-  // 3) the owner's profile (role=admin) + property membership
-  const { error: profErr } = await admin.from("profiles").upsert({
-    id: created.user.id,
-    role: "admin",
-    pg_id: pg.id,
-    full_name: d.owner_name,
-    phone: d.mobile,
-  });
-  if (profErr) return { error: humanizeDbError(profErr) };
-
-  await admin
-    .from("property_members")
-    .insert({ property_id: pg.id, user_id: created.user.id, role: "admin" });
-
-  await logActivity("account.created", `Created PG "${d.pg_name}" (${d.owner_name})`, { pgId: pg.id });
+  await logActivity("account.created", `Created PG "${d.pg_name}" (${d.owner_name})`, { pgId });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
   return { ok: true };
@@ -139,52 +140,60 @@ export async function updateAccountAction(
   const portalEnabled = formData.get("portal_enabled") === "on";
   const isDemo = formData.get("is_demo") === "on";
   const prefix = d.reg_prefix?.trim() ? d.reg_prefix.trim().toUpperCase() : null;
-  const admin = createAdminClient();
-  // optionally (re)set the trial/expiry window when days are provided
-  const { data: current } = await admin
-    .from("pg_accounts")
-    .select("subscription_plan")
-    .eq("id", d.id)
-    .maybeSingle();
-  const patch: Record<string, unknown> = {
-    owner_name: d.owner_name,
-    mobile: d.mobile,
-    location: d.location,
-    subscription_plan: d.subscription_plan,
-    edition: d.edition,
-    portal_enabled: portalEnabled,
-    reg_prefix: prefix,
-    is_demo: isDemo,
-  };
+
+  const current = await queryOne<{ subscription_plan: string }>(
+    `select subscription_plan from pg_accounts where id = ?`,
+    [d.id],
+  );
+  let subscriptionExpiry: string | null = null;
   const trialDays = Number(formData.get("trial_days")) || 0;
   if (trialDays > 0) {
     const exp = new Date();
     exp.setDate(exp.getDate() + Math.min(365, trialDays));
-    patch.subscription_expiry = exp.toISOString().slice(0, 10);
+    subscriptionExpiry = exp.toISOString().slice(0, 10);
   } else if (current?.subscription_plan !== d.subscription_plan) {
-    patch.subscription_expiry = expiryForPlan(d.subscription_plan);
+    subscriptionExpiry = expiryForPlan(d.subscription_plan);
   }
 
-  const { error } = await admin
-    .from("pg_accounts")
-    .update(patch)
-    .eq("id", d.id);
-  if (error) return { error: humanizeDbError(error, "Could not update the account.") };
+  try {
+    if (subscriptionExpiry) {
+      await query(
+        `update pg_accounts set owner_name = ?, mobile = ?, location = ?, subscription_plan = ?,
+                edition = ?, portal_enabled = ?, reg_prefix = ?, is_demo = ?, subscription_expiry = ?
+          where id = ?`,
+        [d.owner_name, d.mobile, d.location, d.subscription_plan, d.edition, portalEnabled, prefix, isDemo, subscriptionExpiry, d.id],
+      );
+    } else {
+      await query(
+        `update pg_accounts set owner_name = ?, mobile = ?, location = ?, subscription_plan = ?,
+                edition = ?, portal_enabled = ?, reg_prefix = ?, is_demo = ?
+          where id = ?`,
+        [d.owner_name, d.mobile, d.location, d.subscription_plan, d.edition, portalEnabled, prefix, isDemo, d.id],
+      );
+    }
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not update the account.") };
+  }
 
   // Billing is per-OWNER, not per-property: one login can run several properties,
   // so the trial/plan/expiry must apply to all of that owner's properties at once.
-  const { data: acct } = await admin
-    .from("pg_accounts")
-    .select("owner_id")
-    .eq("id", d.id)
-    .maybeSingle();
+  const acct = await queryOne<{ owner_id: string | null }>(
+    `select owner_id from pg_accounts where id = ?`,
+    [d.id],
+  );
   if (acct?.owner_id) {
-    const billing: Record<string, unknown> = {
-      is_demo: isDemo,
-      subscription_plan: d.subscription_plan,
-    };
-    if (patch.subscription_expiry) billing.subscription_expiry = patch.subscription_expiry;
-    await admin.from("pg_accounts").update(billing).eq("owner_id", acct.owner_id);
+    if (subscriptionExpiry) {
+      await query(
+        `update pg_accounts set is_demo = ?, subscription_plan = ?, subscription_expiry = ? where owner_id = ?`,
+        [isDemo, d.subscription_plan, subscriptionExpiry, acct.owner_id],
+      );
+    } else {
+      await query(`update pg_accounts set is_demo = ?, subscription_plan = ? where owner_id = ?`, [
+        isDemo,
+        d.subscription_plan,
+        acct.owner_id,
+      ]);
+    }
   }
 
   await logActivity("account.updated", `Updated account settings`, { pgId: d.id });
@@ -195,38 +204,40 @@ export async function updateAccountAction(
 }
 
 /** Permanently delete a PG account and all its data (super-admin only).
- *  Child tables cascade on pg_account delete; we also remove the owner +
- *  tenant auth logins so no orphan accounts are left behind. */
+ *  Child tables cascade on pg_account delete (FK ON DELETE CASCADE); we also
+ *  remove the owner + tenant logins from `users` so no orphan accounts are
+ *  left behind — those aren't part of the cascade since users isn't a child
+ *  of pg_accounts. */
 export async function deleteAccountAction(formData: FormData): Promise<void> {
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));
   if (!id) return;
-  const admin = createAdminClient();
 
-  // collect auth logins to clean up before the cascade removes their rows
-  const { data: pg } = await admin
-    .from("pg_accounts")
-    .select("owner_id, pg_name")
-    .eq("id", id)
-    .maybeSingle();
-  const { data: tenantRows } = await admin
-    .from("tenants")
-    .select("user_id")
-    .eq("pg_id", id);
+  const pg = await queryOne<{ owner_id: string | null; pg_name: string }>(
+    `select owner_id, pg_name from pg_accounts where id = ?`,
+    [id],
+  );
+  const tenantRows = await query<{ user_id: string | null }>(
+    `select user_id from tenants where pg_id = ?`,
+    [id],
+  );
 
-  const { error } = await admin.from("pg_accounts").delete().eq("id", id);
-  if (error) return; // FK/RLS guard — surfaced as a no-op; account stays put
+  try {
+    await query(`delete from pg_accounts where id = ?`, [id]);
+  } catch {
+    return; // FK guard — surfaced as a no-op; account stays put
+  }
 
   const userIds = new Set<string>();
   if (pg?.owner_id) userIds.add(pg.owner_id);
-  for (const t of (tenantRows ?? []) as { user_id: string | null }[]) {
-    if (t.user_id) userIds.add(t.user_id);
-  }
+  for (const t of tenantRows) if (t.user_id) userIds.add(t.user_id);
   for (const uid of userIds) {
-    await admin.auth.admin.deleteUser(uid).catch(() => {});
+    await query(`delete from users where id = ?`, [uid]).catch(() => {});
   }
 
-  await logActivity("account.deleted", `Deleted PG "${pg?.pg_name ?? ""}" and all its data`, { pgId: null });
+  await logActivity("account.deleted", `Deleted PG "${pg?.pg_name ?? ""}" and all its data`, {
+    pgId: null,
+  });
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
 }
@@ -247,7 +258,9 @@ export async function stopImpersonationAction(): Promise<void> {
   redirect("/platform/accounts");
 }
 
-/** Reset a PG owner's login password (super-admin only). */
+/** Reset a PG owner's login password (super-admin only). Also invalidates
+ *  their existing sessions — a password reset should force re-login, same
+ *  as the tenant-facing password reset flow does. */
 export async function resetOwnerPasswordAction(
   _prev: ActionState,
   formData: FormData,
@@ -258,9 +271,16 @@ export async function resetOwnerPasswordAction(
   if (!ownerId) return { error: "This account has no owner login linked." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
 
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(ownerId, { password });
-  if (error) return { error: humanizeDbError(error, "Could not reset the password.") };
+  try {
+    const passwordHash = await bcrypt.hash(password, 10);
+    await query(`update users set password_hash = ?, failed_attempts = 0, locked_until = null where id = ?`, [
+      passwordHash,
+      ownerId,
+    ]);
+    await query(`delete from sessions where user_id = ?`, [ownerId]);
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not reset the password.") };
+  }
   await logActivity("account.password_reset", "Reset an owner's login password", { pgId: null });
   return { ok: true };
 }
@@ -288,20 +308,42 @@ export async function createInvoiceAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form." };
   }
   const d = parsed.data;
-  const admin = createAdminClient();
-  const { error } = await admin.from("platform_invoices").insert({
-    pg_id: d.pg_id,
-    description: d.description,
-    amount: d.amount,
-    tax_percent: d.tax_percent,
-    billing_cycle: d.billing_cycle,
-    period_label: d.period_label?.trim() || null,
-    due_date: d.due_date?.trim() || null,
-    notes: d.notes?.trim() || null,
-    created_by: me.id,
+  try {
+    // Claim the current counter value first, then advance it — the sequence
+    // is seeded at 1001, so the first invoice must be 1001, not 1002.
+    // (Incrementing-then-reading-back shifts every number by one; see the
+    // matching note on next_platform_invoice_no in 004_counters_and_functions.sql.)
+    const nextNo = await withTransaction(async (tx) => {
+      const row = await tx.queryOne<{ next_no: number }>(
+        `select next_no from platform_invoice_seq where id = 1 for update`,
+      );
+      const claimed = row?.next_no ?? 1001;
+      await tx.query(`update platform_invoice_seq set next_no = next_no + 1 where id = 1`);
+      return claimed;
+    });
+    await query(
+      `insert into platform_invoices
+         (pg_id, number, description, amount, tax_percent, billing_cycle, period_label, due_date, notes, created_by)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        d.pg_id,
+        nextNo,
+        d.description,
+        d.amount,
+        d.tax_percent,
+        d.billing_cycle,
+        d.period_label?.trim() || null,
+        d.due_date?.trim() || null,
+        d.notes?.trim() || null,
+        me.id,
+      ],
+    );
+  } catch (error) {
+    return { error: humanizeDbError(error as never, "Could not create the invoice.") };
+  }
+  await logActivity("invoice.created", `Created an invoice (₹${d.amount.toLocaleString("en-IN")})`, {
+    pgId: d.pg_id,
   });
-  if (error) return { error: humanizeDbError(error, "Could not create the invoice.") };
-  await logActivity("invoice.created", `Created an invoice (₹${d.amount.toLocaleString("en-IN")})`, { pgId: d.pg_id });
   revalidatePath(`/platform/accounts/${d.pg_id}`);
   return { ok: true };
 }
@@ -309,17 +351,15 @@ export async function createInvoiceAction(
 export async function toggleInvoicePaidAction(formData: FormData): Promise<void> {
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));
-  const admin = createAdminClient();
-  const { data: inv } = await admin
-    .from("platform_invoices")
-    .select("status, pg_id")
-    .eq("id", id)
-    .maybeSingle();
+  const inv = await queryOne<{ status: string; pg_id: string }>(
+    `select status, pg_id from platform_invoices where id = ?`,
+    [id],
+  );
   if (!inv) return;
-  await admin
-    .from("platform_invoices")
-    .update({ status: inv.status === "paid" ? "unpaid" : "paid" })
-    .eq("id", id);
+  await query(`update platform_invoices set status = ? where id = ?`, [
+    inv.status === "paid" ? "unpaid" : "paid",
+    id,
+  ]);
   revalidatePath(`/platform/accounts/${inv.pg_id}`);
   revalidatePath(`/invoice/${id}`);
 }
@@ -327,26 +367,20 @@ export async function toggleInvoicePaidAction(formData: FormData): Promise<void>
 export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));
-  const admin = createAdminClient();
-  const { data: inv } = await admin
-    .from("platform_invoices")
-    .select("pg_id")
-    .eq("id", id)
-    .maybeSingle();
-  await admin.from("platform_invoices").delete().eq("id", id);
+  const inv = await queryOne<{ pg_id: string }>(`select pg_id from platform_invoices where id = ?`, [id]);
+  await query(`delete from platform_invoices where id = ?`, [id]);
   if (inv) revalidatePath(`/platform/accounts/${inv.pg_id}`);
 }
 
 export async function togglePgStatusAction(formData: FormData): Promise<void> {
   await requireRole(["super_admin"]);
   const id = String(formData.get("id"));
-  const s = await createClient();
-  const { data: pg } = await s.from("pg_accounts").select("status").eq("id", id).maybeSingle();
+  const pg = await queryOne<{ status: string }>(`select status from pg_accounts where id = ?`, [id]);
   if (!pg) return;
-  await s
-    .from("pg_accounts")
-    .update({ status: pg.status === "active" ? "suspended" : "active" })
-    .eq("id", id);
+  await query(`update pg_accounts set status = ? where id = ?`, [
+    pg.status === "active" ? "suspended" : "active",
+    id,
+  ]);
   revalidatePath("/platform");
   revalidatePath("/platform/accounts");
 }

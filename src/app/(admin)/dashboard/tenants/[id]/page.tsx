@@ -5,12 +5,11 @@ import {
   ArrowLeft,
   Briefcase,
   CalendarDays,
-  ExternalLink,
   FileText,
   IdCard,
   MapPin,
   Phone,
-  ScrollText,
+  Printer,
   ShieldCheck,
   Wifi,
 } from "lucide-react";
@@ -40,6 +39,7 @@ import {
   getPgPolicy,
   getTenantAgreement,
   getTenantDetail,
+  listAgreementSections,
   listTenantDocumentsSigned,
   listTenantEvents,
 } from "@/lib/db";
@@ -87,24 +87,21 @@ export default async function TenantDetail({
     .reduce((s, p) => s + (p.total_amount - p.amount_paid), 0);
   const settlement = tenant.security_deposit - outstanding;
 
-  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount, agreement] = await Promise.all([
-    getPayTenants(),
-    getBedOptions(),
-    getJoiningFees(id),
-    getPgPolicy(tenant.pg_id),
-    listTenantEvents(id),
-    getKycSignedUrls(tenant.aadhaar_photo_url),
-    listTenantDocumentsSigned(id),
-    getPgAccount(tenant.pg_id),
-    getTenantAgreement(id),
-  ]);
+  const [payTenants, beds, joiningFees, policy, events, aadhaarUrls, documents, pgAccount, agreementSections, agreement] =
+    await Promise.all([
+      getPayTenants(),
+      getBedOptions(),
+      getJoiningFees(id),
+      getPgPolicy(tenant.pg_id),
+      listTenantEvents(id),
+      getKycSignedUrls(tenant.aadhaar_photo_url),
+      listTenantDocumentsSigned(id),
+      getPgAccount(tenant.pg_id),
+      listAgreementSections(tenant.pg_id),
+      getTenantAgreement(id),
+    ]);
 
-  const [ownerSig, tenantSig] = await Promise.all([
-    getKycSignedUrl(pgAccount?.owner_signature_url ?? null),
-    getKycSignedUrl(agreement?.signature_url ?? null),
-  ]);
-
-  const rulesDocUrl = pgAccount?.rules_doc_url ?? ((pgAccount?.settings as Record<string, unknown>)?.rules_doc_url as string | null) ?? null;
+  const ownerSignatureUrl = await getKycSignedUrl(pgAccount?.owner_signature_url ?? null);
   const aadhaarUrl = aadhaarUrls[0] ?? null;
   const joiningTotal = joiningFees.reduce((s, f) => s + f.amount, 0);
   const onboardingTotal = tenant.rent_amount + tenant.security_deposit + joiningTotal;
@@ -147,7 +144,13 @@ export default async function TenantDetail({
             <FileText className="size-3.5" /> Print record
           </Link>
           <ChangeBedDialog tenant={tenant} beds={beds} />
-          <AddTenantDialog beds={beds} tenant={tenant} />
+          <AddTenantDialog
+            beds={beds}
+            tenant={tenant}
+            agreementSections={agreementSections}
+            ownerSignatureUrl={ownerSignatureUrl}
+            existingAgreement={agreement ? { signatureUrl: agreement.signature_url, acceptedAt: agreement.accepted_at } : null}
+          />
           {tenant.status === "active" && (
             <>
               <RecordPaymentDialog tenants={payTenants} month={currentMonth()} preselectId={tenant.id} />
@@ -266,23 +269,24 @@ export default async function TenantDetail({
                   <p className="text-xs text-ink-muted tnum">{inr(p.amount_paid)} / {inr(p.total_amount)}</p>
                   <p className="text-xs text-ink">Type: {paymentTypes(p)}</p>
                 </div>
-                <PaymentStatusPill status={p.status} />
+                <div className="flex items-center gap-2">
+                  {p.amount_paid > 0 && (
+                    <a
+                      href={`/receipt/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Print receipt"
+                      className="grid size-7 place-items-center rounded-lg text-ink-muted transition hover:bg-paper-2 hover:text-clay-600"
+                    >
+                      <Printer className="size-3.5" />
+                    </a>
+                  )}
+                  <PaymentStatusPill status={p.status} />
+                </div>
               </div>
             ))}
           </div>
         </Card>
-
-        <div className="lg:col-span-3">
-          <TenantRulesCard
-            rulesDocUrl={rulesDocUrl}
-            ownerSig={ownerSig}
-            tenantSig={tenantSig}
-            tenantName={tenant.name}
-            ownerName={pgAccount?.owner_name ?? "Owner"}
-            pgName={pgAccount?.pg_name ?? ""}
-            pgAddress={pgAccount?.property_address ?? null}
-          />
-        </div>
 
         <div className="lg:col-span-3">
           <DocumentsManager tenantId={tenant.id} docs={documents} aadhaarUrl={aadhaarUrl} aadhaarUrls={aadhaarUrls} />
@@ -293,129 +297,6 @@ export default async function TenantDetail({
         </div>
       </div>
     </div>
-  );
-}
-
-function TenantRulesCard({
-  rulesDocUrl,
-  ownerSig,
-  tenantSig,
-  tenantName,
-  ownerName,
-  pgName,
-  pgAddress,
-}: {
-  rulesDocUrl: string | null;
-  ownerSig: string | null;
-  tenantSig: string | null;
-  tenantName: string;
-  ownerName: string;
-  pgName: string;
-  pgAddress: string | null;
-}) {
-  const isImage = rulesDocUrl
-    ? /\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(rulesDocUrl) || rulesDocUrl.includes("/image/upload/")
-    : false;
-
-  return (
-    <Card className="overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-clay-50 text-clay-600 ring-1 ring-clay-100">
-            <ScrollText className="size-5" />
-          </span>
-          <div>
-            <h3 className="text-lg font-semibold text-ink">Rules &amp; Regulations</h3>
-            <p className="text-xs text-ink-muted">Official house rules document for this resident</p>
-          </div>
-        </div>
-        {rulesDocUrl && (
-          <a
-            href={rulesDocUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-clay-600 transition-colors hover:bg-paper-2"
-          >
-            <ExternalLink className="size-3.5" /> View / Download
-          </a>
-        )}
-      </div>
-
-      {rulesDocUrl ? (
-        <>
-          {/* A4 document area */}
-          <div className="border-t border-line bg-[#f5f5f0] px-4 py-5 sm:px-8">
-            {/* A4 paper: 210mm × 297mm ≈ aspect ratio 1:√2 ≈ 1:1.414 */}
-            <div
-              className="mx-auto w-full max-w-[794px] overflow-hidden rounded-lg bg-white shadow-[0_4px_24px_rgba(0,0,0,0.12)] ring-1 ring-black/5"
-              style={{ aspectRatio: "1 / 1.414" }}
-            >
-              {isImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={rulesDocUrl}
-                  alt="Rules & Regulations"
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <iframe
-                  src={rulesDocUrl}
-                  title="Rules & Regulations"
-                  className="h-full w-full border-0"
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Signatures row */}
-          <div className="border-t border-line px-5 py-5 sm:px-8">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-ink-muted">Signatures</p>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Owner */}
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Owner / Manager</p>
-                <div className="flex h-24 items-center justify-center rounded-xl border border-line bg-paper-2/40">
-                  {ownerSig ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={ownerSig} alt="Owner signature" className="max-h-20 object-contain" />
-                  ) : (
-                    <span className="text-xs text-ink-muted">No signature yet</span>
-                  )}
-                </div>
-                <p className="mt-1.5 text-xs text-ink-soft">{ownerName}{pgName ? ` · ${pgName}` : ""}</p>
-                {pgAddress && <p className="text-xs text-ink-muted">{pgAddress}</p>}
-              </div>
-
-              {/* Tenant */}
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Resident</p>
-                <div className="flex h-24 items-center justify-center rounded-xl border border-line bg-paper-2/40">
-                  {tenantSig ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={tenantSig} alt="Tenant signature" className="max-h-20 object-contain" />
-                  ) : (
-                    <span className="text-xs text-ink-muted">No signature yet</span>
-                  )}
-                </div>
-                <p className="mt-1.5 text-xs text-ink-soft">{tenantName}</p>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="border-t border-line px-5 py-8 text-center">
-          <ScrollText className="mx-auto size-9 text-ink-muted" />
-          <p className="mt-2 text-sm text-ink-muted">No Rules &amp; Regulations document uploaded yet.</p>
-          <Link
-            href="/dashboard/settings"
-            className="mt-2 inline-block text-xs font-semibold text-clay-600 hover:underline"
-          >
-            Upload in Settings →
-          </Link>
-        </div>
-      )}
-    </Card>
   );
 }
 

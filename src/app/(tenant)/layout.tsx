@@ -4,6 +4,10 @@ import { requireRole } from "@/lib/guards";
 import { getMyNotifications, getMyPg, tenantNeedsAgreement } from "@/lib/db";
 import { getEdition } from "@/lib/get-client";
 
+// See (super-admin)/layout.tsx — same reasoning, force-dynamic prevents
+// next build from trying to prerender these with real DB queries.
+export const dynamic = "force-dynamic";
+
 export default async function TenantLayout({
   children,
 }: {
@@ -11,8 +15,8 @@ export default async function TenantLayout({
 }) {
   const user = await requireRole(["tenant"]);
   // Editions without a tenant portal (e.g. GVM) never serve /portal.
-  const { portalEnabled } = await getEdition();
-  if (!portalEnabled) redirect("/dashboard");
+  const client = await getEdition();
+  if (!client.portalEnabled) redirect("/dashboard");
   // First login: if the PG has a resident agreement, sign it before continuing.
   if (await tenantNeedsAgreement()) redirect("/agreement");
 
@@ -27,6 +31,9 @@ export default async function TenantLayout({
       properties={user.properties}
       activePropertyId={user.activePropertyId}
       settings={pg?.settings ?? {}}
+      edition={client.edition}
+      brandName={client.brandName}
+      logoSrc={client.logoSrc}
     >
       {children}
     </AppShell>

@@ -1,34 +1,42 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { createClient } from "./supabase/server";
-import type { PropertyRef, Role, SessionUser } from "./types";
+import bcrypt from "bcryptjs";
+import { query, queryOne, parseJsonColumn } from "./mysql/client";
+import { generateSessionToken, hashToken } from "./mysql/session-token";
+import type { PropertyRef, Role, SessionUser, StaffPermissions } from "./types";
 
 /* =========================================================================
-   Session handling, backed by Supabase Auth + the profiles table.
+   Session handling for the Shanthi Ladies Hostel branch — replaces Supabase
+   Auth + RLS with bcrypt + opaque session cookies against MySQL. Every check
+   Postgres RLS used to enforce automatically is now done explicitly in here
+   and in guards.ts / requireRole. See deploy/clients/shanthis-ladies-hostel/
+   mysql/RLS_TO_APP_LAYER.md and AUTH_DESIGN.md for the source of truth.
+
    getSession() is request-cached so guards/layouts/pages share one lookup.
    Multi-property: admins/staff carry their property memberships + the
    cookie-selected active property; tenants stay single-property (pg_id).
    ========================================================================= */
 
+const SESSION_COOKIE = "pg360_session";
 const ACTIVE_PROPERTY_COOKIE = "pg360_active_property";
 const IMPERSONATE_COOKIE = "pg360_impersonate";
 
-type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-async function loadProperties(
-  supabase: SupabaseServer,
-  role: Role,
-  userId: string,
-): Promise<PropertyRef[]> {
+async function loadProperties(role: Role, userId: string): Promise<PropertyRef[]> {
   if (role !== "admin" && role !== "staff") return [];
-  const { data } = await supabase
-    .from("property_members")
-    .select("property_id, pg:pg_accounts(pg_name)")
-    .eq("user_id", userId);
-  type Row = { property_id: string; pg: { pg_name: string } | null };
-  return ((data ?? []) as unknown as Row[])
-    .map((m) => ({ id: m.property_id, name: m.pg?.pg_name ?? "Property" }))
+  const rows = await query<{ property_id: string; pg_name: string }>(
+    `select pm.property_id, pa.pg_name
+       from property_members pm
+       join pg_accounts pa on pa.id = pm.property_id
+      where pm.user_id = ?`,
+    [userId],
+  );
+  return rows
+    .map((r) => ({ id: r.property_id, name: r.pg_name ?? "Property" }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -42,103 +50,115 @@ async function resolveActiveProperty(
   const store = await cookies();
   const picked = store.get(ACTIVE_PROPERTY_COOKIE)?.value;
   if (picked && properties.some((p) => p.id === picked)) return picked;
-  // no/invalid cookie: prefer the owner's "home" property, else the first
   if (pgId && properties.some((p) => p.id === pgId)) return pgId;
   return properties[0]?.id ?? null;
 }
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data?.user) return null;
-    const user = data.user;
+    const store = await cookies();
+    const token = store.get(SESSION_COOKIE)?.value;
+    if (!token) return null;
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id, role, pg_id, full_name, terms_accepted_at, permissions")
-      .eq("id", user.id)
-      .single();
-    if (!profile) return null;
+    const row = await queryOne<{
+      user_id: string;
+      email: string;
+      profile_id: string;
+      role: Role;
+      pg_id: string | null;
+      full_name: string;
+      terms_accepted_at: Date | null;
+      permissions: StaffPermissions | null;
+    }>(
+      `select u.id as user_id, u.email,
+              p.id as profile_id, p.role, p.pg_id, p.full_name,
+              p.terms_accepted_at, p.permissions
+         from sessions s
+         join users u on u.id = s.user_id
+         join profiles p on p.id = u.id
+        where s.token_hash = ? and s.expires_at > now()`,
+      [hashToken(token)],
+    );
+    if (!row) return null;
 
-    const role = profile.role as Role;
-    const termsAcceptedAt = (profile as { terms_accepted_at: string | null }).terms_accepted_at ?? null;
-    const permissions = (profile as { permissions: SessionUser["permissions"] }).permissions ?? null;
+    const role = row.role;
+    const termsAcceptedAt = row.terms_accepted_at ? new Date(row.terms_accepted_at).toISOString() : null;
+    const permissions = parseJsonColumn<StaffPermissions | null>(row.permissions, null);
 
-    // Super-admin "open / view as": when impersonating a PG, present an effective
-    // admin session scoped to it. RLS still sees the real super_admin role (via
-    // current_role()), so reads/writes are permitted by the super_admin policies.
+    // Super-admin "open / view as": present an effective admin session scoped
+    // to the impersonated PG. Every write path must still check the REAL role
+    // via getSession() server-side before allowing an action — this object
+    // alone is what the UI renders, not a capability grant by itself.
     if (role === "super_admin") {
-      const store = await cookies();
-      const pgId = store.get(IMPERSONATE_COOKIE)?.value;
-      if (pgId) {
-        const { data: pg } = await supabase
-          .from("pg_accounts")
-          .select("pg_name")
-          .eq("id", pgId)
-          .maybeSingle();
+      const impersonatePgId = store.get(IMPERSONATE_COOKIE)?.value;
+      if (impersonatePgId) {
+        const pg = await queryOne<{ pg_name: string }>(
+          `select pg_name from pg_accounts where id = ?`,
+          [impersonatePgId],
+        );
         if (pg) {
           return {
-            id: profile.id,
+            id: row.profile_id,
             role: "admin",
-            pg_id: pgId,
+            pg_id: impersonatePgId,
             tenant_id: null,
-            full_name: profile.full_name,
-            email: user.email ?? "",
-            properties: [{ id: pgId, name: pg.pg_name }],
-            activePropertyId: pgId,
+            full_name: row.full_name,
+            email: row.email,
+            properties: [{ id: impersonatePgId, name: pg.pg_name }],
+            activePropertyId: impersonatePgId,
             suspended: false,
-            impersonating: { pgId, pgName: pg.pg_name },
-            termsAcceptedAt: new Date().toISOString(), // never gate an impersonating super-admin
+            impersonating: { pgId: impersonatePgId, pgName: pg.pg_name },
+            termsAcceptedAt: new Date().toISOString(),
           };
         }
       }
     }
 
-    // Role-dependent lookups in parallel. The pg `status` is fetched here too, so
-    // the per-page suspension check costs no extra round-trip (see requireRole).
-    const [tenantRes, membersRes] = await Promise.all([
+    const [tenantRow, memberRows] = await Promise.all([
       role === "tenant"
-        ? supabase
-            .from("tenants")
-            .select("id, pg:pg_accounts(status)")
-            .eq("user_id", user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
+        ? queryOne<{ id: string; pg_status: string }>(
+            `select t.id, pa.status as pg_status
+               from tenants t
+               join pg_accounts pa on pa.id = t.pg_id
+              where t.user_id = ?
+              limit 1`,
+            [row.user_id],
+          )
+        : Promise.resolve(null),
       role === "admin" || role === "staff"
-        ? supabase
-            .from("property_members")
-            .select("property_id, pg:pg_accounts(pg_name, status)")
-            .eq("user_id", user.id)
-        : Promise.resolve({ data: [] }),
+        ? query<{ property_id: string; pg_name: string; status: string }>(
+            `select pm.property_id, pa.pg_name, pa.status
+               from property_members pm
+               join pg_accounts pa on pa.id = pm.property_id
+              where pm.user_id = ?`,
+            [row.user_id],
+          )
+        : Promise.resolve([]),
     ]);
 
-    const tenantRow = tenantRes.data as { id: string; pg: { status: string } | null } | null;
     const tenant_id = role === "tenant" ? tenantRow?.id ?? null : null;
 
-    type MRow = { property_id: string; pg: { pg_name: string; status: string } | null };
-    const memberRows = (membersRes.data ?? []) as unknown as MRow[];
     const properties: PropertyRef[] = memberRows
-      .map((m) => ({ id: m.property_id, name: m.pg?.pg_name ?? "Property" }))
+      .map((m) => ({ id: m.property_id, name: m.pg_name ?? "Property" }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const statusById = new Map(memberRows.map((m) => [m.property_id, m.pg?.status]));
+    const statusById = new Map(memberRows.map((m) => [m.property_id, m.status]));
 
-    const activePropertyId = await resolveActiveProperty(role, profile.pg_id, properties);
+    const activePropertyId = await resolveActiveProperty(role, row.pg_id, properties);
 
     let suspended = false;
     if (role === "tenant") {
-      suspended = tenantRow?.pg?.status === "suspended";
+      suspended = tenantRow?.pg_status === "suspended";
     } else if (role === "admin" || role === "staff") {
       suspended = activePropertyId ? statusById.get(activePropertyId) === "suspended" : false;
     }
 
     return {
-      id: profile.id,
+      id: row.profile_id,
       role,
-      pg_id: profile.pg_id,
+      pg_id: row.pg_id,
       tenant_id,
-      full_name: profile.full_name,
-      email: user.email ?? "",
+      full_name: row.full_name,
+      email: row.email,
       properties,
       activePropertyId,
       suspended,
@@ -160,44 +180,95 @@ export async function signIn(
   email: string,
   password: string,
 ): Promise<{ ok: true; user: SessionUser } | { ok: false; error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error || !data.user) {
-    return { ok: false, error: "Invalid email or password." };
+  const genericError = "Invalid email or password.";
+
+  const row = await queryOne<{
+    id: string;
+    email: string;
+    password_hash: string;
+    failed_attempts: number;
+    locked_until: Date | null;
+    profile_id: string;
+    role: Role;
+    pg_id: string | null;
+    full_name: string;
+  }>(
+    `select u.id, u.email, u.password_hash, u.failed_attempts, u.locked_until,
+            p.id as profile_id, p.role, p.pg_id, p.full_name
+       from users u
+       join profiles p on p.id = u.id
+      where u.email = ?`,
+    [email.trim().toLowerCase()],
+  );
+
+  // Constant-shape response whether or not the email exists, to avoid
+  // leaking account existence via timing/response differences.
+  const hash = row?.password_hash ?? "$2a$10$invalidsaltinvalidsaltinvalidsaltinvalidsa";
+  if (row?.locked_until && new Date(row.locked_until).getTime() > Date.now()) {
+    return { ok: false, error: "Too many failed attempts. Try again in a few minutes." };
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, role, pg_id, full_name")
-    .eq("id", data.user.id)
-    .single();
-  if (!profile) {
-    await supabase.auth.signOut();
-    return { ok: false, error: "No PG360 profile is linked to this account." };
+  const valid = await bcrypt.compare(password, hash);
+  if (!row || !valid) {
+    if (row) {
+      // Atomic increment: the old read-modify-write (read failed_attempts,
+      // compute +1, write it back) let concurrent wrong-password requests
+      // all read the same starting value and overwrite each other's
+      // increment, undercounting attempts and letting an attacker bypass the
+      // lockout by firing guesses in parallel. Doing the +1 and the lockout
+      // decision in the UPDATE itself makes MySQL's row lock serialize it.
+      const lockedUntil = new Date(Date.now() + LOCKOUT_MS);
+      await query(
+        `update users
+            set failed_attempts = failed_attempts + 1,
+                locked_until = case when failed_attempts + 1 >= ? then ? else locked_until end
+          where id = ?`,
+        [MAX_FAILED_ATTEMPTS, lockedUntil, row.id],
+      );
+    }
+    return { ok: false, error: genericError };
   }
 
-  const role = profile.role as Role;
+  await query(`update users set failed_attempts = 0, locked_until = null where id = ?`, [row.id]);
+
+  const role = row.role;
   let tenant_id: string | null = null;
   if (role === "tenant") {
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("user_id", data.user.id)
-      .maybeSingle();
+    const t = await queryOne<{ id: string }>(
+      `select id from tenants where user_id = ? limit 1`,
+      [row.id],
+    );
     tenant_id = t?.id ?? null;
   }
-  const properties = await loadProperties(supabase, role, data.user.id);
-  const activePropertyId = await resolveActiveProperty(role, profile.pg_id, properties);
+  const properties = await loadProperties(role, row.id);
+  const activePropertyId = await resolveActiveProperty(role, row.pg_id, properties);
+
+  const token = generateSessionToken();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  await query(`insert into sessions (user_id, token_hash, expires_at) values (?, ?, ?)`, [
+    row.id,
+    hashToken(token),
+    expiresAt,
+  ]);
+
+  const store = await cookies();
+  store.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: expiresAt,
+  });
 
   return {
     ok: true,
     user: {
-      id: profile.id,
+      id: row.profile_id,
       role,
-      pg_id: profile.pg_id,
+      pg_id: row.pg_id,
       tenant_id,
-      full_name: profile.full_name,
-      email: data.user.email ?? "",
+      full_name: row.full_name,
+      email: row.email,
       properties,
       activePropertyId,
       suspended: false, // freshly authenticated; the next page's getSession resolves it
@@ -206,8 +277,12 @@ export async function signIn(
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (token) {
+    await query(`delete from sessions where token_hash = ?`, [hashToken(token)]);
+  }
+  store.delete(SESSION_COOKIE);
 }
 
 export async function setActiveProperty(propertyId: string): Promise<void> {
