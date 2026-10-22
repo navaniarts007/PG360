@@ -75,12 +75,17 @@ export async function registerOwnerAction(
       subscription_plan: "monthly",
       subscription_expiry: trialExpiry(),
       is_demo: true,
-      created_by: created.user.id,
+      // created_by points at a profiles row — there isn't one yet for a
+      // brand-new self-registration (that's the next step below), and
+      // created_by is nullable for exactly this "nobody provisioned this,
+      // the owner did it themselves" case.
+      created_by: null,
       owner_id: created.user.id,
     })
     .select()
     .single();
   if (pgErr || !pg) {
+    if (pgErr) console.error("[register] pg_accounts insert failed:", pgErr.code, pgErr.message, pgErr.details);
     await admin.auth.admin.deleteUser(created.user.id); // roll back the orphan login
     return { error: humanizeDbError(pgErr, "Could not create your PG.") };
   }
@@ -93,6 +98,7 @@ export async function registerOwnerAction(
     phone: d.mobile,
   });
   if (profErr) {
+    console.error("[register] profiles upsert failed:", profErr.code, profErr.message, profErr.details);
     await admin.auth.admin.deleteUser(created.user.id);
     return { error: humanizeDbError(profErr) };
   }
@@ -157,12 +163,15 @@ export async function completeGoogleRegistrationAction(
       subscription_plan: "monthly",
       subscription_expiry: trialExpiry(),
       is_demo: true,
-      created_by: user.id,
+      created_by: null,
       owner_id: user.id,
     })
     .select()
     .single();
-  if (pgErr || !pg) return { error: humanizeDbError(pgErr, "Could not create your PG.") };
+  if (pgErr || !pg) {
+    if (pgErr) console.error("[register] pg_accounts insert failed:", pgErr.code, pgErr.message, pgErr.details);
+    return { error: humanizeDbError(pgErr, "Could not create your PG.") };
+  }
 
   const { error: profErr } = await admin.from("profiles").upsert({
     id: user.id,
@@ -171,7 +180,10 @@ export async function completeGoogleRegistrationAction(
     full_name: ownerName,
     phone: d.mobile,
   });
-  if (profErr) return { error: humanizeDbError(profErr) };
+  if (profErr) {
+    console.error("[register] profiles upsert failed:", profErr.code, profErr.message, profErr.details);
+    return { error: humanizeDbError(profErr) };
+  }
 
   await admin
     .from("property_members")
