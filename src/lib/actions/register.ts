@@ -151,36 +151,6 @@ export async function completeGoogleRegistrationAction(
 
   const ownerName = (user.user_metadata?.full_name as string | undefined) || user.email || "Owner";
 
-  // TEMP DIAGNOSTIC: the live pg_accounts_subscription_plan_check constraint
-  // rejects "monthly" despite migration 0037 listing it as valid, suggesting
-  // schema drift between this repo's migrations and the live DB. Probe a few
-  // candidate values so we don't have to redeploy per guess; remove once the
-  // real value is confirmed.
-  for (const candidate of ["monthly", "yearly", "lifetime", "starter", "pro"]) {
-    const { error: probeErr } = await admin
-      .from("pg_accounts")
-      .insert({
-        owner_name: "DIAGNOSTIC_PROBE_DELETE_ME",
-        pg_name: "DIAGNOSTIC_PROBE_DELETE_ME",
-        mobile: "0000000000",
-        location: "x",
-        pg_type: "coliving",
-        category: "standard",
-        subscription_plan: candidate,
-        subscription_expiry: trialExpiry(),
-        is_demo: true,
-        created_by: null,
-        owner_id: user.id,
-      });
-    console.error(
-      `[register][PROBE] subscription_plan="${candidate}" ->`,
-      probeErr ? `FAIL ${probeErr.code} ${probeErr.message}` : "OK",
-    );
-    if (!probeErr) {
-      await admin.from("pg_accounts").delete().eq("owner_name", "DIAGNOSTIC_PROBE_DELETE_ME");
-    }
-  }
-
   const { data: pg, error: pgErr } = await admin
     .from("pg_accounts")
     .insert({
