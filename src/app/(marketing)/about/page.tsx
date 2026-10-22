@@ -76,7 +76,7 @@ export default function AboutPage() {
         <Reveal blur delay={240}>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg">
-              <Link href="/login">Start free</Link>
+              <Link href="/register">Start free</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link href="/contact">Talk to us</Link>

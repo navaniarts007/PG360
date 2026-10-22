@@ -54,7 +54,7 @@ export function SiteHeader() {
             <Link href="/login">Sign in</Link>
           </Button>
           <Button asChild size="sm">
-            <Link href="/login">Start free</Link>
+            <Link href="/register">Start free</Link>
           </Button>
         </div>
 
@@ -86,7 +86,7 @@ export function SiteHeader() {
               <Link href="/login">Sign in</Link>
             </Button>
             <Button asChild size="sm">
-              <Link href="/login">Start free</Link>
+              <Link href="/register">Start free</Link>
             </Button>
           </div>
         </div>

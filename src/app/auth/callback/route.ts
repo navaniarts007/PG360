@@ -18,15 +18,15 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.user) {
-      // OAuth (Google) signs in/up freely, but PG360 accounts are provisioned
-      // by an admin, not self-serve — a Google identity with no matching
-      // profiles row has nowhere to land, so it can't be treated as signed in.
+      // A Google identity with no matching profiles row has nowhere to land
+      // UNLESS this hop came from Register (next starts with /register) —
+      // then it's expected: the PG details still need collecting there.
       const { data: profile } = await supabase
         .from("profiles")
         .select("id")
         .eq("id", data.user.id)
         .maybeSingle();
-      if (!profile) {
+      if (!profile && !next.startsWith("/register")) {
         await supabase.auth.signOut();
         return NextResponse.redirect(`${base}/login?error=no_profile`);
       }

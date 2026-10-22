@@ -137,6 +137,13 @@ export function LoginForm({
             </>
           )}
         </Button>
+
+        <p className="text-center text-sm text-ink-muted">
+          New to PG360?{" "}
+          <Link href="/register" className="font-semibold text-clay-600 hover:text-clay-700">
+            Create an account
+          </Link>
+        </p>
       </form>
     </div>
   );

@@ -323,7 +323,7 @@ function Pricing() {
 
                 <div className="mt-auto pt-8">
                   <Button asChild className="w-full" variant={p.highlight ? "primary" : "outline"}>
-                    <Link href="/login">Choose {p.name}</Link>
+                    <Link href="/register">Choose {p.name}</Link>
                   </Button>
                 </div>
               </div>
@@ -441,7 +441,7 @@ function FinalCta() {
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg" className="bg-clay-500 hover:bg-clay-600">
-                <Link href="/login">
+                <Link href="/register">
                   Start free <ArrowRight className="size-4" />
                 </Link>
               </Button>

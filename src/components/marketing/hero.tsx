@@ -66,7 +66,7 @@ export function Hero() {
 
             <div className="hero-rise mt-9 flex flex-wrap items-center gap-3">
               <Button asChild size="lg">
-                <Link href="/login">
+                <Link href="/register">
                   Start free <ArrowRight className="size-4" />
                 </Link>
               </Button>
