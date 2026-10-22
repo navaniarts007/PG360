@@ -39,3 +39,4 @@ tmp-*.log
 .idea
 .vscode/*
 !.vscode/extensions.json
+supabase/.temp/
